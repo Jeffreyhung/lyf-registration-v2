@@ -43,6 +43,7 @@ const CAMPER_HEALTH = `${CAMPER}/private/health`
 const CAMPER_DEMOGRAPHICS = `${CAMPER}/private/demographics`
 const OTHER_FAMILY = "families/fam2"
 const CAMP = "camps/2026"
+const SITE_CONFIG = "config/site"
 const REGISTRATION = `${CAMP}/registrations/reg1`
 
 let testEnv: RulesTestEnvironment
@@ -80,6 +81,7 @@ async function seed() {
     await setDoc(doc(db, `${OTHER_FAMILY}/campers/cam2`), { firstName: "Other" })
 
     await setDoc(doc(db, CAMP), { registrationFee: 100 })
+    await setDoc(doc(db, SITE_CONFIG), { currentCampYear: 2026, preRegistrationCampYear: 2027 })
     await setDoc(doc(db, REGISTRATION), {
       camper: doc(db, CAMPER),
       familyEmails: [PARENT],
@@ -283,13 +285,39 @@ describe("campers/{id}/private/demographics", () => {
 
 // ---- Camps & registrations ----
 
+describe("config/", () => {
+  test("site config is readable by anyone, signed in or not", async () => {
+    await assertSucceeds(getDoc(doc(as(null), SITE_CONFIG)))
+    await assertSucceeds(getDoc(doc(as(PARENT), SITE_CONFIG)))
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), SITE_CONFIG)))
+    await assertSucceeds(getDoc(doc(as(FULL), SITE_CONFIG)))
+  })
+
+  test("nobody writes config from the client — manageCampYear is the only path", async () => {
+    await assertFails(updateDoc(doc(as(FULL), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(updateDoc(doc(as(PROGRAM), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(updateDoc(doc(as(PARENT), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(setDoc(doc(as(FULL), "config/other"), { a: 1 }))
+    await assertFails(deleteDoc(doc(as(FULL), SITE_CONFIG)))
+  })
+})
+
 describe("camps/{year}", () => {
-  test("any signed-in user reads camp info; only full_admin writes", async () => {
+  test("camp info is readable by anyone, signed in or not", async () => {
+    await assertSucceeds(getDoc(doc(as(null), CAMP)))
     await assertSucceeds(getDoc(doc(as(PARENT), CAMP)))
-    await assertFails(getDoc(doc(as(null), CAMP)))
-    await assertSucceeds(updateDoc(doc(as(FULL), CAMP), { registrationFee: 200 }))
+    await assertSucceeds(getDoc(doc(as(PROGRAM), CAMP)))
+  })
+
+  test("nobody writes camp info from the client — manageCampYear is the only path", async () => {
+    await assertFails(updateDoc(doc(as(FULL), CAMP), { registrationFee: 200 }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), CAMP), { registrationFee: 200 }))
     await assertFails(updateDoc(doc(as(PROGRAM), CAMP), { registrationFee: 200 }))
     await assertFails(updateDoc(doc(as(PARENT), CAMP), { registrationFee: 0 }))
+    await assertFails(updateDoc(doc(as(FULL), CAMP), { remainingSpots: { Younger: 999 } }))
+    await assertFails(setDoc(doc(as(FULL), "camps/2027"), { registrationFee: 1 }))
+    await assertFails(deleteDoc(doc(as(FULL), CAMP)))
   })
 })
 
