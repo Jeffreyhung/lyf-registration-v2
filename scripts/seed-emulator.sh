@@ -60,8 +60,24 @@ curl -s -X PATCH \
 
 echo "  ✔ Created admins/${HEALTH_EMAIL} with role: health_staff"
 
+# Create a fourth admin with program_admin role (program_staff + camp year rollover)
+PROGRAM_ADMIN_EMAIL="programadmin@tacl.org"
+curl -s -X PATCH \
+  "${FIRESTORE_HOST}/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents/admins/${PROGRAM_ADMIN_EMAIL}?updateMask.fieldPaths=role&updateMask.fieldPaths=addedBy" \
+  -H "Content-Type: application/json" \
+  -H "${AUTH_HEADER}" \
+  -d "{
+    \"fields\": {
+      \"role\": { \"stringValue\": \"program_admin\" },
+      \"addedBy\": { \"stringValue\": \"seed-script\" }
+    }
+  }" > /dev/null
+
+echo "  ✔ Created admins/${PROGRAM_ADMIN_EMAIL} with role: program_admin"
+
 echo ""
 echo "Done! Sign in with any of these emails via the Auth emulator:"
 echo "  - ${EMAIL} (full_admin)"
 echo "  - ${STAFF_EMAIL} (program_staff)"
 echo "  - ${HEALTH_EMAIL} (health_staff)"
+echo "  - ${PROGRAM_ADMIN_EMAIL} (program_admin)"

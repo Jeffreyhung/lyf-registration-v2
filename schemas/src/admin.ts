@@ -8,7 +8,12 @@ export type TimestampLike = {
   toMillis(): number
 }
 
-export const ADMIN_ROLES = ["full_admin", "program_staff", "health_staff"] as const
+export const ADMIN_ROLES = [
+  "full_admin",
+  "program_admin",
+  "program_staff",
+  "health_staff",
+] as const
 
 export type AdminRole = (typeof ADMIN_ROLES)[number]
 
@@ -39,6 +44,18 @@ export const ROLE_CAPABILITIES = {
     manageAdmins: true,
     manageWaitlist: true,
     createTestData: true,
+  },
+  // program_staff plus the ability to run the yearly camp-year rollover
+  // (dates, fees, caps, bypass emails). Still no roster or money access.
+  program_admin: {
+    readHealth: false,
+    readDemographics: false,
+    writeRegistrations: true,
+    managePayments: false,
+    manageCredits: false,
+    manageAdmins: false,
+    manageWaitlist: false,
+    createTestData: false,
   },
   program_staff: {
     readHealth: false,

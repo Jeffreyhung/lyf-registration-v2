@@ -23,7 +23,7 @@ service cloud.firestore {
     // ---------- Admin role helpers ----------
 
     function validRoles() {
-      return ['full_admin', 'program_staff', 'health_staff'];
+      return ['full_admin', 'program_admin', 'program_staff', 'health_staff'];
     }
 
     function adminDocPath() {
@@ -159,10 +159,10 @@ service cloud.firestore {
           (hasEmail() && callerEmail() in resource.data.familyEmails);
         allow create, delete: if isFullAdmin();
         allow update: if isFullAdmin();
-        // writeRegistrations capability: program_staff may edit the
-        // operational fields the admin console exposes, nothing structural
-        // (camper ref, payments, familyEmails, waiver, pricing state).
-        allow update: if hasRole('program_staff') &&
+        // writeRegistrations capability: program_staff and program_admin may
+        // edit the operational fields the admin console exposes, nothing
+        // structural (camper ref, payments, familyEmails, waiver, pricing state).
+        allow update: if hasAnyRole(['program_staff', 'program_admin']) &&
           onlyUpdates(['status', 'internalNotes', 'hasContacted', 'isCheckedOut',
                        'nameOfParentCheckedOut', 'checkedOutTime', 'smallGroup',
                        'cabinPreference', 'updatedAt']);

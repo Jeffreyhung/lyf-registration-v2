@@ -30,6 +30,7 @@ import {
 
 const FULL = "full@tacl.org"
 const PROGRAM = "program@tacl.org"
+const PROGRAM_ADMIN = "programadmin@tacl.org"
 const HEALTH = "health@tacl.org"
 const DISABLED = "disabled@tacl.org"
 const BAD_ROLE = "badrole@tacl.org"
@@ -52,6 +53,7 @@ async function seed() {
     const admins: Record<string, object> = {
       [FULL]: { role: "full_admin" },
       [PROGRAM]: { role: "program_staff" },
+      [PROGRAM_ADMIN]: { role: "program_admin" },
       [HEALTH]: { role: "health_staff" },
       [DISABLED]: { role: "full_admin", disabled: true },
       [BAD_ROLE]: { role: "superuser" },
@@ -129,6 +131,8 @@ describe("admins/", () => {
     await assertSucceeds(getDoc(doc(as(FULL), "admins", PROGRAM)))
     await assertSucceeds(getDocs(collection(as(FULL), "admins")))
     await assertFails(getDoc(doc(as(PROGRAM), "admins", FULL)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), "admins", FULL)))
+    await assertFails(getDocs(collection(as(PROGRAM_ADMIN), "admins")))
     await assertFails(getDoc(doc(as(HEALTH), "admins", FULL)))
     await assertFails(getDoc(doc(as(PARENT), "admins", FULL)))
     await assertFails(getDoc(doc(as(null), "admins", FULL)))
@@ -139,6 +143,8 @@ describe("admins/", () => {
     await assertFails(updateDoc(doc(as(FULL), "admins", PROGRAM), { role: "full_admin" }))
     await assertFails(deleteDoc(doc(as(FULL), "admins", PROGRAM)))
     await assertFails(updateDoc(doc(as(PROGRAM), "admins", PROGRAM), { role: "full_admin" }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), "admins", PROGRAM_ADMIN), { role: "full_admin" }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), "admins", "new@tacl.org"), { role: "program_staff" }))
   })
 
   test("fails closed: disabled admins and unrecognized roles get no admin access", async () => {
@@ -244,6 +250,7 @@ describe("campers/{id}/private/health", () => {
     await assertSucceeds(getDoc(doc(as(FULL), CAMPER_HEALTH)))
     await assertSucceeds(getDoc(doc(as(PARENT), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(PROGRAM), CAMPER_HEALTH)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(OTHER_PARENT), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(null), CAMPER_HEALTH)))
   })
@@ -267,6 +274,7 @@ describe("campers/{id}/private/demographics", () => {
     await assertSucceeds(updateDoc(doc(as(FULL), CAMPER_DEMOGRAPHICS), { born: "TW" }))
     await assertFails(getDoc(doc(as(HEALTH), CAMPER_DEMOGRAPHICS)))
     await assertFails(getDoc(doc(as(PROGRAM), CAMPER_DEMOGRAPHICS)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_DEMOGRAPHICS)))
     await assertFails(getDoc(doc(as(PARENT), CAMPER_DEMOGRAPHICS)))
     await assertFails(updateDoc(doc(as(PARENT), CAMPER_DEMOGRAPHICS), { born: "x" }))
     await assertFails(setDoc(doc(as(PARENT), `${CAMPER}/private/other`), { secret: 1 }))
@@ -320,6 +328,24 @@ describe("camps/{year}/registrations/", () => {
     await assertFails(deleteDoc(doc(as(PROGRAM), REGISTRATION)))
   })
 
+  test("program_admin (writeRegistrations) has the same operational-field access as program_staff", async () => {
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), REGISTRATION)))
+    await assertSucceeds(
+      updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), {
+        status: "Cancelled",
+        internalNotes: "x",
+        smallGroup: "A",
+        cabinPreference: "B",
+        hasContacted: true,
+      })
+    )
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), { familyEmails: [PROGRAM_ADMIN] }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), { payments: [] }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), { waiverSignature: "x" }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), `${CAMP}/registrations/new`), { status: "Active" }))
+    await assertFails(deleteDoc(doc(as(PROGRAM_ADMIN), REGISTRATION)))
+  })
+
   test("health_staff has no writeRegistrations capability", async () => {
     await assertFails(updateDoc(doc(as(HEALTH), REGISTRATION), { internalNotes: "x" }))
     await assertFails(updateDoc(doc(as(HEALTH), REGISTRATION), { status: "Cancelled" }))
@@ -359,6 +385,7 @@ describe("server-only and unknown collections", () => {
       await assertFails(getDoc(doc(as(PARENT), path)))
     }
     await assertFails(setDoc(doc(as(FULL), "brandNew/doc"), { a: 1 }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), "brandNew/doc"), { a: 1 }))
     await assertFails(setDoc(doc(as(PARENT), "brandNew/doc"), { a: 1 }))
   })
 })
