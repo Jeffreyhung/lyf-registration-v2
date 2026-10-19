@@ -1,0 +1,14 @@
+{
+  // Used only by ts-jest. The production build (tsconfig.json) keeps rootDir=src
+  // and excludes ./test, so nothing here ends up in lib/ or the isolate bundle.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["jest", "node"]
+  },
+  "include": ["./src/**/*", "./test/unit/**/*"]
+}

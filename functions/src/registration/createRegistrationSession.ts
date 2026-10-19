@@ -82,10 +82,29 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
     );
     const db = getFirestoreDb(!isTestData);
 
-    // Get the registration pricing.
+    // Get the registration pricing. campYear comes from the client, so refuse
+    // anything that does not resolve to a camp with a real price: a missing or
+    // unpriced camp document would otherwise yield a $0 registration that is
+    // treated as fully covered and activated without payment.
     const campRef = db.collection("camps").doc(campYear.toString());
-    const campData = (await campRef.get()).data() as CampYear;
+    const campSnapshot = await campRef.get();
+    if (!campSnapshot.exists) {
+      throw new HttpsError(
+        "failed-precondition",
+        `Registration is not open for camp year ${campYear}`
+      );
+    }
+    const campData = campSnapshot.data() as CampYear;
     const campPrice = getRegistrationPrice(campData);
+    if (!Number.isFinite(campPrice) || campPrice <= 0) {
+      logger.error(
+        `Camp ${campYear} has no registration fee configured; refusing to register`
+      );
+      throw new HttpsError(
+        "failed-precondition",
+        `Registration pricing is not configured for camp year ${campYear}`
+      );
+    }
     const campPreRegistrationFee = campData?.preRegistrationFee ?? 500;
     const siblingDiscount =
       campData?.siblingDiscount ?? DEFAULT_SIBLING_DISCOUNT;

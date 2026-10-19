@@ -127,14 +127,31 @@ const creditsToAdd: Credit[] = [
 async function addCreditForEmail() {
   console.log("Adding credits...")
 
-  creditsToAdd.forEach(async ({email, amount, note}) => {
+  const skipped: string[] = []
+
+  // Sequential so every lookup finishes (and every failure is reported)
+  // before the script exits.
+  for (const {email, amount, note} of creditsToAdd) {
     const family = await db
       .collection("families")
       .where("emails", "array-contains", email)
       .get()
 
-    if (family.size != 1) {
-      console.log(`Error finding family for email: ${email}`)
+    if (family.empty) {
+      console.log(`SKIPPED ${email}: no family lists this email`)
+      skipped.push(email)
+      continue
+    }
+
+    // An email can legitimately be listed in more than one family (listed by
+    // someone else and in their own). Never guess which one gets the credit.
+    if (family.size > 1) {
+      const ids = family.docs.map((d) => d.id).join(", ")
+      console.log(
+        `SKIPPED ${email}: listed in ${family.size} families (${ids}); resolve manually`
+      )
+      skipped.push(email)
+      continue
     }
 
     const familyRef = family.docs[0].ref
@@ -149,7 +166,12 @@ async function addCreditForEmail() {
       },
       {merge: true}
     )
-  })
+    console.log(`Added ${amount} credit to family ${familyRef.id} (${email})`)
+  }
+
+  if (skipped.length > 0) {
+    console.log(`\n${skipped.length} email(s) skipped: ${skipped.join(", ")}`)
+  }
 }
 
 addCreditForEmail()
