@@ -1,0 +1,24 @@
+{
+  "_source": "lyf-registration (v1) git history: RegistrationFlow.tsx constants and pages/registration.tsx close (dfc4fa4 shows the 2024 values being replaced), pages/camper-checkout.tsx pre-registration gate (2fc5ff7, 7c89b23), pages/index.tsx camp dates and campsite (30be04a shows the 2024 values being replaced).",
+  "_todo": "Fees were never in git for 2024 (Firestore only); the values here copy 2025. 2024 had no camp tracks, so campSizeCaps is omitted and campTotalSizeCap is unknown. There was no info session sentence in the app that year. Pre-registration open is the day the 2023 camper-checkout page went live.",
+
+  "name": "LYF Camp 2024",
+  "campsite": "YMCA Camp Jones Gulch",
+  "campsiteAddress": "11000 Pescadero Creek Rd, La Honda, CA 94020",
+
+  "preRegistrationOpenDate": "2023-06-16T00:00:00-07:00",
+  "preRegistrationCloseDate": "2023-07-15T00:00:00-07:00",
+  "earlyRegOpenDate": "2023-12-18T12:00:00-08:00",
+  "registrationOpenDate": "2024-02-01T12:00:00-08:00",
+  "registrationCloseDate": "2024-05-15T00:00:00-07:00",
+  "campStartDate": "2024-06-30T15:00:00-07:00",
+  "campEndDate": "2024-07-06T15:00:00-07:00",
+
+  "preRegistrationFee": 500,
+  "registrationFee": 1325,
+  "registrationLateFee": 1525,
+  "shirtPrice": 0,
+  "siblingDiscount": 0,
+
+  "registrationBypassEmails": []
+}

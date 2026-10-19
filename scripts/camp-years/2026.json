@@ -1,0 +1,29 @@
+{
+  "_source": "lyf-registration (v1) git history: RegistrationFlow.tsx constants (commit eef2cce), pages/registration.tsx close date (3636115 'Close registration 2026') and TEMP_ALLOWED_EMAILS (7115cb9), pages/preregistration.tsx window (b70d3fb, b760a00), InfoStep.tsx info session (c4115b3), pages/index.tsx camp dates.",
+  "_todo": "Fees, caps, earlyRegEndDate and registrationLateDate were never in git for 2026 (they live in the v1 Firestore camps/2026 doc); the values here copy 2025. Check them against the console before backfilling. Info session time of day is a guess; only the date was published.",
+
+  "name": "LYF Camp 2026",
+  "campsite": "Alliance Redwoods Conference Grounds",
+  "campsiteAddress": "6250 Bohemian Hwy, Occidental, CA 95465",
+
+  "preRegistrationOpenDate": "2025-07-12T00:00:00-07:00",
+  "preRegistrationCloseDate": "2025-08-04T00:00:00-07:00",
+  "earlyRegOpenDate": "2026-01-31T12:00:00-08:00",
+  "earlyRegEndDate": "2026-02-15T12:00:00-08:00",
+  "registrationOpenDate": "2026-02-15T12:00:00-08:00",
+  "registrationLateDate": "2026-03-31T12:00:00-07:00",
+  "registrationCloseDate": "2026-04-20T00:00:00-07:00",
+  "infoSessionDate": "2026-02-04T19:00:00-08:00",
+  "campStartDate": "2026-07-12T15:00:00-07:00",
+  "campEndDate": "2026-07-18T15:00:00-07:00",
+
+  "preRegistrationFee": 500,
+  "registrationFee": 1325,
+  "registrationLateFee": 1525,
+  "shirtPrice": 0,
+  "siblingDiscount": 0,
+
+  "campTotalSizeCap": 185,
+  "campSizeCaps": { "Younger": 85, "Older": 85 },
+  "registrationBypassEmails": ["joanthewong@yahoo.com", "tlouie@gmail.com"]
+}

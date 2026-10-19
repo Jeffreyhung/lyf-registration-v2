@@ -8,12 +8,14 @@
  * the dashboard is not an option (e.g. seeding a brand-new test database).
  *
  * Usage:
- *   CAMP_YEAR=2027 CAMP_YEAR_JSON=./camp-year.example.json ./run.sh -n resetCampYearInfo
+ *   CAMP_YEAR=2027 CAMP_YEAR_JSON=./camp-years/2027.json ./run.sh -n resetCampYearInfo
  *
  * The JSON file holds the CampYear configuration fields (see
  * CAMP_YEAR_CONFIG_KEYS in the schemas package). Date fields are ISO-8601
- * strings with an offset, e.g. "2027-01-31T12:00:00-08:00". remainingSpots is
- * not read from the file — it is reset to campSizeCaps.
+ * strings with an offset, e.g. "2027-01-31T12:00:00-08:00". Keys starting
+ * with "_" are notes and are ignored. remainingSpots is not read from the
+ * file — it is reset to campSizeCaps. scripts/camp-years/ holds one file per
+ * year reconstructed from the v1 repository's history.
  */
 import {readFileSync} from "fs"
 import {resolve} from "path"
@@ -44,6 +46,7 @@ function readConfig(): {year: number; config: Record<string, unknown>} {
 
   const config: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(raw)) {
+    if (key.startsWith("_")) continue
     if (!allowed.has(key)) {
       throw new Error(`${key} is not a camp year configuration field`)
     }
