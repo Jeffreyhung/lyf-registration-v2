@@ -22,6 +22,7 @@ import {
   Parent,
   Registration,
   RegistrationStatus,
+  isEstablishedFamilyMember,
 } from "lyf-registration-schemas"
 
 export type DocumentIdWithType<T> = T & {
@@ -148,7 +149,16 @@ export default function useFamilyData({
       return
     }
 
-    const family = familyDocs.docs[0]
+    // A user can be listed in more than one family if someone else named them
+    // as a co-parent. Prefer the family they are an established member of;
+    // fall back to the first match (the registration flow asks the user to
+    // confirm such a family before registering into it).
+    const family =
+      (user?.email &&
+        familyDocs.docs.find((d) =>
+          isEstablishedFamilyMember(d.data(), user.email as string)
+        )) ||
+      familyDocs.docs[0]
 
     // Get any camp credits this family has
     // TODO Remove camp credit

@@ -161,6 +161,20 @@ export function validateDollarAmount(
 }
 
 /**
+ * True when the caller is an admin whose role grants the capability.
+ * Never throws for a non-admin; use assertAdmin to enforce.
+ */
+export async function callerHasCapability(
+  request: CallableRequest,
+  capability: Capability
+): Promise<boolean> {
+  if (!request.auth?.token?.email) return false;
+
+  const {role} = await getCallerAdminRole(request);
+  return roleHasCapability(role, capability);
+}
+
+/**
  * Resolves whether the caller is allowed to use test data.
  * Only admins whose role grants the createTestData capability may set
  * isTestData=true; everyone else is silently forced to production mode.
@@ -170,8 +184,69 @@ export async function resolveTestDataFlag(
   requestedIsTestData: boolean
 ): Promise<boolean> {
   if (!requestedIsTestData) return false;
-  if (!request.auth?.token?.email) return false;
+  return callerHasCapability(request, "createTestData");
+}
 
-  const {role} = await getCallerAdminRole(request);
-  return roleHasCapability(role, "createTestData");
+/**
+ * Resolves whether the caller may force every camper in the request onto the
+ * waitlist. This is a testing aid, so it is gated the same way as test data:
+ * a non-admin's `forceWaitlist: true` is silently ignored. Honouring it for
+ * everyone let a caller pad a request with waitlisted (unpaid) campers that
+ * still counted toward the sibling discount.
+ */
+export async function resolveForceWaitlistFlag(
+  request: CallableRequest,
+  requestedForceWaitlist: boolean
+): Promise<boolean> {
+  if (!requestedForceWaitlist) return false;
+  return callerHasCapability(request, "createTestData");
+}
+
+/**
+ * Upper bounds on list fields in a registration payload. The form never
+ * produces anything near these; they exist so a hand-crafted request cannot
+ * create unbounded campers/registrations in one call.
+ */
+export const MAX_PARENTS_PER_REGISTRATION = 10;
+export const MAX_CAMPERS_PER_REGISTRATION = 10;
+
+/**
+ * Validates the shape of the list fields in a registration payload before
+ * anything is written. Every entry in `campers` becomes a camper document
+ * and a registration, so the arrays must be real, non-empty, bounded, and
+ * `demographics` must line up with `campers` index-for-index.
+ */
+export function validateRegistrationPayloadShape(payload: {
+  parents?: unknown;
+  campers?: unknown;
+  demographics?: unknown;
+}): void {
+  const {parents, campers, demographics} = payload;
+
+  if (!Array.isArray(parents) || parents.length === 0) {
+    throw new HttpsError("invalid-argument", "At least one parent is required");
+  }
+  if (parents.length > MAX_PARENTS_PER_REGISTRATION) {
+    throw new HttpsError(
+      "invalid-argument",
+      `At most ${MAX_PARENTS_PER_REGISTRATION} parents may be submitted`
+    );
+  }
+
+  if (!Array.isArray(campers) || campers.length === 0) {
+    throw new HttpsError("invalid-argument", "At least one camper is required");
+  }
+  if (campers.length > MAX_CAMPERS_PER_REGISTRATION) {
+    throw new HttpsError(
+      "invalid-argument",
+      `At most ${MAX_CAMPERS_PER_REGISTRATION} campers may be registered at once`
+    );
+  }
+
+  if (!Array.isArray(demographics) || demographics.length !== campers.length) {
+    throw new HttpsError(
+      "invalid-argument",
+      "demographics must contain one entry per camper"
+    );
+  }
 }
