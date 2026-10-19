@@ -44,6 +44,7 @@ export const ROLE_CAPABILITIES = {
     manageAdmins: true,
     manageWaitlist: true,
     createTestData: true,
+    manageCampYear: true,
   },
   // program_staff plus the ability to run the yearly camp-year rollover
   // (dates, fees, caps, bypass emails). Still no roster or money access.
@@ -56,6 +57,7 @@ export const ROLE_CAPABILITIES = {
     manageAdmins: false,
     manageWaitlist: false,
     createTestData: false,
+    manageCampYear: true,
   },
   program_staff: {
     readHealth: false,
@@ -66,6 +68,7 @@ export const ROLE_CAPABILITIES = {
     manageAdmins: false,
     manageWaitlist: false,
     createTestData: false,
+    manageCampYear: false,
   },
   health_staff: {
     readHealth: true,
@@ -76,6 +79,7 @@ export const ROLE_CAPABILITIES = {
     manageAdmins: false,
     manageWaitlist: false,
     createTestData: false,
+    manageCampYear: false,
   },
 } as const satisfies Record<AdminRole, Record<string, boolean>>
 
@@ -134,3 +138,18 @@ export type AdminAuditLogEntry = {
   after: Admin | null
   at: TimestampLike
 }
+
+// Also stored at: adminAuditLog/{autoId}, written by the manageCampYear
+// callable. `target` is the document path ("camps/2027", "config/site") and
+// `database` says which data set (prod or test) the write went to.
+export type CampYearAuditLogEntry = {
+  actor: string
+  action: "createYear" | "updateYear" | "setSiteConfig"
+  target: string
+  database: string
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  at: TimestampLike
+}
+
+export type AuditLogEntry = AdminAuditLogEntry | CampYearAuditLogEntry
