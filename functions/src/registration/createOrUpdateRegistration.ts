@@ -48,7 +48,10 @@ type CamperAndRegInfo = RegistrationPayload["campers"][0];
  * Given a family payload, update the family and return the reference to it.
  * @param db
  * @param familyPayload
- * @param emails
+ * @param emails Normalized parent emails from the payload (includes the caller).
+ * @param householdCulture
+ * @param authEmail The caller's verified email from Firebase Auth.
+ * @param joinFamilyId A family the caller confirmed as theirs, if any.
  * @returns
  */
 async function updateAndGetFamily(
@@ -56,18 +59,31 @@ async function updateAndGetFamily(
   familyPayload: Family,
   emails: string[],
   householdCulture: HouseholdCulture,
-  authEmail: string
+  authEmail: string,
+  joinFamilyId?: string | null
 ): Promise<DocumentReference<Family>> {
-  const familyRef = await findOrCreateFamily(db, authEmail);
+  const callerEmail = normalizeEmail(authEmail);
+  const {ref: familyRef, didExist} = await findOrCreateFamily(
+    db,
+    authEmail,
+    joinFamilyId
+  );
   await familyRef.set(
     {
       emails: FieldValue.arrayUnion(...emails),
+      // The caller registered through this family themselves, so from now on
+      // it is theirs without asking (see isEstablishedFamilyMember). Only the
+      // caller is confirmed; co-parents they list still have to confirm.
+      confirmedEmails: FieldValue.arrayUnion(callerEmail),
       household: householdCulture,
       city: familyPayload.city,
       state: familyPayload.state,
       zip: familyPayload.zip,
       street: familyPayload.street,
       schemaVersion: CURRENT_SCHEMA_VERSION,
+      // Stamp the creator once so findOrCreateFamily can tell this family
+      // apart from one the caller was merely listed in by someone else.
+      ...(didExist ? {} : {createdBy: callerEmail}),
     },
     {
       merge: true,
@@ -171,8 +187,15 @@ export async function createOrUpdateRegistration(
   authEmail: string
 ): Promise<RegistrationReferences> {
   // TODO: Add HouseholdCulture property here to update into firebase for each family
-  const {campYear, family, parents, campers, demographics, household} =
-    registrationPayload;
+  const {
+    campYear,
+    family,
+    parents,
+    campers,
+    demographics,
+    household,
+    joinFamilyId,
+  } = registrationPayload;
 
   const campRef = db.collection("camps").doc(campYear.toString());
 
@@ -184,7 +207,7 @@ export async function createOrUpdateRegistration(
 
   // Update the family, parents, and campers according to the payload.
   const familyRef = await updateAndGetFamily(
-    db, family, emails, household, authEmail
+    db, family, emails, household, authEmail, joinFamilyId
   );
   const parentRefs = await updateAndGetParents(db, familyRef, parents);
 

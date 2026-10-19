@@ -29,6 +29,7 @@ export enum RegistrationActionType {
   PrefillFamily = 15,
   LoadPendingPaymentRegistrations = 16,
   EditHousehold = 17,
+  SetJoinFamily = 18,
 }
 
 export interface RegistrationBaseAction {
@@ -89,6 +90,13 @@ export interface RegistrationLoadPendingPaymentRegistrationsAction
   familyData: FamilyData
 }
 
+// Records the parent's answer to "is this existing family yours?": the
+// family's id, or null to register into a family of their own.
+export interface RegistrationSetJoinFamilyAction
+  extends RegistrationBaseAction {
+  joinFamilyId: string | null
+}
+
 export type RegistrationAction =
   | RegistrationAddAction
   | RegistrationEditAction
@@ -99,6 +107,7 @@ export type RegistrationAction =
   | RegistrationPrefillParentAction
   | RegistrationPrefillFamilyAction
   | RegistrationLoadPendingPaymentRegistrationsAction
+  | RegistrationSetJoinFamilyAction
 
 /**
  * Reducer that handles all of the state management for registrationState. Note that we have to always return a new copy of the registrationState
@@ -400,6 +409,14 @@ export function registrationReducer(
       }
       break
     }
+    case RegistrationActionType.SetJoinFamily: {
+      const { joinFamilyId } = action as RegistrationSetJoinFamilyAction
+      changedState = {
+        ...registrationState,
+        joinFamilyId,
+      }
+      break
+    }
     default: {
       throw Error("Unknown action: " + action.type)
     }
@@ -424,6 +441,7 @@ export function createEmptyRegistrationData(campYear: number) {
     demographics: [{}],
     household: {},
     donation: 0,
+    joinFamilyId: null,
   }
 }
 

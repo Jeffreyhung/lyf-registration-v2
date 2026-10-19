@@ -14,6 +14,11 @@ export type RegistrationData = {
   demographics: Demographics[]
   donation: number
   household: HouseholdCulture
+  // When another parent listed this account on an existing family, the
+  // registration flow asks whether that family is really theirs. The id of
+  // the family they confirmed goes here; null/undefined means "start my own".
+  // The server only honours it for a family the caller is actually listed in.
+  joinFamilyId?: string | null
 }
 
 export type RegistrationPayload = RegistrationData & {

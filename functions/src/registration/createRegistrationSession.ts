@@ -13,14 +13,21 @@ import {
   sendMessageToRegistrationErrorMessages,
   sendMessageToRegistrationForCampChannel,
 } from "../slack/slackChannelWebhooks";
-import {createDiscountName, getStripeCustomerId} from "../registrationUtils";
+import {
+  computeRegistrationCharges,
+  createDiscountName,
+  DEFAULT_SIBLING_DISCOUNT,
+  getStripeCustomerId,
+} from "../registrationUtils";
 import {createRegistrationDonationSession} from "../donation/createDonationSession";
 import {createOrUpdateRegistration} from "./createOrUpdateRegistration";
 import {
   callableOptions,
+  resolveForceWaitlistFlag,
   resolveTestDataFlag,
   validateDollarAmount,
   validateRedirectUrl,
+  validateRegistrationPayloadShape,
 } from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
 
@@ -58,9 +65,10 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
       successUrl,
       cancelUrl,
       isTestData: requestedTestData = false,
-      forceWaitlist = false,
+      forceWaitlist: requestedForceWaitlist = false,
     } = request.data;
 
+    validateRegistrationPayloadShape(request.data);
     validateRedirectUrl(successUrl);
     validateRedirectUrl(cancelUrl);
     if (donation > 0) {
@@ -68,6 +76,10 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
     }
 
     const isTestData = await resolveTestDataFlag(request, requestedTestData);
+    const forceWaitlist = await resolveForceWaitlistFlag(
+      request,
+      requestedForceWaitlist
+    );
     const db = getFirestoreDb(!isTestData);
 
     // Get the registration pricing.
@@ -75,7 +87,8 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
     const campData = (await campRef.get()).data() as CampYear;
     const campPrice = getRegistrationPrice(campData);
     const campPreRegistrationFee = campData?.preRegistrationFee ?? 500;
-    const siblingDiscount = campData?.siblingDiscount ?? 80;
+    const siblingDiscount =
+      campData?.siblingDiscount ?? DEFAULT_SIBLING_DISCOUNT;
     const remainingSpots = campData?.remainingSpots ?? {
       [CampTrack.YOUNGER]: 0,
       [CampTrack.OLDER]: 0,
@@ -147,7 +160,7 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
       );
     }
 
-    let totalRegistrationCost = 0;
+    let registeredCost = 0;
     const stripeLineItems: LineItem<RegistrationLineItemMetadata>[] = [];
 
     // Create Stripe line items for the registrations.
@@ -159,7 +172,7 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
           const registrationCost =
             campPrice - (isPreRegistered ? campPreRegistrationFee : 0);
 
-          totalRegistrationCost += registrationCost;
+          registeredCost += registrationCost;
           stripeLineItems.push({
             priceInDollars: registrationCost,
             name: `LYF Camp ${campYear} Registration${
@@ -178,21 +191,26 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
     );
 
     // We don't trust any discounts applied from the client-side, so re-compute them here.
-    const siblingDiscountAmount = siblingDiscount * (campers.length - 1);
-    totalRegistrationCost -= siblingDiscountAmount;
-
-    // Apply any camp credit that the family has.
+    // The discount is per *paid* sibling: waitlisted campers are not charged, so
+    // they must not count, or a request padded with waitlisted campers could
+    // discount the paid ones down to nothing (see computeRegistrationCharges).
     const campCredit = await db.collection("credits").doc(familyRef.id).get();
-    const campCreditRemaining = campCredit.data()?.amountRemaining ?? 0;
-    const campCreditUsed = Math.min(totalRegistrationCost, campCreditRemaining);
+    const {siblingDiscountAmount, campCreditUsed, isFullyCovered} =
+      computeRegistrationCharges({
+        registeredCost,
+        registeredCount: registeredCampers.length,
+        siblingDiscount,
+        campCreditRemaining: campCredit.data()?.amountRemaining ?? 0,
+      });
 
     // At this point, if they have more camp credit than the total registration cost
     // (i.e. financial aid), then we just need to immediately return or create a donation session
-    if (totalRegistrationCost <= campCreditUsed) {
-      // Complete the registrations
+    if (isFullyCovered) {
+      // Complete the registrations. Only the campers who have a spot become
+      // active; waitlisted campers in the same request stay on the waitlist.
       const campTrackSpots = new Map<string, number>();
       await Promise.all(
-        camperAndStatuses.map(async (c) => {
+        registeredCampers.map(async (c) => {
           await c.registrationRef.update({
             status: RegistrationStatus.ACTIVE,
             updatedAt: FieldValue.serverTimestamp(),
@@ -211,7 +229,7 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
         campYear.toString(),
         signedInParentEmail,
         familyRef,
-        camperAndStatuses.map((c) => c.registrationRef),
+        registeredCampers.map((c) => c.registrationRef),
         stripeLineItems.map((s) => s.name),
         campCreditUsed,
         campTrackSpots
