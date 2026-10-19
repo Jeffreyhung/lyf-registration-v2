@@ -26,6 +26,10 @@ import {issueStripeRefund} from "./stripe/issueStripeRefund";
 // Import our function for managing the admin roster (the only write path to admins/)
 import {manageAdmin} from "./admin/manageAdmin";
 
+// Import our function for camp year configuration (the only write path to
+// camps/{year} config fields and config/site)
+import {manageCampYear} from "./admin/manageCampYear";
+
 // Import our triggers that keep Registration.familyEmails in sync with Family.emails
 import {
   syncFamilyEmailsOnUpdate,
@@ -44,6 +48,7 @@ export {
   moveCampersOffWaitlist as moveCampersOffWaitlistV2,
   issueStripeRefund as issueStripeRefundV2,
   manageAdmin as manageAdminV2,
+  manageCampYear as manageCampYearV2,
   syncFamilyEmailsOnUpdate as syncFamilyEmailsOnUpdateV2,
   syncFamilyEmailsOnUpdateTest as syncFamilyEmailsOnUpdateTestV2,
 };
