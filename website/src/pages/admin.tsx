@@ -31,6 +31,7 @@ import { SnackbarAlertProvider } from "@components/SnackbarAlert"
 import PaymentDashboard from "@components/Admin/PaymentDashboard"
 import CampCreditTab from "@components/Admin/CampCreditTab"
 import AdminManagement from "@components/Admin/AdminManagement"
+import CampYearTab from "@components/Admin/CampYearTab"
 import { roleHasCapability } from "lyf-registration-schemas"
 
 const enum AdminTab {
@@ -42,6 +43,7 @@ const enum AdminTab {
   CAMP_CREDITS,
   CREATE_TEST_DATA,
   SMALL_GROUP_ASSIGNMENTS,
+  CAMP_YEAR,
   ADMIN_MANAGEMENT,
 }
 
@@ -122,6 +124,9 @@ const AdminPage: React.FC = () => {
           <Tab value={AdminTab.CREATE_TEST_DATA} label="Create Test Data" id="tab-create-test-data" />
         )}
         <Tab value={AdminTab.SMALL_GROUP_ASSIGNMENTS} label="Small Group Assignments" id="tab-small-group-assignments" />
+        {roleHasCapability(adminRole, "manageCampYear") && (
+          <Tab value={AdminTab.CAMP_YEAR} label="Camp Year" id="tab-camp-year" />
+        )}
         {roleHasCapability(adminRole, "manageAdmins") && (
           <Tab value={AdminTab.ADMIN_MANAGEMENT} label="Admin Management" id="tab-admin-management" />
         )}
@@ -171,6 +176,11 @@ const AdminPage: React.FC = () => {
         <TabPanel index={AdminTab.SMALL_GROUP_ASSIGNMENTS} value={tab} id="small-group-assignments">
           <SmallGroupAssignmentsV2 registrations={data} campYear={year}/>
         </TabPanel>
+        {roleHasCapability(adminRole, "manageCampYear") && (
+          <TabPanel index={AdminTab.CAMP_YEAR} value={tab} id="camp-year">
+            <CampYearTab />
+          </TabPanel>
+        )}
         {roleHasCapability(adminRole, "manageAdmins") && (
           <TabPanel index={AdminTab.ADMIN_MANAGEMENT} value={tab} id="admin-management">
             <AdminManagement />
