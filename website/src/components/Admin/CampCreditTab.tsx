@@ -30,20 +30,28 @@ export default function CampCreditTab({}: CampCreditProps) {
     const querySnapshot = await getDocs(q)
 
     if (querySnapshot.empty) {
+      setFamilyId("")
       setSnackbar({
         children: "No family found with that email",
         severity: "error",
       })
-    } else if (querySnapshot.size > 1) {
-      setSnackbar({
-        children: "More than one family found with that email",
-        severity: "error",
-      })
+      return
     }
 
-    querySnapshot.forEach((doc) => {
-      setFamilyId(doc.id)
-    })
+    // An email can legitimately be listed in more than one family (a parent
+    // listed by someone else and their own). Picking one silently would credit
+    // the wrong household, so refuse and let the admin resolve it.
+    if (querySnapshot.size > 1) {
+      setFamilyId("")
+      const ids = querySnapshot.docs.map((d) => d.id).join(", ")
+      setSnackbar({
+        children: `More than one family found with that email (${ids}). Resolve the duplicate before adding credit.`,
+        severity: "error",
+      })
+      return
+    }
+
+    setFamilyId(querySnapshot.docs[0].id)
   }
 
   // Given the family ID, get the camp credit document
