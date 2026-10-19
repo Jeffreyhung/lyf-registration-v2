@@ -1,0 +1,26 @@
+{
+  "name": "LYF Camp 2027",
+  "campsite": "Alliance Redwoods Conference Grounds",
+  "campsiteAddress": "6250 Bohemian Hwy, Occidental, CA 95465",
+
+  "preRegistrationOpenDate": "2026-07-12T15:00:00-07:00",
+  "preRegistrationCloseDate": "2026-08-04T00:00:00-07:00",
+  "earlyRegOpenDate": "2027-01-30T12:00:00-08:00",
+  "earlyRegEndDate": "2027-02-13T12:00:00-08:00",
+  "registrationOpenDate": "2027-02-14T12:00:00-08:00",
+  "registrationLateDate": "2027-03-31T12:00:00-07:00",
+  "registrationCloseDate": "2027-04-20T00:00:00-07:00",
+  "infoSessionDate": "2027-02-03T19:00:00-08:00",
+  "campStartDate": "2027-07-11T15:00:00-07:00",
+  "campEndDate": "2027-07-17T15:00:00-07:00",
+
+  "preRegistrationFee": 500,
+  "registrationFee": 1325,
+  "registrationLateFee": 1525,
+  "shirtPrice": 0,
+  "siblingDiscount": 0,
+
+  "campTotalSizeCap": 185,
+  "campSizeCaps": { "Younger": 85, "Older": 85 },
+  "registrationBypassEmails": []
+}
