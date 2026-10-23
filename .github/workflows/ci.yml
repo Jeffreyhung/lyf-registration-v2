@@ -1,0 +1,87 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. The Firestore rules suite
+# needs the emulator (and a JRE) and only matters when the rules change, so it
+# stays in its own path-filtered workflow (test-firestore-rules.yml).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  schemas:
+    name: Schemas (build + unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - name: Build
+        run: yarn workspace lyf-registration-schemas build
+      - name: Unit tests
+        run: yarn workspace lyf-registration-schemas test
+
+  functions:
+    name: Functions (lint + unit tests + type-check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - name: Lint
+        run: yarn workspace functions lint
+      # The test script builds the schemas workspace first; the functions
+      # import lyf-registration-schemas from its dist/.
+      - name: Unit tests
+        run: yarn workspace functions test
+      - name: Type-check the production build
+        run: yarn --cwd functions tsc --noEmit -p tsconfig.json
+
+  small-group-pairing:
+    name: Small group pairing (build + unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - name: Build
+        run: yarn workspace small-group-pairing build
+      - name: Unit tests
+        run: yarn workspace small-group-pairing test
+
+  website:
+    name: Website (type-check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # The website's tsconfig references both local packages; they must be
+      # built for their declarations to resolve.
+      - name: Build local workspace packages
+        run: |
+          yarn workspace lyf-registration-schemas build
+          yarn workspace small-group-pairing build
+      - name: Type-check
+        run: yarn workspace lyf-registration-website typecheck

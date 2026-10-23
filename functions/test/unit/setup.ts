@@ -9,3 +9,8 @@ jest.mock("firebase-functions", () => ({
     error: jest.fn(),
   },
 }));
+
+// Module-level configuration in src/utils/auth.ts reads these at import time.
+// Make the tests independent of whatever the developer's shell has set.
+delete process.env.FUNCTIONS_EMULATOR;
+delete process.env.ALLOWED_REDIRECT_ORIGINS;

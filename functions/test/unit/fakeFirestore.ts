@@ -1,12 +1,29 @@
 /**
- * A tiny in-memory stand-in for the parts of the Firestore Admin SDK that
- * findOrCreateFamily touches: collection().where().get(), collection().doc(),
- * and document snapshots with id/ref/data(). It is deliberately minimal; add
- * behaviour here only when a test needs it.
+ * A tiny in-memory stand-in for the parts of the Firestore Admin SDK that the
+ * registration helpers touch: collection()/doc() navigation (including
+ * sub-collections and parent links), where(...).get(), listDocuments(), and
+ * document snapshots with id/ref/exists/data(). It is deliberately minimal;
+ * add behaviour here only when a test needs it.
+ *
+ * Collections are addressed by their full path ("families/f1/campers"), so a
+ * sub-collection is just a collection whose name contains slashes.
  */
+import type {
+  CollectionReference,
+  DocumentReference,
+  Firestore,
+} from "firebase-admin/firestore";
+
 type DocData = Record<string, unknown>;
 
 type WhereClause = {field: string; op: string; value: unknown};
+
+function splitPath(path: string): {parent: string | null; last: string} {
+  const i = path.lastIndexOf("/");
+  return i === -1 ?
+    {parent: null, last: path} :
+    {parent: path.slice(0, i), last: path.slice(i + 1)};
+}
 
 export class FakeDocRef {
   constructor(
@@ -17,6 +34,15 @@ export class FakeDocRef {
 
   get path(): string {
     return `${this.collectionName}/${this.id}`;
+  }
+
+  /** The collection this document lives in. */
+  get parent(): FakeCollection {
+    return new FakeCollection(this.db, this.collectionName);
+  }
+
+  collection(name: string): FakeCollection {
+    return new FakeCollection(this.db, `${this.path}/${name}`);
   }
 
   async get() {
@@ -44,6 +70,11 @@ export class FakeDocRef {
       throw new Error(`No document to update: ${this.path}`);
     }
     this.db.write(this.collectionName, this.id, {...existing, ...data});
+  }
+
+  /** Typed view for passing into code under test. */
+  as<T = DocData>(): DocumentReference<T> {
+    return this as unknown as DocumentReference<T>;
   }
 }
 
@@ -86,7 +117,7 @@ function matches(data: DocData, {field, op, value}: WhereClause): boolean {
   }
 }
 
-class FakeCollection extends FakeQuery {
+export class FakeCollection extends FakeQuery {
   constructor(
     private readonly fakeDb: FakeFirestore,
     private readonly name: string
@@ -94,8 +125,35 @@ class FakeCollection extends FakeQuery {
     super(fakeDb, name, []);
   }
 
+  get path(): string {
+    return this.name;
+  }
+
+  get id(): string {
+    return splitPath(this.name).last;
+  }
+
+  /** The document this collection hangs off, or null for a root collection. */
+  get parent(): FakeDocRef | null {
+    const {parent} = splitPath(this.name);
+    if (parent === null) return null;
+    const doc = splitPath(parent);
+    return new FakeDocRef(this.fakeDb, doc.parent!, doc.last);
+  }
+
   doc(id?: string): FakeDocRef {
     return new FakeDocRef(this.fakeDb, this.name, id ?? this.fakeDb.nextId());
+  }
+
+  async listDocuments(): Promise<FakeDocRef[]> {
+    return [...this.fakeDb.entries(this.name)].map(
+      ([id]) => new FakeDocRef(this.fakeDb, this.name, id)
+    );
+  }
+
+  /** Typed view for passing into code under test. */
+  as<T = DocData>(): CollectionReference<T> {
+    return this as unknown as CollectionReference<T>;
   }
 }
 
@@ -111,6 +169,15 @@ export class FakeFirestore {
 
   collection(name: string): FakeCollection {
     return new FakeCollection(this, name);
+  }
+
+  /** A document by full path, e.g. "families/f1/campers/c1". */
+  doc(path: string): FakeDocRef {
+    const {parent, last} = splitPath(path);
+    if (parent === null) {
+      throw new Error(`Document path must have an even number of segments: ${path}`);
+    }
+    return new FakeDocRef(this, parent, last);
   }
 
   nextId(): string {
@@ -131,5 +198,10 @@ export class FakeFirestore {
 
   entries(collectionName: string): Iterable<[string, DocData]> {
     return this.store.get(collectionName)?.entries() ?? [];
+  }
+
+  /** Typed view for passing into code under test. */
+  as(): Firestore {
+    return this as unknown as Firestore;
   }
 }
