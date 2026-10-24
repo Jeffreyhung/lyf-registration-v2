@@ -87,6 +87,29 @@ describe("constructor", () => {
 
     expect(c.groupId).toBe(UNASSIGNED_GROUP_ID)
   })
+
+  test("auto-creates groups referenced by campers that were not passed in", () => {
+    // Regression: a camper whose persisted groupId is not one of the provided
+    // groups used to crash with "Cannot read properties of undefined (reading 'members')".
+    const pairings = new Pairings(
+      [group("A")],
+      [camper("1", "A"), camper("2", "legacy"), camper("3", "legacy")]
+    )
+
+    expect(pairings.groups.map((g) => g.id)).toEqual([UNASSIGNED_GROUP_ID, "A", "legacy"])
+    expect(pairings.getGroup("legacy")).toMatchObject({minSize: 0, maxSize: 20})
+    expect(memberIds(pairings, "A")).toEqual(["1"])
+    expect(memberIds(pairings, "legacy")).toEqual(["2", "3"])
+  })
+
+  test("treats an empty-string groupId as unassigned", () => {
+    const c = camper("1", "")
+    const pairings = new Pairings([group("A")], [c])
+
+    expect(c.groupId).toBe(UNASSIGNED_GROUP_ID)
+    expect(pairings.groups.map((g) => g.id)).toEqual([UNASSIGNED_GROUP_ID, "A"])
+    expect(memberIds(pairings, UNASSIGNED_GROUP_ID)).toEqual(["1"])
+  })
 })
 
 describe("getGroup", () => {
@@ -184,6 +207,28 @@ describe("assignCamperToGroup / assignCamperToGroupId", () => {
     pairings.assignCamperToGroupId(c, "A")
 
     expect(memberIds(pairings, "A")).toEqual(["1"])
+  })
+
+  test("throws a descriptive error for an unknown group id and leaves the camper put", () => {
+    const c = camper("1", "A")
+    const pairings = new Pairings([group("A")], [c])
+
+    expect(() => pairings.assignCamperToGroupId(c, "nope")).toThrow(
+      'Cannot assign camper 1 to unknown group "nope"'
+    )
+    expect(c.groupId).toBe("A")
+    expect(memberIds(pairings, "A")).toEqual(["1"])
+  })
+})
+
+describe("addCamper with an empty groupId", () => {
+  test("places the camper in the unassigned group", () => {
+    const pairings = new Pairings([group("A")], [])
+
+    pairings.addCamper(camper("1", ""))
+
+    expect(memberIds(pairings, UNASSIGNED_GROUP_ID)).toEqual(["1"])
+    expect(pairings.groups.map((g) => g.id)).toEqual([UNASSIGNED_GROUP_ID, "A"])
   })
 })
 
