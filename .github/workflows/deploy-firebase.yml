@@ -1,0 +1,242 @@
+name: Deploy to Firebase
+
+# Continuous deployment for the Firebase side of the project: Cloud Functions
+# (codebase "v2") and Firestore rules/indexes. Runs on every push to main and
+# deploys only the parts whose sources changed. The website is deployed by
+# deploy-website.yml (GitHub Pages).
+#
+# Auth is Workload Identity Federation — no service-account key is stored in
+# GitHub. See README "Deployment" for the one-time GCP setup.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "functions/**"
+      - "schemas/**"
+      - "firestore.rules"
+      - "firestore.indexes.json"
+      - "firebase.json"
+      - ".firebaserc"
+      - "package.json"
+      - "yarn.lock"
+      - ".github/workflows/deploy-firebase.yml"
+  workflow_dispatch:
+    inputs:
+      deploy_functions:
+        description: Deploy Cloud Functions
+        type: boolean
+        default: true
+      deploy_firestore:
+        description: Deploy Firestore rules and indexes
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # required to mint the OIDC token for Workload Identity Federation
+
+# One deploy at a time; a cancelled Firebase deploy can leave a half-updated
+# release, so let in-flight runs finish.
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: false
+
+env:
+  FIREBASE_PROJECT: ${{ vars.FIREBASE_PROJECT_ID }}
+
+jobs:
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      functions: ${{ steps.filter.outputs.functions }}
+      firestore: ${{ steps.filter.outputs.firestore }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            functions:
+              - "functions/**"
+              - "schemas/**"
+              - "firebase.json"
+              - ".firebaserc"
+              - "package.json"
+              - "yarn.lock"
+              - ".github/workflows/deploy-firebase.yml"
+            firestore:
+              - "firestore.rules"
+              - "firestore.indexes.json"
+              - "firebase.json"
+              - ".firebaserc"
+              - ".github/workflows/deploy-firebase.yml"
+
+  firestore:
+    name: Firestore rules + indexes
+    needs: changes
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_firestore) ||
+      (github.event_name == 'push' && needs.changes.outputs.firestore == 'true')
+    runs-on: ubuntu-latest
+    environment: firebase
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Check deploy target is configured
+        run: |
+          if [ -z "$FIREBASE_PROJECT" ]; then
+            echo "::error::FIREBASE_PROJECT_ID variable is empty — add it under Settings → Secrets and variables → Actions → Variables"
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      # firebase.json lists both named databases (lyf-v2 and lyf-v2-test);
+      # this pushes the shared rules and indexes to each.
+      - name: Deploy Firestore rules and indexes
+        run: yarn firebase deploy --only firestore --project "$FIREBASE_PROJECT" --non-interactive
+
+  functions:
+    name: Cloud Functions (v2 codebase)
+    needs: changes
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.deploy_functions) ||
+      (github.event_name == 'push' && needs.changes.outputs.functions == 'true')
+    runs-on: ubuntu-latest
+    environment: firebase
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # The Firebase CLI applies functions/.env as the functions' runtime
+      # environment, replacing whatever is currently configured. An empty value
+      # here would wipe a production credential, or bind the Firestore triggers
+      # to the wrong database, so refuse to deploy unless every value is set.
+      # Mirrors functions/.env.example.
+      - name: Check runtime secrets and variables are present
+        run: |
+          for v in FIREBASE_PROJECT FIRESTORE_DATABASE_ID FIRESTORE_TEST_DATABASE_ID ALLOWED_REDIRECT_ORIGINS \
+                   STRIPE_API_KEY STRIPE_TEST_API_KEY STRIPE_ENDPOINT_SECRET STRIPE_TEST_ENDPOINT_SECRET \
+                   EMAIL EMAIL_CLIENT_ID EMAIL_CLIENT_SECRET EMAIL_REFRESH_TOKEN \
+                   GATSBY_FIREBASE_API_KEY GATSBY_FIREBASE_AUTH_DOMAIN GATSBY_FIREBASE_PROJECT_ID \
+                   GATSBY_FIREBASE_STORAGE_BUCKET GATSBY_FIREBASE_MESSAGING_SENDER_ID GATSBY_FIREBASE_APP_ID \
+                   MAILCHIMP_API_KEY MAILCHIMP_SERVER \
+                   SLACK_REGISTRATION_WEBHOOK SLACK_REGISTRATION_FOR_CAMP_WEBHOOK SLACK_ERROR_WEBHOOK; do
+            if [ -z "${!v}" ]; then
+              echo "::error::$v is empty — add it under Settings → Secrets and variables → Actions (as a secret or variable, on the repository or the 'firebase' environment)"
+              missing=1
+            fi
+          done
+          [ -z "${missing:-}" ]
+        env:
+          FIRESTORE_DATABASE_ID: ${{ vars.GATSBY_FIRESTORE_DATABASE_ID }}
+          FIRESTORE_TEST_DATABASE_ID: ${{ vars.GATSBY_FIRESTORE_TEST_DATABASE_ID }}
+          ALLOWED_REDIRECT_ORIGINS: ${{ vars.ALLOWED_REDIRECT_ORIGINS }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          STRIPE_TEST_API_KEY: ${{ secrets.STRIPE_TEST_API_KEY }}
+          STRIPE_ENDPOINT_SECRET: ${{ secrets.STRIPE_ENDPOINT_SECRET }}
+          STRIPE_TEST_ENDPOINT_SECRET: ${{ secrets.STRIPE_TEST_ENDPOINT_SECRET }}
+          EMAIL: ${{ secrets.EMAIL }}
+          EMAIL_CLIENT_ID: ${{ secrets.EMAIL_CLIENT_ID }}
+          EMAIL_CLIENT_SECRET: ${{ secrets.EMAIL_CLIENT_SECRET }}
+          EMAIL_REFRESH_TOKEN: ${{ secrets.EMAIL_REFRESH_TOKEN }}
+          GATSBY_FIREBASE_API_KEY: ${{ secrets.GATSBY_FIREBASE_API_KEY }}
+          GATSBY_FIREBASE_AUTH_DOMAIN: ${{ secrets.GATSBY_FIREBASE_AUTH_DOMAIN }}
+          GATSBY_FIREBASE_PROJECT_ID: ${{ secrets.GATSBY_FIREBASE_PROJECT_ID }}
+          GATSBY_FIREBASE_STORAGE_BUCKET: ${{ secrets.GATSBY_FIREBASE_STORAGE_BUCKET }}
+          GATSBY_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.GATSBY_FIREBASE_MESSAGING_SENDER_ID }}
+          GATSBY_FIREBASE_APP_ID: ${{ secrets.GATSBY_FIREBASE_APP_ID }}
+          MAILCHIMP_API_KEY: ${{ secrets.MAILCHIMP_API_KEY }}
+          MAILCHIMP_SERVER: ${{ secrets.MAILCHIMP_SERVER }}
+          SLACK_REGISTRATION_WEBHOOK: ${{ secrets.SLACK_REGISTRATION_WEBHOOK }}
+          SLACK_REGISTRATION_FOR_CAMP_WEBHOOK: ${{ secrets.SLACK_REGISTRATION_FOR_CAMP_WEBHOOK }}
+          SLACK_ERROR_WEBHOOK: ${{ secrets.SLACK_ERROR_WEBHOOK }}
+
+      # The firebase.json predeploy hooks copy functions/.env into the isolated
+      # bundle, and the CLI reads it for trigger database bindings and the
+      # functions' runtime environment.
+      - name: Write functions/.env from secrets
+        run: |
+          cat > functions/.env <<EOF
+          FIRESTORE_DATABASE_ID=${FIRESTORE_DATABASE_ID}
+          FIRESTORE_TEST_DATABASE_ID=${FIRESTORE_TEST_DATABASE_ID}
+          ALLOWED_REDIRECT_ORIGINS=${ALLOWED_REDIRECT_ORIGINS}
+          STRIPE_API_KEY=${STRIPE_API_KEY}
+          STRIPE_TEST_API_KEY=${STRIPE_TEST_API_KEY}
+          STRIPE_ENDPOINT_SECRET=${STRIPE_ENDPOINT_SECRET}
+          STRIPE_TEST_ENDPOINT_SECRET=${STRIPE_TEST_ENDPOINT_SECRET}
+          EMAIL=${EMAIL}
+          EMAIL_CLIENT_ID=${EMAIL_CLIENT_ID}
+          EMAIL_CLIENT_SECRET=${EMAIL_CLIENT_SECRET}
+          EMAIL_REFRESH_TOKEN=${EMAIL_REFRESH_TOKEN}
+          GATSBY_FIREBASE_API_KEY=${GATSBY_FIREBASE_API_KEY}
+          GATSBY_FIREBASE_AUTH_DOMAIN=${GATSBY_FIREBASE_AUTH_DOMAIN}
+          GATSBY_FIREBASE_PROJECT_ID=${GATSBY_FIREBASE_PROJECT_ID}
+          GATSBY_FIREBASE_STORAGE_BUCKET=${GATSBY_FIREBASE_STORAGE_BUCKET}
+          GATSBY_FIREBASE_MESSAGING_SENDER_ID=${GATSBY_FIREBASE_MESSAGING_SENDER_ID}
+          GATSBY_FIREBASE_APP_ID=${GATSBY_FIREBASE_APP_ID}
+          GATSBY_FIREBASE_MEASUREMENT_ID=${GATSBY_FIREBASE_MEASUREMENT_ID}
+          MAILCHIMP_API_KEY=${MAILCHIMP_API_KEY}
+          MAILCHIMP_SERVER=${MAILCHIMP_SERVER}
+          SLACK_REGISTRATION_WEBHOOK=${SLACK_REGISTRATION_WEBHOOK}
+          SLACK_REGISTRATION_FOR_CAMP_WEBHOOK=${SLACK_REGISTRATION_FOR_CAMP_WEBHOOK}
+          SLACK_ERROR_WEBHOOK=${SLACK_ERROR_WEBHOOK}
+          EOF
+        env:
+          FIRESTORE_DATABASE_ID: ${{ vars.GATSBY_FIRESTORE_DATABASE_ID }}
+          FIRESTORE_TEST_DATABASE_ID: ${{ vars.GATSBY_FIRESTORE_TEST_DATABASE_ID }}
+          ALLOWED_REDIRECT_ORIGINS: ${{ vars.ALLOWED_REDIRECT_ORIGINS }}
+          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          STRIPE_TEST_API_KEY: ${{ secrets.STRIPE_TEST_API_KEY }}
+          STRIPE_ENDPOINT_SECRET: ${{ secrets.STRIPE_ENDPOINT_SECRET }}
+          STRIPE_TEST_ENDPOINT_SECRET: ${{ secrets.STRIPE_TEST_ENDPOINT_SECRET }}
+          EMAIL: ${{ secrets.EMAIL }}
+          EMAIL_CLIENT_ID: ${{ secrets.EMAIL_CLIENT_ID }}
+          EMAIL_CLIENT_SECRET: ${{ secrets.EMAIL_CLIENT_SECRET }}
+          EMAIL_REFRESH_TOKEN: ${{ secrets.EMAIL_REFRESH_TOKEN }}
+          GATSBY_FIREBASE_API_KEY: ${{ secrets.GATSBY_FIREBASE_API_KEY }}
+          GATSBY_FIREBASE_AUTH_DOMAIN: ${{ secrets.GATSBY_FIREBASE_AUTH_DOMAIN }}
+          GATSBY_FIREBASE_PROJECT_ID: ${{ secrets.GATSBY_FIREBASE_PROJECT_ID }}
+          GATSBY_FIREBASE_STORAGE_BUCKET: ${{ secrets.GATSBY_FIREBASE_STORAGE_BUCKET }}
+          GATSBY_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.GATSBY_FIREBASE_MESSAGING_SENDER_ID }}
+          GATSBY_FIREBASE_APP_ID: ${{ secrets.GATSBY_FIREBASE_APP_ID }}
+          GATSBY_FIREBASE_MEASUREMENT_ID: ${{ secrets.GATSBY_FIREBASE_MEASUREMENT_ID }}
+          MAILCHIMP_API_KEY: ${{ secrets.MAILCHIMP_API_KEY }}
+          MAILCHIMP_SERVER: ${{ secrets.MAILCHIMP_SERVER }}
+          SLACK_REGISTRATION_WEBHOOK: ${{ secrets.SLACK_REGISTRATION_WEBHOOK }}
+          SLACK_REGISTRATION_FOR_CAMP_WEBHOOK: ${{ secrets.SLACK_REGISTRATION_FOR_CAMP_WEBHOOK }}
+          SLACK_ERROR_WEBHOOK: ${{ secrets.SLACK_ERROR_WEBHOOK }}
+
+      - name: Authenticate to Google Cloud (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      # The predeploy hooks in firebase.json build schemas, lint, build and
+      # isolate the functions bundle. --force lets the CLI delete functions
+      # that were removed from the v2 codebase instead of aborting the deploy
+      # (non-interactive runs cannot answer the confirmation prompt).
+      - name: Deploy Cloud Functions
+        run: yarn firebase deploy --only functions:v2 --project "$FIREBASE_PROJECT" --non-interactive --force
