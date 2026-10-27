@@ -7,6 +7,11 @@
 import {Camper, CamperId, Group, GroupId} from "../types"
 import {UNASSIGNED_GROUP_ID} from "../utils"
 
+/** Treats a missing or empty group id as the unassigned group. */
+function normalizeGroupId(groupId: GroupId | undefined): GroupId {
+  return groupId || UNASSIGNED_GROUP_ID
+}
+
 export class Pairings<T> {
   public groups: Group<T>[]
   public campers: Camper<T>[]
@@ -26,10 +31,12 @@ export class Pairings<T> {
     // Create a map of groupId to group for easier finding
     this.groupMapping = new Map(this.groups.map((group) => [group.id, group]))
 
-    // For each camper, use the initially provided groupId to assign them to a group
+    // For each camper, use the initially provided groupId to assign them to a group.
+    // Campers may reference a group that wasn't passed in (e.g. a legacy group id
+    // persisted in the database), so auto-create any missing group rather than crash.
     this.campers.forEach((camper) => {
-      const groupId = camper.groupId ?? UNASSIGNED_GROUP_ID
-      // This auto-creates the group if it doesn't already exist
+      const groupId = normalizeGroupId(camper.groupId)
+      this.addGroup(groupId)
       this.assignCamperToGroupId(camper, groupId)
     })
   }
@@ -51,7 +58,7 @@ export class Pairings<T> {
 
   addCamper(camper: Camper<T>) {
     this.campers.push(camper)
-    const groupId = camper.groupId ?? UNASSIGNED_GROUP_ID
+    const groupId = normalizeGroupId(camper.groupId)
     // This will no-op if the group already exists.
     this.addGroup(groupId)
     this.assignCamperToGroupId(camper, groupId)
@@ -69,12 +76,11 @@ export class Pairings<T> {
 
   // TODO: Add a check to make sure group is not full and decide what to do in that case.
   assignCamperToGroupId(camper: Camper<T>, groupId: GroupId) {
-    // Remove the camper from the original group.
-    this.groupMapping.get(camper.groupId)?.members.delete(camper)
-
-    // Assign the camper to the new group.
-    camper.groupId = groupId
-    this.groupMapping.get(groupId).members.add(camper)
+    const group = this.groupMapping.get(groupId)
+    if (!group) {
+      throw new Error(`Cannot assign camper ${camper.id} to unknown group "${groupId}"`)
+    }
+    this.assignCamperToGroup(camper, group)
   }
 
   removeCamper(camperId: CamperId) {

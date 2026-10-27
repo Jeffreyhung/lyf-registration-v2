@@ -97,6 +97,9 @@ service cloud.firestore {
     // Read-only from the client. All roster mutations go through the
     // manageAdmin callable (Admin SDK bypasses rules) so the last-full_admin
     // guard and the audit log cannot be skipped.
+    // These rules are deployed to both databases and get() cannot cross
+    // databases, so the test database holds a copy of the roster kept in
+    // sync by the replicateAdminsToTest trigger.
     match /admins/{email} {
       // Any signed-in user can read their own admin doc (how the client
       // learns its role)

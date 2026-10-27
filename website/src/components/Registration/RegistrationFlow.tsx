@@ -3,6 +3,8 @@ import {
   Button,
   Dialog,
   DialogActions,
+  DialogContent,
+  DialogContentText,
   DialogTitle,
   Typography,
 } from "@mui/material"
@@ -20,7 +22,10 @@ import ReviewStep from "./ReviewStep"
 import ConfirmationScreen from "./ConfirmationScreen"
 
 // Registration Data
-import { getCampTracksFromCamp } from "lyf-registration-schemas"
+import {
+  getCampTracksFromCamp,
+  isEstablishedFamilyMember,
+} from "lyf-registration-schemas"
 import {
   registrationReducer,
   RegistrationDataContext,
@@ -68,11 +73,32 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
     includeRegistrations: true,
   })
 
+  // After we've loaded all the data from the server, we can now setup all the data we need for the registration flow.
+  // We use a reducer to manage all the various actions we can take on this data.
+  const [registrationData, dispatch] = React.useReducer(
+    registrationReducer,
+    createEmptyRegistrationData(campYear)
+  )
+
   // Parse the data from the server
   const { campers, registrations, campCredit, parents, family } = familyData
-  const thisYearsRegistrations = Array.from(registrations.values()).filter(
-    (r) => r.campYear === campYear.toString()
-  )
+
+  // The family we found may have been created by someone else who listed this
+  // parent as a co-parent. Anyone can list any email, so until the parent
+  // confirms it is really their household we neither prefill from it nor show
+  // its campers, and the server will not register them into it either (it
+  // applies the same isEstablishedFamilyMember rule plus `joinFamilyId`).
+  const familyNeedsConfirmation =
+    family != null && !isEstablishedFamilyMember(family, user.email)
+  const useFamily =
+    family != null &&
+    (!familyNeedsConfirmation || registrationData.joinFamilyId === family.id)
+
+  const thisYearsRegistrations = useFamily
+    ? Array.from(registrations.values()).filter(
+        (r) => r.campYear === campYear.toString()
+      )
+    : []
   const preRegistrations = thisYearsRegistrations.filter(
     (r) => r.isPreRegistered
   )
@@ -89,39 +115,65 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   })
 
   const [isWaitlistConfirmed, setIsWaitlistConfirmed] = React.useState(true)
-
-  // After we've loaded all the data from the server, we can now setup all the data we need for the registration flow.
-  // We use a reducer to manage all the various actions we can take on this data.
-  const [registrationData, dispatch] = React.useReducer(
-    registrationReducer,
-    createEmptyRegistrationData(campYear)
-  )
   const camperAndDemographicsEndIndex = registrationData.campers.length * 2 + 2
+
+  // "Is this your family?" dialog. Whichever path needed the answer stashes
+  // what to do next here, and handleFamilyDecision runs it.
+  const [familyDialogOpen, setFamilyDialogOpen] = React.useState(false)
+  const afterFamilyDecision = React.useRef<((joined: boolean) => void) | null>(
+    null
+  )
+
+  // Prefill the signed in parent's info. Only trust the stored parent doc
+  // when the family is (or was just confirmed as) theirs; otherwise whoever
+  // listed them wrote that doc.
+  const prefillSignedInParent = (fromFamily: boolean) => {
+    const storedParent = fromFamily
+      ? parents.find((p) => p.email === user.email)
+      : undefined
+    dispatch({
+      type: RegistrationActionType.PrefillParent,
+      index: 0,
+      parent: storedParent ?? { email: user.email, id: user.email, ref: null },
+    })
+  }
+
+  // Prefill the signed in parent's info and the family info, asking first
+  // when the family was created by someone else.
+  const prefillFromServer = () => {
+    if (familyNeedsConfirmation) {
+      afterFamilyDecision.current = (joined) => {
+        prefillSignedInParent(joined)
+        if (joined && family) {
+          dispatch({ type: RegistrationActionType.PrefillFamily, family })
+        }
+      }
+      setFamilyDialogOpen(true)
+      return
+    }
+
+    prefillSignedInParent(true)
+    if (family) {
+      dispatch({ type: RegistrationActionType.PrefillFamily, family })
+    }
+  }
+
+  const handleFamilyDecision = (joined: boolean) => {
+    dispatch({
+      type: RegistrationActionType.SetJoinFamily,
+      joinFamilyId: joined && family ? family.id : null,
+    })
+    setFamilyDialogOpen(false)
+    const next = afterFamilyDecision.current
+    afterFamilyDecision.current = null
+    next?.(joined)
+  }
 
   const [alertOpen, setAlertOpen] = React.useState(false)
   const handleNoContinue = () => {
     window.localStorage.removeItem("registration")
     setAlertOpen(false)
-
-    // We still want to prefill the signed in parent's info
-    const signedInParent = parents.find((p) => p.email === user.email) ?? {
-      email: user.email,
-      id: user.email,
-      ref: null,
-    }
-    dispatch({
-      type: RegistrationActionType.PrefillParent,
-      index: 0,
-      parent: signedInParent,
-    })
-
-    // And prefill the family info
-    if (family) {
-      dispatch({
-        type: RegistrationActionType.PrefillFamily,
-        family: family,
-      })
-    }
+    prefillFromServer()
   }
   const handleYesContinue = () => {
     dispatch({ type: RegistrationActionType.LoadFromCache })
@@ -187,11 +239,20 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
     // If we're continuing from the waitlist, then we should load the registration data from the
     // from the database.
     if (urlSearchParams.has("continueFromWaitlist")) {
-      dispatch({
-        type: RegistrationActionType.LoadPendingPaymentRegistrations,
-        campYear: campYear,
-        familyData: familyData,
-      })
+      const loadPending = () =>
+        dispatch({
+          type: RegistrationActionType.LoadPendingPaymentRegistrations,
+          campYear: campYear,
+          familyData: familyData,
+        })
+
+      if (familyNeedsConfirmation) {
+        afterFamilyDecision.current = (joined) =>
+          joined ? loadPending() : prefillSignedInParent(false)
+        setFamilyDialogOpen(true)
+      } else {
+        loadPending()
+      }
 
       return
     }
@@ -201,25 +262,8 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
       return
     }
 
-    // Otherwise, prefill the signed in parent's info
-    const signedInParent = parents.find((p) => p.email === user.email) ?? {
-      email: user.email,
-      id: user.email,
-      ref: null,
-    }
-    dispatch({
-      type: RegistrationActionType.PrefillParent,
-      index: 0,
-      parent: signedInParent,
-    })
-
-    // And prefill the family info
-    if (family) {
-      dispatch({
-        type: RegistrationActionType.PrefillFamily,
-        family: family,
-      })
-    }
+    // Otherwise, prefill the signed in parent's and family's info
+    prefillFromServer()
   }, [loading])
 
   return (
@@ -313,7 +357,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
                 <CamperStep
                   camper={camper}
                   camperIndex={index}
-                  campersInDatabase={campers}
+                  campersInDatabase={useFamily ? campers : []}
                   registrations={thisYearsRegistrations}
                   campYear={campYear}
                 />,
@@ -326,7 +370,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
             <FamilyCultureStep household={registrationData.household} />,
             <ReviewStep
               preRegistrations={preRegistrations}
-              campCredit={campCredit}
+              campCredit={useFamily ? campCredit : 0}
               campInfo={campInfo}
               campTracksInfo={campTracksInfo}
               setIsWaitlistConfirmed={setIsWaitlistConfirmed}
@@ -353,6 +397,36 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
             <Button onClick={handleNoContinue}>No</Button>
             <Button onClick={handleYesContinue} autoFocus>
               Yes
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={familyDialogOpen}
+          aria-labelledby="family-dialog-title"
+          aria-describedby="family-dialog-description"
+        >
+          <DialogTitle id="family-dialog-title">
+            Is this your family?
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText id="family-dialog-description">
+              {family?.createdBy ?? "Another parent"} listed {user.email} as a
+              parent or guardian on an existing family
+              {family?.city
+                ? ` in ${family.city}${family.state ? `, ${family.state}` : ""}`
+                : ""}
+              . If that is your household, continue with it to see its campers
+              and registrations. If you don&apos;t recognize it, start your own
+              family instead and nothing from it will be shared with you.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => handleFamilyDecision(false)}>
+              Not my family
+            </Button>
+            <Button onClick={() => handleFamilyDecision(true)} autoFocus>
+              Yes, continue with it
             </Button>
           </DialogActions>
         </Dialog>

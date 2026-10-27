@@ -22,7 +22,20 @@ Follow the [Firebase docs](https://firebase.google.com/docs/functions/get-starte
 10. Since the functions directory is already initialized, there's no need to run `firebase init functions`
 11. Keys for the `.env` file can be found in the Bitwarden item `lyf-registration env var`.
 
-# Testing
+# Unit tests
+
+Pure logic that guards registration (pricing, payload limits, admin-gated
+flags, family membership) has jest tests under [test/unit](test/unit/). They
+need no emulator and run in CI on every change to `functions/` or `schemas/`:
+
+```
+yarn workspace functions test
+```
+
+Tests live outside `src/` so they are excluded from the production build and
+the isolate bundle; `tsconfig.test.json` is used only by ts-jest.
+
+# Emulator testing
 
 1. Start the firebase emulators with `firebase emulators:start`
    - May need to download the emulators with `firebase init emulators`

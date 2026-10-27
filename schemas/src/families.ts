@@ -12,6 +12,14 @@ export type Family = Partial<{
   city: string
   // All of the emails that have admin access to this family.
   emails: string[]
+  // Normalized email of the account whose registration created this family.
+  // Set once by the registration function and never client-writable.
+  createdBy: string
+  // Members who have registered through this family themselves (the creator,
+  // and any co-parent who confirmed it is their household). Being in `emails`
+  // alone means someone *listed* you; being here means you accepted. See
+  // isEstablishedFamilyMember in utils.ts. Function-managed, never client-writable.
+  confirmedEmails: string[]
   country: string
   state: string
   street: string

@@ -13,45 +13,86 @@ import {
   Family,
   Parent,
   Registration,
+  isEstablishedFamilyMember,
+  normalizeEmail,
 } from "lyf-registration-schemas";
 
-type RefAndExisting<T> = {
+export type RefAndExisting<T> = {
   ref: DocumentReference<T>;
   didExist: boolean;
 };
 
 /**
- * Find the family associated with the authenticated caller's email,
- * or create a new family document if none exists.
+ * Find the family the authenticated caller belongs to, or create a new one.
  *
- * Uses only the verified auth email for lookup to prevent a user from
- * merging into another family by supplying a victim's email as a co-parent.
+ * Membership (`Family.emails`) is the only authorization key for family data
+ * in firestore.rules, and any parent can list any address as a co-parent. So
+ * being listed in a family is not, by itself, proof that the caller belongs
+ * there: otherwise anyone could pre-claim a stranger's email and have that
+ * person's campers, health info and registrations written into a family the
+ * claimant can read. The caller is registered into
+ *
+ *   1. the family they are an established member of (created it, confirmed
+ *      it before, or are its only member — see isEstablishedFamilyMember), or
+ *   2. failing that, the family they explicitly confirmed in this request
+ *      (`joinFamilyId`), provided they are actually listed in it, or
+ *   3. failing that, a brand-new family of their own.
+ *
+ * Only the verified auth email is used for the lookup, which also prevents
+ * the inverse: merging into a victim's family by naming them as a co-parent.
  *
  * @param db The Firestore database to query from.
  * @param authEmail The caller's verified email from Firebase Auth.
+ * @param joinFamilyId A family the caller confirmed as theirs, if any.
  */
 export async function findOrCreateFamily(
   db: Firestore,
-  authEmail: string
-): Promise<DocumentReference<Family>> {
-  const normalizedAuthEmail = authEmail.toLowerCase();
+  authEmail: string,
+  joinFamilyId?: string | null
+): Promise<RefAndExisting<Family>> {
+  const callerEmail = normalizeEmail(authEmail);
+
   const familiesQuery = await db
     .collection("families")
-    .where("emails", "array-contains", normalizedAuthEmail)
+    .where("emails", "array-contains", callerEmail)
     .get();
-  if (familiesQuery.size > 1) {
-    logger.error(
-      `More than one family found for auth email: ${normalizedAuthEmail}`
-    );
+
+  const ownFamilies = familiesQuery.docs.filter((familyDoc) =>
+    isEstablishedFamilyMember(familyDoc.data() as Family, callerEmail)
+  );
+
+  if (ownFamilies.length > 1) {
+    logger.error(`More than one family found for auth email: ${callerEmail}`);
     throw new HttpsError(
       "failed-precondition",
       "Multiple families found for your account. Please contact support."
     );
   }
 
-  return familiesQuery.size == 1
-    ? familiesQuery.docs[0].ref
-    : db.collection("families").doc();
+  if (ownFamilies.length === 1) {
+    return {ref: ownFamilies[0].ref, didExist: true};
+  }
+
+  if (joinFamilyId) {
+    const confirmed = familiesQuery.docs.find((d) => d.id === joinFamilyId);
+    if (!confirmed) {
+      throw new HttpsError(
+        "permission-denied",
+        "You are not listed as a parent on the family you selected"
+      );
+    }
+    logger.info(`${callerEmail} confirmed family ${joinFamilyId} as theirs`);
+    return {ref: confirmed.ref, didExist: true};
+  }
+
+  if (familiesQuery.size > 0) {
+    logger.info(
+      `${callerEmail} is listed in ${familiesQuery.size} family document(s) ` +
+        "but has not confirmed any of them; creating a new family"
+    );
+  }
+
+  return {ref: db.collection("families").doc(), didExist: false};
 }
 
 /**

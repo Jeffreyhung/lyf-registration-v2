@@ -3,6 +3,7 @@
  */
 
 import { CampTrack, CampTrackInfo, CampYear } from "./camp"
+import type { Family } from "./families"
 
 /**
  * Current version of the Firestore document schema. Bump when the shape of
@@ -29,6 +30,28 @@ export function normalizeEmail(email: string): string {
 
 export function normalizeEmails(emails: (string | undefined | null)[]): string[] {
   return [...new Set(emails.filter((e): e is string => !!e).map(normalizeEmail))]
+}
+
+/**
+ * Whether `email` belongs to `family` on its own account, as opposed to merely
+ * having been listed as a co-parent by whoever registered.
+ *
+ * `Family.emails` is the authorization key for family data, and any parent can
+ * put any address in it. So a listing by someone else is not proof of
+ * membership: a stranger could otherwise pre-claim an email and have that
+ * person's campers, health info and registrations land in a family the
+ * stranger can read. A member is established when they created the family,
+ * previously confirmed it as theirs, or are its only member (nobody else could
+ * have listed them). Anyone else must confirm the family explicitly before
+ * the server will register them into it; the website asks, the function
+ * enforces, and both use this one rule.
+ */
+export function isEstablishedFamilyMember(family: Family, email: string): boolean {
+  const me = normalizeEmail(email)
+  if (family.createdBy && normalizeEmail(family.createdBy) === me) return true
+  if (normalizeEmails(family.confirmedEmails ?? []).includes(me)) return true
+  const others = normalizeEmails(family.emails ?? []).filter((e) => e !== me)
+  return others.length === 0
 }
 
 /**

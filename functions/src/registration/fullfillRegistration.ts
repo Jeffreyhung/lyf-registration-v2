@@ -17,7 +17,10 @@ import {
   RegistrationStatus,
 } from "lyf-registration-schemas";
 import {RegistrationLineItemMetadata} from "./createRegistrationSession";
-import {createDiscountName} from "../registrationUtils";
+import {
+  createDiscountName,
+  DEFAULT_SIBLING_DISCOUNT,
+} from "../registrationUtils";
 import {
   sendMessageToRegistrationForCampChannel,
   sendMessageToRegistrationErrorMessages,
@@ -44,10 +47,18 @@ async function calculateDiscountAmounts(
   if (discountAmount <= 0) return [0, 0];
 
   const campYearInfo = (await campYearRef.get()).data();
-  const siblingDiscount = campYearInfo?.siblingDiscount ?? 0;
+  // Same default as createRegistrationSession, otherwise a camp year without
+  // the field would have the whole coupon attributed to camp credit here.
+  const siblingDiscount =
+    campYearInfo?.siblingDiscount ?? DEFAULT_SIBLING_DISCOUNT;
 
-  const siblingDiscountUsed = (numberOfRegistrations - 1) * siblingDiscount;
-  const campCreditUsed = discountAmount - siblingDiscountUsed;
+  // Mirrors createRegistrationSession: the sibling discount is per paid
+  // registration and can never exceed the discount Stripe actually applied.
+  const siblingDiscountUsed = Math.min(
+    Math.max(0, numberOfRegistrations - 1) * siblingDiscount,
+    discountAmount
+  );
+  const campCreditUsed = Math.max(0, discountAmount - siblingDiscountUsed);
 
   return [siblingDiscountUsed, campCreditUsed];
 }

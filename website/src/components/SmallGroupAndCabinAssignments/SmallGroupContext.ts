@@ -81,7 +81,7 @@ export function loadFromRegistrations(
   const campers: PairingCamper[] = validRegistrations.map((c) => ({
     id: c.registrationRef.id,
     name: c.camperName,
-    groupId: c.smallGroup,
+    groupId: c.smallGroup || undefined,
     metadata: {
       grade: c.grade.toString(),
       gender: c.gender?.join(", "),
