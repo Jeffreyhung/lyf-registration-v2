@@ -130,6 +130,14 @@ export default function useRegistrations({
       if (!values) {
         return
       }
+      // When the Firestore instance flips (prod <-> test mode) this effect
+      // fires once more with the previous instance's snapshot before
+      // useCollection has reset it. Hydrating that snapshot would read the
+      // old database's refs while building sibling paths against the new
+      // one — permission errors at best, prod rows in the test view at worst.
+      if (values.query.firestore !== firestore) {
+        return
+      }
 
       // Hydrate every changed registration, but never let one failure take
       // the rest of the dashboard down or escape as an unhandled rejection.
