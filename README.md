@@ -369,10 +369,13 @@ Firestore documents drive it, in both the prod (`lyf-v2`) and test
   the `manageCampYear` function, and `remainingSpots` only by the registration
   functions.
 - `camps/{year}/private/bypass/emails/{email}` — one document per family
-  allowed to use the registration page after it closes. A parent can read
-  only their own entry (so the list cannot be enumerated), admins can list
-  them, and only `manageCampYear` writes them. The Camp Year tab's bypass
-  chips edit this collection.
+  allowed to register after `registrationCloseDate`. A parent can read only
+  their own entry (so the list cannot be enumerated), admins can list them,
+  and only `manageCampYear` writes them. The Camp Year tab's bypass chips
+  edit this collection. The close date is enforced in two places: the
+  website hides the page, and `createRegistrationSession` refuses to create
+  a registration after the close unless the caller has an entry, so calling
+  the function directly does not get around it.
 
 Both are edited from the admin dashboard's **Camp Year** tab, visible to
 `full_admin` and `program_admin` (the `manageCampYear` capability). Every

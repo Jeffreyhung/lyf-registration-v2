@@ -14,6 +14,7 @@ import {
   sendMessageToRegistrationForCampChannel,
 } from "../slack/slackChannelWebhooks";
 import {
+  assertRegistrationOpen,
   computeRegistrationCharges,
   createDiscountName,
   DEFAULT_SIBLING_DISCOUNT,
@@ -105,6 +106,16 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
         `Registration pricing is not configured for camp year ${campYear}`
       );
     }
+    // The website hides the registration page after registrationCloseDate,
+    // but this callable is reachable directly, so enforce the same window
+    // (and the per-family bypass list) here before anything is written.
+    await assertRegistrationOpen(
+      db,
+      campYear,
+      campData,
+      request.auth.token.email!
+    );
+
     const campPreRegistrationFee = campData?.preRegistrationFee ?? 500;
     const siblingDiscount =
       campData?.siblingDiscount ?? DEFAULT_SIBLING_DISCOUNT;
