@@ -4,7 +4,6 @@ import {
   doc,
   DocumentData,
   Firestore,
-  FirestoreError,
   query,
   QueryConstraint,
   DocumentReference,
@@ -68,12 +67,13 @@ export default function useRegistrations({
   campYear,
   constraints = [],
   firestore,
-}: useRegistrationsProps): [
-  RegistrationData[],
-  boolean,
-  FirestoreError | undefined
-] {
+}: useRegistrationsProps): [RegistrationData[], boolean, Error | undefined] {
   const [allData, setAllData] = React.useState<RegistrationData[]>([])
+  // Errors from the per-registration fan-out reads (camper, family, parents).
+  // They are surfaced through the hook's error slot instead of escaping as
+  // unhandled promise rejections (which is how they used to reach Sentry with
+  // no stack trace: "FirebaseError: Missing or insufficient permissions").
+  const [loadError, setLoadError] = React.useState<Error | undefined>()
   const pastFirestore = React.useRef<Firestore>(firestore)
   const shouldUpdate = pastFirestore.current !== firestore
   if (shouldUpdate) {
@@ -119,6 +119,7 @@ export default function useRegistrations({
       camperDataMap.current = new Map()
       familyDataMap.current = new Map()
       setAllData([])
+      setLoadError(undefined)
       prevAdminRole.current = adminRole
       prevCampYear.current = campYear
     }
@@ -130,104 +131,126 @@ export default function useRegistrations({
         return
       }
 
+      // Hydrate every changed registration, but never let one failure take
+      // the rest of the dashboard down or escape as an unhandled rejection.
+      let firstError: Error | undefined
       await Promise.all(
         values.docChanges().map(async (docChange) => {
-          const registration = docChange.doc
-          const data = registration.data()
-          const id = registration.id
+          try {
+            const registration = docChange.doc
+            const data = registration.data()
+            const id = registration.id
 
-          // Load base camper document (Tier 0 — all admins)
-          let camperData = camperDataMap.current.get(data.camper.id)
-          if (!camperData) {
-            const camper = await getDoc<Camper, DocumentData>(data.camper)
-            camperData = camper.exists() ? camper.data() : {}
-            if (!camper.exists()) {
-              console.error("No camper found.")
-            }
-            camperDataMap.current.set(data.camper.id, camperData)
-          }
-
-          // Load private health sub-doc (Tier 1 — health_staff, full_admin)
-          let healthData: Partial<CamperHealth> = {}
-          if (canReadHealth(adminRole)) {
-            try {
-              const healthDoc = await getDoc(
-                doc(firestore, `${data.camper.path}/private/health`)
-              )
-              if (healthDoc.exists()) {
-                healthData = healthDoc.data() as CamperHealth
+            // Load base camper document (Tier 0 — all admins)
+            let camperData = camperDataMap.current.get(data.camper.id)
+            if (!camperData) {
+              const camper = await getDoc<Camper, DocumentData>(data.camper)
+              camperData = camper.exists() ? camper.data() : {}
+              if (!camper.exists()) {
+                console.error("No camper found.")
               }
-            } catch {
-              // Permission denied or doc doesn't exist — leave empty
+              camperDataMap.current.set(data.camper.id, camperData)
             }
-          }
 
-          // Load private demographics sub-doc (Tier 2 — full_admin only)
-          let demographicsData: Demographics | undefined
-          if (canReadDemographics(adminRole)) {
-            try {
-              const demoDoc = await getDoc(
-                doc(firestore, `${data.camper.path}/private/demographics`)
-              )
-              if (demoDoc.exists()) {
-                demographicsData = demoDoc.data() as Demographics
+            // Load private health sub-doc (Tier 1 — health_staff, full_admin)
+            let healthData: Partial<CamperHealth> = {}
+            if (canReadHealth(adminRole)) {
+              try {
+                const healthDoc = await getDoc(
+                  doc(firestore, `${data.camper.path}/private/health`)
+                )
+                if (healthDoc.exists()) {
+                  healthData = healthDoc.data() as CamperHealth
+                }
+              } catch {
+                // Permission denied or doc doesn't exist — leave empty
               }
-            } catch {
-              // Permission denied or doc doesn't exist — leave empty
             }
-          }
 
-          // Load family and parents (Tier 0 — all admins)
-          const family = data.camper.parent.parent as DocumentReference<Family>
-          const familyId = family.id as string
-          let familyData: FamilyData | undefined =
-            familyDataMap.current.get(familyId)
-          if (!familyData) {
-            const fam = await getDoc<Family, DocumentData>(family)
-            const emails = fam.data()?.emails
+            // Load private demographics sub-doc (Tier 2 — full_admin only)
+            let demographicsData: Demographics | undefined
+            if (canReadDemographics(adminRole)) {
+              try {
+                const demoDoc = await getDoc(
+                  doc(firestore, `${data.camper.path}/private/demographics`)
+                )
+                if (demoDoc.exists()) {
+                  demographicsData = demoDoc.data() as Demographics
+                }
+              } catch {
+                // Permission denied or doc doesn't exist — leave empty
+              }
+            }
 
-            const parentsCollection = collection(
-              firestore,
-              `/families/${familyId}/parents`
+            // Load family and parents (Tier 0 — all admins)
+            const family = data.camper.parent
+              .parent as DocumentReference<Family>
+            const familyId = family.id as string
+            let familyData: FamilyData | undefined =
+              familyDataMap.current.get(familyId)
+            if (!familyData) {
+              const fam = await getDoc<Family, DocumentData>(family)
+              const emails = fam.data()?.emails
+
+              const parentsCollection = collection(
+                firestore,
+                `/families/${familyId}/parents`
+              )
+              const parents = await getDocs<Parent, DocumentData>(
+                query(parentsCollection)
+              )
+              let parentsData = parents.docs.map((p) => p.data())
+
+              if (emails) {
+                parentsData = parentsData.sort(
+                  (a, b) => parentIndex(a, emails) - parentIndex(b, emails)
+                )
+              }
+
+              familyData = {
+                parents: parentsData,
+                familyId: familyId,
+                familyData: fam.data(),
+              }
+              familyDataMap.current.set(familyId, familyData)
+            }
+
+            regDataMap.current.set(id, {
+              registrationRef: registration.ref,
+              registrationYear: campYear,
+              ...camperData,
+              ...healthData,
+              ...data,
+              ...familyData,
+              ...(demographicsData ? { demographics: demographicsData } : {}),
+            })
+          } catch (err) {
+            // Most often permission-denied: the caller signed out or lost
+            // admin access while this batch was in flight. Keep what loaded,
+            // skip this registration, and report the first failure.
+            firstError ??= err instanceof Error ? err : new Error(String(err))
+            console.error(
+              `[useRegistrations] failed to load registration ${docChange.doc.id}`,
+              err
             )
-            const parents = await getDocs<Parent, DocumentData>(query(parentsCollection))
-            let parentsData = parents.docs.map((p) => p.data())
-
-            if (emails) {
-              parentsData = parentsData.sort(
-                (a, b) => parentIndex(a, emails) - parentIndex(b, emails)
-              )
-            }
-
-            familyData = {
-              parents: parentsData,
-              familyId: familyId,
-              familyData: fam.data(),
-            }
-            familyDataMap.current.set(familyId, familyData)
           }
-
-          regDataMap.current.set(id, {
-            registrationRef: registration.ref,
-            registrationYear: campYear,
-            ...camperData,
-            ...healthData,
-            ...data,
-            ...familyData,
-            ...(demographicsData ? { demographics: demographicsData } : {}),
-          })
         })
       )
+      if (firstError) {
+        setLoadError(firstError)
+      }
       setAllData(
         Array.from(regDataMap.current?.values()).filter(
           (reg) => reg.registrationYear === campYear
         )
       )
     }
-    combineData()
+    combineData().catch((err: unknown) => {
+      setLoadError(err instanceof Error ? err : new Error(String(err)))
+    })
   }, [values, adminRole, campYear, firestore])
 
-  return [allData, loading, error]
+  return [allData, loading, error ?? loadError]
 }
 
 /**
