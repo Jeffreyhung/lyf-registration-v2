@@ -20,6 +20,8 @@ type ScheduleGatedProps = React.PropsWithChildren<{
   contentIfUnavailable?: React.ReactNode
   allowEmails?: string[]
   allowAdmin?: boolean
+  /** Viewer-specific bypass already resolved by the caller (useRegistrationBypass). */
+  allowBypass?: boolean
 }>
 
 export function Spinner() {
@@ -58,6 +60,7 @@ export default function ScheduleGated({
   contentIfUnavailable = <UnavailableMessage what="Registration" />,
   allowEmails,
   allowAdmin,
+  allowBypass,
   children,
 }: ScheduleGatedProps) {
   if (loading) return <Spinner />
@@ -68,6 +71,7 @@ export default function ScheduleGated({
       contentIfHidden={contentIfHidden}
       allowEmails={allowEmails}
       allowAdmin={allowAdmin}
+      allowBypass={allowBypass}
     >
       {children}
     </TimeGated>

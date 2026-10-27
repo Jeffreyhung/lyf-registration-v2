@@ -58,11 +58,6 @@ export type CampYear = Partial<{
   // Virtual Parent Info Session, shown on the registration InfoStep.
   infoSessionDate: Timestamp
 
-  // Emails (lowercase) allowed through the registration time gate after
-  // registrationCloseDate, e.g. people who missed the deadline. Replaces the
-  // TEMP_ALLOWED_EMAILS literal that used to live in pages/registration.tsx.
-  registrationBypassEmails: string[]
-
   // Used to determine at what point do we start waitlisting campers.
   // Purposely separate from campSizeCap because we don't want cancellations to open up spots that could bypass
   // the waitlist.
@@ -150,3 +145,25 @@ export type SiteConfig = Partial<{
 }>
 
 export const SITE_CONFIG_PATH = "config/site"
+
+/**
+ * Stored at: camps/{year}/private/bypass/emails/{email} — one document per
+ * email (lowercase) allowed through the registration time gate after
+ * registrationCloseDate, e.g. a family that missed the deadline. Replaces the
+ * TEMP_ALLOWED_EMAILS literal that used to live in pages/registration.tsx.
+ *
+ * Kept out of the public camps/{year} document on purpose: a parent may read
+ * only their own entry (so nobody can enumerate who got an extension), admins
+ * may list them, and only the manageCampYear callable writes them.
+ */
+export type RegistrationBypassEntry = Partial<{
+  email: string
+  addedBy: string
+  addedAt: Timestamp
+}>
+
+export const registrationBypassCollectionPath = (year: number | string) =>
+  `camps/${year}/private/bypass/emails`
+
+export const registrationBypassDocPath = (year: number | string, email: string) =>
+  `${registrationBypassCollectionPath(year)}/${email}`

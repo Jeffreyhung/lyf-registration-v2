@@ -4,6 +4,10 @@ One JSON file per camp year, in the shape `resetCampYearInfo` and
 `seed-emulator.sh` read (the `CampYearConfigInput` keys from the schemas
 package, with dates as ISO-8601 strings carrying a Pacific offset). Keys that
 start with `_` are notes and are ignored by both loaders.
+`registrationBypassEmails` is never written onto the public camp document:
+both loaders turn it into private per-email documents under
+`camps/{year}/private/bypass/emails/`. Keep it empty in committed files; real
+extensions are granted from the Camp Year tab.
 
 They were reconstructed from the v1 repository's git history
 (`TACL-LYF/lyf-registration`), where every year's dates were commit-by-commit

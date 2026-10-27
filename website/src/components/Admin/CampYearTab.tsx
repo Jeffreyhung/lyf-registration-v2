@@ -34,6 +34,7 @@ import {
   ManageCampYearRequest,
   ManageCampYearResponse,
   normalizeEmail,
+  registrationBypassCollectionPath,
 } from "lyf-registration-schemas"
 
 import { ProdContext } from "@components/ProdContext"
@@ -94,7 +95,10 @@ type FormState = {
 const numberToField = (n: number | undefined) =>
   typeof n === "number" ? String(n) : ""
 
-function formFromCampYear(camp: CampYear | undefined): FormState {
+function formFromCampYear(
+  camp: CampYear | undefined,
+  bypassEmails: string[]
+): FormState {
   const dates = {} as FormState["dates"]
   for (const key of CAMP_YEAR_DATE_KEYS) {
     dates[key] = timestampToCampTime(camp?.[key])
@@ -117,7 +121,7 @@ function formFromCampYear(camp: CampYear | undefined): FormState {
     texts,
     campTotalSizeCap: numberToField(camp?.campTotalSizeCap),
     campSizeCaps,
-    bypassEmails: camp?.registrationBypassEmails ?? [],
+    bypassEmails,
   }
 }
 
@@ -163,7 +167,13 @@ export default function CampYearTab() {
   const [yearsLoading, setYearsLoading] = React.useState(true)
   const [selectedYear, setSelectedYear] = React.useState<number | null>(null)
   const [busy, setBusy] = React.useState<string | null>(null)
-  const [form, setForm] = React.useState<FormState>(() => formFromCampYear(undefined))
+  const [form, setForm] = React.useState<FormState>(() =>
+    formFromCampYear(undefined, [])
+  )
+  // Bypass emails are private per-email docs (camps/{year}/private/bypass/
+  // emails), never on the public camp document; admins may list them.
+  const [bypassEmails, setBypassEmails] = React.useState<string[]>([])
+  const [bypassLoading, setBypassLoading] = React.useState(false)
   const [dirty, setDirty] = React.useState(false)
   const [emailInput, setEmailInput] = React.useState("")
 
@@ -204,12 +214,41 @@ export default function CampYearTab() {
     selectedYear !== null ? doc(firestore, `camps/${selectedYear}`) : null
   )
 
+  const loadBypass = React.useCallback(
+    async (year: number | null) => {
+      if (year === null) {
+        setBypassEmails([])
+        return
+      }
+      setBypassLoading(true)
+      try {
+        const snapshot = await getDocs(
+          collection(firestore, registrationBypassCollectionPath(year))
+        )
+        setBypassEmails(snapshot.docs.map((d) => d.id).sort())
+      } catch (err) {
+        setSnackbar({
+          children: errorMessage(err, "Failed to load bypass emails"),
+          severity: "error",
+        })
+        setBypassEmails([])
+      } finally {
+        setBypassLoading(false)
+      }
+    },
+    [firestore, setSnackbar]
+  )
+
+  React.useEffect(() => {
+    loadBypass(selectedYear)
+  }, [loadBypass, selectedYear])
+
   // Reset the form whenever a different year (or a fresh copy of it) arrives,
   // but never over the admin's unsaved edits.
   React.useEffect(() => {
-    if (campLoading || dirty) return
-    setForm(formFromCampYear(camp))
-  }, [camp, campLoading, dirty])
+    if (campLoading || bypassLoading || dirty) return
+    setForm(formFromCampYear(camp, bypassEmails))
+  }, [camp, campLoading, bypassEmails, bypassLoading, dirty])
 
   React.useEffect(() => {
     setDirty(false)
@@ -247,7 +286,10 @@ export default function CampYearTab() {
       "Save",
       { action: "updateYear", year: selectedYear, fields: formToInput(form) },
       `Saved camps/${selectedYear}`,
-      () => setDirty(false)
+      async () => {
+        setDirty(false)
+        await loadBypass(selectedYear)
+      }
     )
   }
 
@@ -310,7 +352,8 @@ export default function CampYearTab() {
     )
   }
 
-  const disabled = busy !== null || selectedYear === null || campLoading
+  const disabled =
+    busy !== null || selectedYear === null || campLoading || bypassLoading
 
   return (
     <Stack spacing={3} sx={{ maxWidth: 900, mx: "auto", py: 2 }}>
@@ -371,7 +414,7 @@ export default function CampYearTab() {
             </Button>
           </Stack>
 
-          {campLoading ? (
+          {campLoading || bypassLoading ? (
             <Box display="flex" justifyContent="center" py={4}>
               <CircularProgress />
             </Box>
@@ -482,6 +525,8 @@ export default function CampYearTab() {
               <Divider textAlign="left">Registration bypass emails</Divider>
               <Typography variant="body2" color="text.secondary">
                 These families can use the registration page after it closes.
+                Stored privately per email: a parent can see only their own
+                entry, never the list.
               </Typography>
               <Stack direction="row" spacing={1} alignItems="center">
                 <TextField
@@ -523,7 +568,7 @@ export default function CampYearTab() {
                 </Button>
                 <Button
                   onClick={() => {
-                    setForm(formFromCampYear(camp))
+                    setForm(formFromCampYear(camp, bypassEmails))
                     setDirty(false)
                   }}
                   disabled={disabled || !dirty}

@@ -33,9 +33,11 @@ export const CAMP_YEAR_FEE_KEYS = [
 export const CAMP_YEAR_TEXT_KEYS = ["name", "campsite", "campsiteAddress"] as const
 
 /**
- * Every CampYear key the callable will accept. remainingSpots is deliberately
- * absent: functions decrement it as campers register and resetting it by hand
- * would let registrations bypass the waitlist.
+ * Every key the callable will accept. remainingSpots is deliberately absent:
+ * functions decrement it as campers register and resetting it by hand would
+ * let registrations bypass the waitlist. registrationBypassEmails is accepted
+ * here but is NOT stored on the camps/{year} document — the function writes
+ * one private document per email (see registrationBypassCollectionPath).
  */
 export const CAMP_YEAR_CONFIG_KEYS = [
   ...CAMP_YEAR_DATE_KEYS,

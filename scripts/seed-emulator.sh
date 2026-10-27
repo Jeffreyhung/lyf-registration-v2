@@ -107,16 +107,33 @@ camp_year_doc() {
       : Array.isArray(v) ? { arrayValue: { values: v.map(enc) } }
       : { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) } };
     const fields = {};
-    for (const [k, v] of Object.entries(raw)) if (!k.startsWith("_")) fields[k] = enc(v);
+    for (const [k, v] of Object.entries(raw)) {
+      // Bypass emails are private per-email documents, never on the public doc.
+      if (k.startsWith("_") || k === "registrationBypassEmails") continue;
+      fields[k] = enc(v);
+    }
     if (raw.campSizeCaps) fields.remainingSpots = enc(raw.campSizeCaps);
     process.stdout.write(JSON.stringify({ fields }));
   ' "$1"
+}
+
+bypass_emails() {
+  node -e 'console.log((JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).registrationBypassEmails || []).join("\n"))' "$1"
 }
 
 for file in "${SCRIPT_DIR}"/camp-years/*.json; do
   year="$(basename "${file}" .json)"
   put_doc "camps/${year}" "$(camp_year_doc "${file}")"
   echo "  ✔ Created camps/${year} from $(basename "${file}")"
+  for email in $(bypass_emails "${file}"); do
+    put_doc "camps/${year}/private/bypass/emails/${email}" "{
+      \"fields\": {
+        \"email\": $(str "${email}"),
+        \"addedBy\": $(str "seed-script")
+      }
+    }"
+    echo "    ✔ bypass entry ${email}"
+  done
 done
 
 put_doc "config/site" "{

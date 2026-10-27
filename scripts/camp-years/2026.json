@@ -1,6 +1,6 @@
 {
-  "_source": "lyf-registration (v1) git history: RegistrationFlow.tsx constants (commit eef2cce), pages/registration.tsx close date (3636115 'Close registration 2026') and TEMP_ALLOWED_EMAILS (7115cb9), pages/preregistration.tsx window (b70d3fb, b760a00), InfoStep.tsx info session (c4115b3), pages/index.tsx camp dates.",
-  "_todo": "Fees, caps, earlyRegEndDate and registrationLateDate were never in git for 2026 (they live in the v1 Firestore camps/2026 doc); the values here copy 2025. Check them against the console before backfilling. Info session time of day is a guess; only the date was published.",
+  "_source": "lyf-registration (v1) git history: RegistrationFlow.tsx constants (commit eef2cce), pages/registration.tsx close date (3636115 'Close registration 2026'), pages/preregistration.tsx window (b70d3fb, b760a00), InfoStep.tsx info session (c4115b3), pages/index.tsx camp dates.",
+  "_todo": "Fees, caps, earlyRegEndDate and registrationLateDate were never in git for 2026 (they live in the v1 Firestore camps/2026 doc); the values here copy 2025. Check them against the console before backfilling. Info session time of day is a guess; only the date was published. The two late-registration emails v1 allowed are deliberately not carried here: bypass entries are private per-email documents, granted from the Camp Year tab.",
 
   "name": "LYF Camp 2026",
   "campsite": "Alliance Redwoods Conference Grounds",
@@ -25,5 +25,5 @@
 
   "campTotalSizeCap": 185,
   "campSizeCaps": { "Younger": 85, "Older": 85 },
-  "registrationBypassEmails": ["joanthewong@yahoo.com", "tlouie@gmail.com"]
+  "registrationBypassEmails": []
 }

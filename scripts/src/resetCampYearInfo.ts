@@ -14,14 +14,22 @@
  * CAMP_YEAR_CONFIG_KEYS in the schemas package). Date fields are ISO-8601
  * strings with an offset, e.g. "2027-01-31T12:00:00-08:00". Keys starting
  * with "_" are notes and are ignored. remainingSpots is not read from the
- * file — it is reset to campSizeCaps. scripts/camp-years/ holds one file per
+ * file — it is reset to campSizeCaps. registrationBypassEmails is not stored
+ * on the camp document: it replaces the private per-email documents under
+ * camps/{year}/private/bypass/emails/. scripts/camp-years/ holds one file per
  * year reconstructed from the v1 repository's history.
  */
 import {readFileSync} from "fs"
 import {resolve} from "path"
 import * as admin from "firebase-admin"
 import {getFirestore} from "firebase-admin/firestore"
-import {CAMP_YEAR_CONFIG_KEYS, CAMP_YEAR_DATE_KEYS} from "lyf-registration-schemas"
+import {
+  CAMP_YEAR_CONFIG_KEYS,
+  CAMP_YEAR_DATE_KEYS,
+  normalizeEmails,
+  registrationBypassCollectionPath,
+} from "lyf-registration-schemas"
+import {FieldValue} from "firebase-admin/firestore"
 
 const app = admin.initializeApp()
 // Seeds the v2 test database; "(default)"/"internal-test" belong to v1
@@ -65,16 +73,31 @@ function readConfig(): {year: number; config: Record<string, unknown>} {
 
 async function main() {
   const {year, config} = readConfig()
-  const campSizeCaps = (config.campSizeCaps ?? {}) as Record<string, number>
+  const {registrationBypassEmails, ...campFields} = config
+  const campSizeCaps = (campFields.campSizeCaps ?? {}) as Record<string, number>
 
   await db.collection("camps").doc(String(year)).set({
-    ...config,
-    name: config.name ?? `LYF Camp ${year}`,
+    ...campFields,
+    name: campFields.name ?? `LYF Camp ${year}`,
     // Fresh year, fresh spots.
     remainingSpots: {...campSizeCaps},
   })
+  console.log(`Wrote camps/${year} with ${Object.keys(campFields).length} fields`)
 
-  console.log(`Wrote camps/${year} with ${Object.keys(config).length} fields`)
+  // Replace the private bypass entries with the file's list (possibly empty).
+  const bypassRef = db.collection(registrationBypassCollectionPath(year))
+  const desired = normalizeEmails((registrationBypassEmails as string[] | undefined) ?? [])
+  const batch = db.batch()
+  for (const existing of await bypassRef.listDocuments()) batch.delete(existing)
+  for (const email of desired) {
+    batch.set(bypassRef.doc(email), {
+      email,
+      addedBy: "resetCampYearInfo script",
+      addedAt: FieldValue.serverTimestamp(),
+    })
+  }
+  await batch.commit()
+  console.log(`Wrote ${desired.length} bypass entries under ${bypassRef.path}`)
 }
 
 main()

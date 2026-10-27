@@ -1,6 +1,6 @@
 import {addYears} from "date-fns";
 import {fromZonedTime, toZonedTime} from "date-fns-tz";
-import {FieldValue, Timestamp} from "firebase-admin/firestore";
+import {FieldValue, Firestore, Timestamp, Transaction} from "firebase-admin/firestore";
 import {logger} from "firebase-functions";
 import {HttpsError, onCall} from "firebase-functions/v2/https";
 import {
@@ -15,6 +15,8 @@ import {
   ManageCampYearResponse,
   normalizeEmail,
   normalizeEmails,
+  registrationBypassCollectionPath,
+  registrationBypassDocPath,
   SITE_CONFIG_PATH,
 } from "lyf-registration-schemas";
 
@@ -38,6 +40,8 @@ type CampYearDoc = Record<string, unknown>;
  *    which the registration functions own)
  *  - keep registration dates in a sensible order
  *  - roll a year forward by copying the previous one
+ *  - keep the registration-close bypass emails OFF the public camp document,
+ *    as one private document per email under camps/{year}/private/bypass
  *  - append an entry to `adminAuditLog`
  *
  * Unlike the admin roster, camp data exists in both the prod and test
@@ -104,9 +108,16 @@ export const manageCampYear = onCall<
             );
           }
 
+          // Stale entries can linger if a year was deleted by hand; read them
+          // (all reads must precede writes in a transaction).
+          const bypassBefore = await readBypass(tx, db, year);
+
           const source = sourceSnap.data() as CampYearDoc;
           const shifted = shiftTimestamps(source, year - sourceYear);
-          const overrides = parseConfigInput(data.overrides ?? {});
+          // Never copy a legacy bypass field onto the public document.
+          delete shifted.registrationBypassEmails;
+          const {registrationBypassEmails: bypass, ...overrides} =
+            parseConfigInput(data.overrides ?? {});
           const after: CampYearDoc = {
             ...shifted,
             ...overrides,
@@ -119,16 +130,21 @@ export const manageCampYear = onCall<
           assertDateOrder(after, new Set(CAMP_YEAR_DATE_KEYS));
 
           tx.set(targetRef, after);
-          audit("createYear", null, after);
+          // A new year starts with an empty bypass list unless overridden.
+          const bypassAfter = writeBypass(
+            tx, db, year, (bypass as string[] | undefined) ?? [], bypassBefore, actor
+          );
+          audit("createYear", null, {...after, registrationBypassEmails: bypassAfter});
           break;
         }
 
         case "updateYear": {
           const year = parseYear(data.year, "year");
           target = `camps/${year}`;
-          const fields = parseConfigInput(data.fields);
+          const {registrationBypassEmails: bypass, ...fields} =
+            parseConfigInput(data.fields);
           const changedKeys = Object.keys(fields);
-          if (changedKeys.length === 0) {
+          if (changedKeys.length === 0 && bypass === undefined) {
             throw new HttpsError("invalid-argument", "No fields to update");
           }
 
@@ -137,12 +153,22 @@ export const manageCampYear = onCall<
           if (!snap.exists) {
             throw new HttpsError("not-found", `${target} does not exist`);
           }
+          const bypassBefore = await readBypass(tx, db, year);
           const before = snap.data() as CampYearDoc;
           const after: CampYearDoc = {...before, ...fields};
           assertDateOrder(after, new Set(changedKeys));
 
-          tx.update(ref, fields as {[key: string]: FieldValue | object});
-          audit("updateYear", before, after);
+          if (changedKeys.length > 0) {
+            tx.update(ref, fields as {[key: string]: FieldValue | object});
+          }
+          const bypassAfter = bypass === undefined ?
+            bypassBefore :
+            writeBypass(tx, db, year, bypass as string[], bypassBefore, actor);
+          audit(
+            "updateYear",
+            {...before, registrationBypassEmails: bypassBefore},
+            {...after, registrationBypassEmails: bypassAfter}
+          );
           break;
         }
 
@@ -211,6 +237,50 @@ export const manageCampYear = onCall<
     return {status: "success", action: data.action, target};
   })
 );
+
+// ---- Bypass list (camps/{year}/private/bypass/emails/{email}) ----
+
+/** Current bypass emails for a year, sorted. Must run before any tx write. */
+async function readBypass(
+  tx: Transaction,
+  db: Firestore,
+  year: number
+): Promise<string[]> {
+  const snap = await tx.get(db.collection(registrationBypassCollectionPath(year)));
+  return snap.docs.map((d) => d.id).sort();
+}
+
+/**
+ * Reconciles the per-email documents with `desired`: removes entries that
+ * are no longer wanted, adds new ones stamped with the actor. Returns the
+ * resulting list, sorted, for the audit log.
+ */
+function writeBypass(
+  tx: Transaction,
+  db: Firestore,
+  year: number,
+  desired: string[],
+  existing: string[],
+  actor: string
+): string[] {
+  const want = new Set(desired);
+  const have = new Set(existing);
+  for (const email of existing) {
+    if (!want.has(email)) {
+      tx.delete(db.doc(registrationBypassDocPath(year, email)));
+    }
+  }
+  for (const email of desired) {
+    if (!have.has(email)) {
+      tx.set(db.doc(registrationBypassDocPath(year, email)), {
+        email,
+        addedBy: actor,
+        addedAt: FieldValue.serverTimestamp(),
+      });
+    }
+  }
+  return [...want].sort();
+}
 
 // ---- Validation helpers ----
 

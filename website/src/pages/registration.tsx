@@ -15,21 +15,25 @@ import { RegistrationFlow } from "@components/Registration"
 // Hooks
 import useSiteConfig from "@hooks/useSiteConfig"
 import useCampSchedule from "@hooks/useCampSchedule"
+import useRegistrationBypass from "@hooks/useRegistrationBypass"
 
-// Which year this page registers for, when it closes, and who may bypass the
-// close all come from Firestore (config/site -> camps/{year}) and are edited
-// from the admin dashboard's Camp Year tab.
+// Which year this page registers for and when it closes come from Firestore
+// (config/site -> camps/{year}, public). Whether the signed-in family may
+// register after the close is a private per-email document that only they
+// and admins can read. All of it is edited from the Camp Year tab.
 const RegistrationPage: React.FC<PageProps> = () => {
   const { currentCampYear, loading: configLoading } = useSiteConfig()
   const schedule = useCampSchedule(currentCampYear)
+  const bypass = useRegistrationBypass(currentCampYear)
   const loading =
-    configLoading || (currentCampYear !== null && schedule.loading)
+    configLoading ||
+    (currentCampYear !== null && (schedule.loading || bypass.loading))
 
   return (
     <ScheduleGated
       loading={loading}
       hideAfterDateTime={schedule.registrationClose}
-      allowEmails={schedule.bypassEmails}
+      allowBypass={bypass.canBypass}
       contentIfHidden={
         <Stack
           justifyContent="center"

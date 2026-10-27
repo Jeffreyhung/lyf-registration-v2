@@ -364,11 +364,15 @@ Firestore documents drive it, in both the prod (`lyf-v2`) and test
 - `camps/{year}` — dates (`preRegistrationOpenDate`, `preRegistrationCloseDate`,
   `earlyRegOpenDate`, `earlyRegEndDate`, `registrationOpenDate`,
   `registrationLateDate`, `registrationCloseDate`, `infoSessionDate`,
-  `campStartDate`, `campEndDate`), fees, caps, campsite, and
-  `registrationBypassEmails` (people allowed through the gate after
-  registration closes). Public read; configuration fields are written only by
+  `campStartDate`, `campEndDate`), fees, caps and campsite. Public read, so
+  nothing personal may live here; configuration fields are written only by
   the `manageCampYear` function, and `remainingSpots` only by the registration
   functions.
+- `camps/{year}/private/bypass/emails/{email}` — one document per family
+  allowed to use the registration page after it closes. A parent can read
+  only their own entry (so the list cannot be enumerated), admins can list
+  them, and only `manageCampYear` writes them. The Camp Year tab's bypass
+  chips edit this collection.
 
 Both are edited from the admin dashboard's **Camp Year** tab, visible to
 `full_admin` and `program_admin` (the `manageCampYear` capability). Every

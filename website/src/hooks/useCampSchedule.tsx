@@ -23,15 +23,14 @@ export type CampSchedule = {
   infoSessionDate: Dayjs | null
   campStart: Dayjs | null
   campEnd: Dayjs | null
-  /** Lowercase emails allowed past the registration close gate. */
-  bypassEmails: string[]
   error: Error | undefined
 }
 
 /**
  * The dates that drive the registration pages for one camp year, read from
  * camps/{year} (public) and converted to Dayjs in camp time. Pass null while
- * the year itself is still loading from config/site.
+ * the year itself is still loading from config/site. The registration-close
+ * bypass list is private and lives in useRegistrationBypass instead.
  */
 export default function useCampSchedule(
   year: number | null | undefined
@@ -59,9 +58,6 @@ export default function useCampSchedule(
       infoSessionDate: timestampToCampTime(campInfo?.infoSessionDate),
       campStart: timestampToCampTime(campInfo?.campStartDate),
       campEnd: timestampToCampTime(campInfo?.campEndDate),
-      bypassEmails: Array.isArray(campInfo?.registrationBypassEmails)
-        ? campInfo.registrationBypassEmails.map((e) => e.toLowerCase())
-        : [],
       error,
     }),
     [loading, data, campInfo, error]

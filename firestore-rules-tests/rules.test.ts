@@ -43,6 +43,7 @@ const CAMPER_HEALTH = `${CAMPER}/private/health`
 const CAMPER_DEMOGRAPHICS = `${CAMPER}/private/demographics`
 const OTHER_FAMILY = "families/fam2"
 const CAMP = "camps/2026"
+const BYPASS = `${CAMP}/private/bypass/emails`
 const SITE_CONFIG = "config/site"
 const REGISTRATION = `${CAMP}/registrations/reg1`
 
@@ -82,6 +83,9 @@ async function seed() {
 
     await setDoc(doc(db, CAMP), { registrationFee: 100 })
     await setDoc(doc(db, SITE_CONFIG), { currentCampYear: 2026, preRegistrationCampYear: 2027 })
+    await setDoc(doc(db, "config/other"), { secret: true })
+    await setDoc(doc(db, `${BYPASS}/${PARENT}`), { email: PARENT, addedBy: FULL })
+    await setDoc(doc(db, `${BYPASS}/late@example.com`), { email: "late@example.com", addedBy: FULL })
     await setDoc(doc(db, REGISTRATION), {
       camper: doc(db, CAMPER),
       familyEmails: [PARENT],
@@ -300,6 +304,47 @@ describe("config/", () => {
     await assertFails(updateDoc(doc(as(PARENT), SITE_CONFIG), { currentCampYear: 2027 }))
     await assertFails(setDoc(doc(as(FULL), "config/other"), { a: 1 }))
     await assertFails(deleteDoc(doc(as(FULL), SITE_CONFIG)))
+  })
+
+  test("only config/site is public; other config docs fall to the catch-all", async () => {
+    await assertFails(getDoc(doc(as(null), "config/other")))
+    await assertFails(getDoc(doc(as(PARENT), "config/other")))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), "config/other")))
+    await assertSucceeds(getDoc(doc(as(FULL), "config/other")))
+  })
+})
+
+describe("camps/{year}/private/bypass/emails/", () => {
+  test("a parent can read only their own entry", async () => {
+    await assertSucceeds(getDoc(doc(as(PARENT), `${BYPASS}/${PARENT}`)))
+    await assertFails(getDoc(doc(as(PARENT), `${BYPASS}/late@example.com`)))
+    await assertFails(getDocs(collection(as(PARENT), BYPASS)))
+    await assertFails(getDoc(doc(as(OTHER_PARENT), `${BYPASS}/${PARENT}`)))
+    await assertFails(getDoc(doc(as(null), `${BYPASS}/${PARENT}`)))
+    await assertFails(getDocs(collection(as(null), BYPASS)))
+  })
+
+  test("every admin role can read and list the bypass entries", async () => {
+    for (const admin of [FULL, PROGRAM_ADMIN, PROGRAM, HEALTH]) {
+      await assertSucceeds(getDoc(doc(as(admin), `${BYPASS}/late@example.com`)))
+      await assertSucceeds(getDocs(collection(as(admin), BYPASS)))
+    }
+    await assertFails(getDocs(collection(as(DISABLED), BYPASS)))
+  })
+
+  test("nobody writes bypass entries from the client — manageCampYear is the only path", async () => {
+    await assertFails(setDoc(doc(as(FULL), `${BYPASS}/new@example.com`), { email: "new@example.com" }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), `${BYPASS}/new@example.com`), { email: "new@example.com" }))
+    await assertFails(setDoc(doc(as(PARENT), `${BYPASS}/${PARENT}`), { email: PARENT }))
+    await assertFails(deleteDoc(doc(as(FULL), `${BYPASS}/${PARENT}`)))
+    await assertFails(deleteDoc(doc(as(PARENT), `${BYPASS}/${PARENT}`)))
+  })
+
+  test("other private paths under a camp fall to the catch-all (full_admin inspect only)", async () => {
+    await assertSucceeds(getDoc(doc(as(FULL), `${CAMP}/private/bypass`)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), `${CAMP}/private/bypass`)))
+    await assertFails(getDoc(doc(as(PARENT), `${CAMP}/private/other`)))
+    await assertFails(setDoc(doc(as(FULL), `${CAMP}/private/other`), { a: 1 }))
   })
 })
 
