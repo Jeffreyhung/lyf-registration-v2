@@ -20,8 +20,10 @@ import {withSentryCallable} from "../utils/sentry";
  *  - refuse self-demotion/removal
  *  - append an entry to `adminAuditLog`
  *
- * The roster lives in the production database only — it is global, not per
- * test/prod data set.
+ * The roster is written to the production database only — it is global, not
+ * per test/prod data set. Security rules can only read the database they
+ * guard, so `replicateAdminsToTest` mirrors every change into the test
+ * database; nothing here (or anywhere else) should write there directly.
  */
 export const manageAdmin = onCall<ManageAdminRequest, Promise<ManageAdminResponse>>(
   callableOptions,
