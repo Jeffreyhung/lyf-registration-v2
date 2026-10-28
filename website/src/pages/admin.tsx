@@ -240,7 +240,7 @@ const AdminPage: React.FC = () => {
           </Grid>
         )
       case "camper-checkout":
-        return <CamperCheckout data={data} loading={loading} />
+        return <CamperCheckout data={data} loading={loading} campYear={year} />
       case "demographics":
         return <Demographics data={data} />
       case "payments":
