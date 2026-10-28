@@ -28,7 +28,7 @@ The main orchestrator for the entire registration process. It manages:
 
 - Loads camp year information and family data (campers, parents, registrations, camp credit)
 - Implements time-based access control with early access for pre-registered campers
-- Access times are configured via `REGISTRATION_OPEN_FOR_PREREGISTERED` and `REGISTRATION_OPEN` constants
+- Access times come from `camps/{year}` (`earlyRegOpenDate` for pre-registered families, `registrationOpenDate` for everyone) via the `useCampSchedule` hook — see [Camp year rollover](#camp-year-rollover)
 
 **State Management:**
 
@@ -349,6 +349,95 @@ Helper function that manages database document creation and updates:
 - Server-side authentication checks
 - Schema validation via `lyf-registration-schemas` package
 - Error handling with user-friendly messages
+
+
+## Camp year rollover
+
+Nothing about a camp year is hardcoded in the website any more. Two kinds of
+Firestore documents drive it, in both the prod (`lyf-v2`) and test
+(`lyf-v2-test`) databases:
+
+- `config/site` — `currentCampYear` (what the registration page and home page
+  are for) and `preRegistrationCampYear` (what the pre-registration page
+  sells, normally `currentCampYear + 1`). Public read, never written from the
+  client.
+- `camps/{year}` — dates (`preRegistrationOpenDate`, `preRegistrationCloseDate`,
+  `earlyRegOpenDate`, `earlyRegEndDate`, `registrationOpenDate`,
+  `registrationLateDate`, `registrationCloseDate`, `infoSessionDate`,
+  `campStartDate`, `campEndDate`), fees, caps and campsite. Public read, so
+  nothing personal may live here; configuration fields are written only by
+  the `manageCampYear` function, and `remainingSpots` only by the registration
+  functions.
+- `camps/{year}/private/bypass/emails/{email}` — one document per family
+  allowed to register after `registrationCloseDate`. A parent can read only
+  their own entry (so the list cannot be enumerated), admins can list them,
+  and only `manageCampYear` writes them. The Camp Year tab's bypass chips
+  edit this collection. The close date is enforced in two places: the
+  website hides the page, and `createRegistrationSession` refuses to create
+  a registration after the close unless the caller has an entry, so calling
+  the function directly does not get around it.
+
+Both are edited from the admin dashboard's **Camp Year** tab, visible to
+`full_admin` and `program_admin` (the `manageCampYear` capability). Every
+write goes through the `manageCampYearV2` callable, which enforces the key
+whitelist, checks date ordering and appends to `adminAuditLog`.
+
+### The yearly cycle (dashboard steps)
+
+Example: camp 2026 is the current year and camp 2027 is next.
+
+1. **During camp 2026 (pre-registration opens):** in the Camp Year tab select
+   2026 and click **Create next year from selected**. This creates
+   `camps/2027` as a copy of 2026 with every date moved forward one calendar
+   year (Pacific time) and `remainingSpots` reset to the caps. Adjust any dates
+   or fees in the form and **Save**. Then click **Set as pre-registration
+   year** so `/preregistration` sells 2027 — it opens and closes on 2027's
+   `preRegistrationOpenDate` / `preRegistrationCloseDate`.
+2. **After camp 2026 (registration for 2027 approaches):** select 2027 and
+   click **Set as current camp year**. The home page, `/registration` and the
+   info step now refer to 2027; registration opens for pre-registered families
+   at `earlyRegOpenDate`, for everyone at `registrationOpenDate`, and closes at
+   `registrationCloseDate`. Set `infoSessionDate` so the InfoStep sentence is
+   right; the VIS banner image in `InfoStep.tsx` is still swapped by hand.
+3. **Late registrations:** add the family's email to the bypass list on the
+   current year and **Save** — they can use `/registration` after the close
+   date without a deploy.
+4. Repeat from step 1 with 2027 as the source year.
+
+Flip the dashboard's test-data toggle to make the same changes in the test
+database. In test mode the tab also offers **Copy … from production** and
+**Copy site pointers from production**, which mirror a production camp year
+(including its private bypass entries and remaining spots) or the
+`config/site` pointers into `lyf-v2-test`; the production database is never
+written by these. Scripts remain for bootstrapping: `scripts/src/resetCampYearInfo.ts`
+writes a `camps/{year}` document in the test database from a JSON file (the
+expected shape is in its header comment), and `scripts/seed-emulator.sh`
+seeds `config/site` plus two sample camp years into the emulator.
+
+### One-time rollout order
+
+The old deploy mixed code and data; the first deploy of this version has to
+be ordered so no page sees a half-migrated state:
+
+1. **Firestore rules** — `yarn deploy:firestore`. `camps/{year}` and `config/`
+   become public-read / server-write (the old site keeps working: it only read
+   `camps/{year}` while signed in).
+2. **Backfill data** in *both* `lyf-v2` and `lyf-v2-test`: create
+   `config/site` with `currentCampYear: 2026` and `preRegistrationCampYear:
+   2027`; add the new fields to `camps/2026` (`preRegistrationOpenDate`,
+   `preRegistrationCloseDate`, `infoSessionDate`, `registrationBypassEmails`)
+   and create/complete `camps/2027` with the same set, using the dates
+   that were hardcoded in the previous release as the source of truth.
+   Until the callable is deployed, write them with `resetCampYearInfo`
+   (Admin SDK) or the Firebase console; afterwards the Camp Year tab is the
+   only path needed.
+3. **Functions** — `yarn deploy:functions` deploys `manageCampYearV2`.
+4. **Website** — deploy the site. With the data in place the pages resolve
+   their schedule; if `config/site` or a camp document is missing they fail
+   closed with a "not available right now" message rather than a stale date.
+5. **Grant `program_admin`** to the program directors who will run the
+   rollover, via the Admin Management tab (or `grantAdminAccess` with
+   `ADMIN_ROLE=program_admin` for the very first one).
 
 ### Testing
 

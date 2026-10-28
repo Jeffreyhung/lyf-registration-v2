@@ -13,7 +13,7 @@ import {
 } from "lyf-registration-schemas";
 
 import {db} from "../utils";
-import {assertAdmin, callableOptions} from "../utils/auth";
+import {adminCallableOptions, assertAdmin} from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
 import {parseCallablePayload} from "../utils/validate";
 
@@ -24,11 +24,13 @@ import {parseCallablePayload} from "../utils/validate";
  *  - refuse self-demotion/removal
  *  - append an entry to `adminAuditLog`
  *
- * The roster lives in the production database only — it is global, not per
- * test/prod data set.
+ * The roster is written to the production database only — it is global, not
+ * per test/prod data set. Security rules can only read the database they
+ * guard, so `replicateAdminsToTest` mirrors every change into the test
+ * database; nothing here (or anywhere else) should write there directly.
  */
 export const manageAdmin = onCall<ManageAdminRequest, Promise<ManageAdminResponse>>(
-  callableOptions,
+  adminCallableOptions,
   withSentryCallable("manageAdmin", async (request) => {
     const {email: actorEmail} = await assertAdmin(request, "manageAdmins");
     const actor = normalizeEmail(actorEmail);

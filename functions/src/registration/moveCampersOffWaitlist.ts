@@ -30,7 +30,7 @@ import {applySpotDelta} from "../registrationUtils";
 import {sendMessageToRegistrationErrorMessages} from "../slack/slackChannelWebhooks";
 import {
   assertAdmin,
-  callableOptions,
+  adminCallableOptions,
 } from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
 import {parseCallablePayload} from "../utils/validate";
@@ -59,7 +59,7 @@ const htmlTemplate = mjml2html(mjmlTemplate, {
  * an email to the parent informing their campers are off the waitlist.
  */
 export const moveCampersOffWaitlist = onCall<MoveCampersOffWaitlistRequest>(
-  callableOptions,
+  adminCallableOptions,
   withSentryCallable("moveCampersOffWaitlist", async (request) => {
     await assertAdmin(request, "manageWaitlist");
 

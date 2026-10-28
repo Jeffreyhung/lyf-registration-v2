@@ -30,6 +30,7 @@ import {
 
 const FULL = "full@tacl.org"
 const PROGRAM = "program@tacl.org"
+const PROGRAM_ADMIN = "programadmin@tacl.org"
 const HEALTH = "health@tacl.org"
 const DISABLED = "disabled@tacl.org"
 const BAD_ROLE = "badrole@tacl.org"
@@ -42,6 +43,8 @@ const CAMPER_HEALTH = `${CAMPER}/private/health`
 const CAMPER_DEMOGRAPHICS = `${CAMPER}/private/demographics`
 const OTHER_FAMILY = "families/fam2"
 const CAMP = "camps/2026"
+const BYPASS = `${CAMP}/private/bypass/emails`
+const SITE_CONFIG = "config/site"
 const REGISTRATION = `${CAMP}/registrations/reg1`
 
 let testEnv: RulesTestEnvironment
@@ -52,6 +55,7 @@ async function seed() {
     const admins: Record<string, object> = {
       [FULL]: { role: "full_admin" },
       [PROGRAM]: { role: "program_staff" },
+      [PROGRAM_ADMIN]: { role: "program_admin" },
       [HEALTH]: { role: "health_staff" },
       [DISABLED]: { role: "full_admin", disabled: true },
       [BAD_ROLE]: { role: "superuser" },
@@ -78,6 +82,10 @@ async function seed() {
     await setDoc(doc(db, `${OTHER_FAMILY}/campers/cam2`), { firstName: "Other" })
 
     await setDoc(doc(db, CAMP), { registrationFee: 100 })
+    await setDoc(doc(db, SITE_CONFIG), { currentCampYear: 2026, preRegistrationCampYear: 2027 })
+    await setDoc(doc(db, "config/other"), { secret: true })
+    await setDoc(doc(db, `${BYPASS}/${PARENT}`), { email: PARENT, addedBy: FULL })
+    await setDoc(doc(db, `${BYPASS}/late@example.com`), { email: "late@example.com", addedBy: FULL })
     await setDoc(doc(db, REGISTRATION), {
       camper: doc(db, CAMPER),
       familyEmails: [PARENT],
@@ -129,6 +137,8 @@ describe("admins/", () => {
     await assertSucceeds(getDoc(doc(as(FULL), "admins", PROGRAM)))
     await assertSucceeds(getDocs(collection(as(FULL), "admins")))
     await assertFails(getDoc(doc(as(PROGRAM), "admins", FULL)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), "admins", FULL)))
+    await assertFails(getDocs(collection(as(PROGRAM_ADMIN), "admins")))
     await assertFails(getDoc(doc(as(HEALTH), "admins", FULL)))
     await assertFails(getDoc(doc(as(PARENT), "admins", FULL)))
     await assertFails(getDoc(doc(as(null), "admins", FULL)))
@@ -139,6 +149,8 @@ describe("admins/", () => {
     await assertFails(updateDoc(doc(as(FULL), "admins", PROGRAM), { role: "full_admin" }))
     await assertFails(deleteDoc(doc(as(FULL), "admins", PROGRAM)))
     await assertFails(updateDoc(doc(as(PROGRAM), "admins", PROGRAM), { role: "full_admin" }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), "admins", PROGRAM_ADMIN), { role: "full_admin" }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), "admins", "new@tacl.org"), { role: "program_staff" }))
   })
 
   test("fails closed: disabled admins and unrecognized roles get no admin access", async () => {
@@ -244,6 +256,7 @@ describe("campers/{id}/private/health", () => {
     await assertSucceeds(getDoc(doc(as(FULL), CAMPER_HEALTH)))
     await assertSucceeds(getDoc(doc(as(PARENT), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(PROGRAM), CAMPER_HEALTH)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(OTHER_PARENT), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(null), CAMPER_HEALTH)))
   })
@@ -267,6 +280,7 @@ describe("campers/{id}/private/demographics", () => {
     await assertSucceeds(updateDoc(doc(as(FULL), CAMPER_DEMOGRAPHICS), { born: "TW" }))
     await assertFails(getDoc(doc(as(HEALTH), CAMPER_DEMOGRAPHICS)))
     await assertFails(getDoc(doc(as(PROGRAM), CAMPER_DEMOGRAPHICS)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_DEMOGRAPHICS)))
     await assertFails(getDoc(doc(as(PARENT), CAMPER_DEMOGRAPHICS)))
     await assertFails(updateDoc(doc(as(PARENT), CAMPER_DEMOGRAPHICS), { born: "x" }))
     await assertFails(setDoc(doc(as(PARENT), `${CAMPER}/private/other`), { secret: 1 }))
@@ -275,13 +289,80 @@ describe("campers/{id}/private/demographics", () => {
 
 // ---- Camps & registrations ----
 
+describe("config/", () => {
+  test("site config is readable by anyone, signed in or not", async () => {
+    await assertSucceeds(getDoc(doc(as(null), SITE_CONFIG)))
+    await assertSucceeds(getDoc(doc(as(PARENT), SITE_CONFIG)))
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), SITE_CONFIG)))
+    await assertSucceeds(getDoc(doc(as(FULL), SITE_CONFIG)))
+  })
+
+  test("nobody writes config from the client — manageCampYear is the only path", async () => {
+    await assertFails(updateDoc(doc(as(FULL), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(updateDoc(doc(as(PROGRAM), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(updateDoc(doc(as(PARENT), SITE_CONFIG), { currentCampYear: 2027 }))
+    await assertFails(setDoc(doc(as(FULL), "config/other"), { a: 1 }))
+    await assertFails(deleteDoc(doc(as(FULL), SITE_CONFIG)))
+  })
+
+  test("only config/site is public; other config docs fall to the catch-all", async () => {
+    await assertFails(getDoc(doc(as(null), "config/other")))
+    await assertFails(getDoc(doc(as(PARENT), "config/other")))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), "config/other")))
+    await assertSucceeds(getDoc(doc(as(FULL), "config/other")))
+  })
+})
+
+describe("camps/{year}/private/bypass/emails/", () => {
+  test("a parent can read only their own entry", async () => {
+    await assertSucceeds(getDoc(doc(as(PARENT), `${BYPASS}/${PARENT}`)))
+    await assertFails(getDoc(doc(as(PARENT), `${BYPASS}/late@example.com`)))
+    await assertFails(getDocs(collection(as(PARENT), BYPASS)))
+    await assertFails(getDoc(doc(as(OTHER_PARENT), `${BYPASS}/${PARENT}`)))
+    await assertFails(getDoc(doc(as(null), `${BYPASS}/${PARENT}`)))
+    await assertFails(getDocs(collection(as(null), BYPASS)))
+  })
+
+  test("every admin role can read and list the bypass entries", async () => {
+    for (const admin of [FULL, PROGRAM_ADMIN, PROGRAM, HEALTH]) {
+      await assertSucceeds(getDoc(doc(as(admin), `${BYPASS}/late@example.com`)))
+      await assertSucceeds(getDocs(collection(as(admin), BYPASS)))
+    }
+    await assertFails(getDocs(collection(as(DISABLED), BYPASS)))
+  })
+
+  test("nobody writes bypass entries from the client — manageCampYear is the only path", async () => {
+    await assertFails(setDoc(doc(as(FULL), `${BYPASS}/new@example.com`), { email: "new@example.com" }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), `${BYPASS}/new@example.com`), { email: "new@example.com" }))
+    await assertFails(setDoc(doc(as(PARENT), `${BYPASS}/${PARENT}`), { email: PARENT }))
+    await assertFails(deleteDoc(doc(as(FULL), `${BYPASS}/${PARENT}`)))
+    await assertFails(deleteDoc(doc(as(PARENT), `${BYPASS}/${PARENT}`)))
+  })
+
+  test("other private paths under a camp fall to the catch-all (full_admin inspect only)", async () => {
+    await assertSucceeds(getDoc(doc(as(FULL), `${CAMP}/private/bypass`)))
+    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), `${CAMP}/private/bypass`)))
+    await assertFails(getDoc(doc(as(PARENT), `${CAMP}/private/other`)))
+    await assertFails(setDoc(doc(as(FULL), `${CAMP}/private/other`), { a: 1 }))
+  })
+})
+
 describe("camps/{year}", () => {
-  test("any signed-in user reads camp info; only full_admin writes", async () => {
+  test("camp info is readable by anyone, signed in or not", async () => {
+    await assertSucceeds(getDoc(doc(as(null), CAMP)))
     await assertSucceeds(getDoc(doc(as(PARENT), CAMP)))
-    await assertFails(getDoc(doc(as(null), CAMP)))
-    await assertSucceeds(updateDoc(doc(as(FULL), CAMP), { registrationFee: 200 }))
+    await assertSucceeds(getDoc(doc(as(PROGRAM), CAMP)))
+  })
+
+  test("nobody writes camp info from the client — manageCampYear is the only path", async () => {
+    await assertFails(updateDoc(doc(as(FULL), CAMP), { registrationFee: 200 }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), CAMP), { registrationFee: 200 }))
     await assertFails(updateDoc(doc(as(PROGRAM), CAMP), { registrationFee: 200 }))
     await assertFails(updateDoc(doc(as(PARENT), CAMP), { registrationFee: 0 }))
+    await assertFails(updateDoc(doc(as(FULL), CAMP), { remainingSpots: { Younger: 999 } }))
+    await assertFails(setDoc(doc(as(FULL), "camps/2027"), { registrationFee: 1 }))
+    await assertFails(deleteDoc(doc(as(FULL), CAMP)))
   })
 })
 
@@ -318,6 +399,24 @@ describe("camps/{year}/registrations/", () => {
     await assertFails(updateDoc(doc(as(PROGRAM), REGISTRATION), { payments: [] }))
     await assertFails(setDoc(doc(as(PROGRAM), `${CAMP}/registrations/new`), { status: "Active" }))
     await assertFails(deleteDoc(doc(as(PROGRAM), REGISTRATION)))
+  })
+
+  test("program_admin (writeRegistrations) has the same operational-field access as program_staff", async () => {
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), REGISTRATION)))
+    await assertSucceeds(
+      updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), {
+        status: "Cancelled",
+        internalNotes: "x",
+        smallGroup: "A",
+        cabinPreference: "B",
+        hasContacted: true,
+      })
+    )
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), { familyEmails: [PROGRAM_ADMIN] }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), { payments: [] }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), { waiverSignature: "x" }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), `${CAMP}/registrations/new`), { status: "Active" }))
+    await assertFails(deleteDoc(doc(as(PROGRAM_ADMIN), REGISTRATION)))
   })
 
   test("health_staff has no writeRegistrations capability", async () => {
@@ -359,6 +458,7 @@ describe("server-only and unknown collections", () => {
       await assertFails(getDoc(doc(as(PARENT), path)))
     }
     await assertFails(setDoc(doc(as(FULL), "brandNew/doc"), { a: 1 }))
+    await assertFails(setDoc(doc(as(PROGRAM_ADMIN), "brandNew/doc"), { a: 1 }))
     await assertFails(setDoc(doc(as(PARENT), "brandNew/doc"), { a: 1 }))
   })
 })

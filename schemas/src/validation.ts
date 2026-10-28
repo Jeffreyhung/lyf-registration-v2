@@ -534,6 +534,9 @@ const campYearShape = <F extends Flavour>(f: F) => ({
   earlyRegDiscount: field(f, amount(f), NUMBER_KINDS),
   earlyRegEndDate: field(f, timestamp, TIMESTAMP_KINDS),
   earlyRegOpenDate: field(f, timestamp, TIMESTAMP_KINDS),
+  preRegistrationOpenDate: field(f, timestamp, TIMESTAMP_KINDS),
+  preRegistrationCloseDate: field(f, timestamp, TIMESTAMP_KINDS),
+  infoSessionDate: field(f, timestamp, TIMESTAMP_KINDS),
 
   name: field(f, z.string()),
 

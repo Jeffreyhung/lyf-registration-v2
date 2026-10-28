@@ -8,7 +8,6 @@ import {
   DialogTitle,
   Typography,
 } from "@mui/material"
-import dayjs from "dayjs"
 
 // Components
 import { CheckoutFlow } from "@components/CheckoutFlow"
@@ -40,22 +39,14 @@ import ProdContext from "@components/ProdContext"
 import useFamilyData from "@hooks/useFamilyData"
 import useTimeCheck from "@hooks/useTimeCheck"
 import useCampYearInfo from "@hooks/useCampYearInfo"
+import useCampSchedule from "@hooks/useCampSchedule"
+import { FAR_FUTURE, formatCampDate, formatCampTime } from "@utils/campTime"
 import WaitlistHeaderBar from "./WaitlistHeaderBar"
 import InfoStep from "./InfoStep"
 
 type RegistrationFlowProps = {
   campYear: number
 }
-
-const REGISTRATION_OPEN_FOR_PREREGISTERED = dayjs(
-  "2026-01-31 12:00 PM -0800",
-  "YYYY-MM-DD h:mm A ZZ"
-)
-
-const REGISTRATION_OPEN = dayjs(
-  "2026-02-15 12:00 PM -0800",
-  "YYYY-MM-DD h:mm A ZZ"
-)
 
 const SHOW_WAITLIST_HEADER_BAR = false
 
@@ -67,6 +58,12 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
     campYear,
     firestore
   )
+  // Opening times live on camps/{year} (earlyRegOpenDate for pre-registered
+  // families, registrationOpenDate for everyone) and are edited from the
+  // admin dashboard. A missing date means "not open".
+  const schedule = useCampSchedule(campYear)
+  const registrationOpenForPreRegistered = schedule.earlyRegOpen ?? FAR_FUTURE
+  const registrationOpen = schedule.registrationOpen ?? FAR_FUTURE
   const [familyData, loading, error] = useFamilyData({
     isSignedIn: isSignedIn,
     user: user,
@@ -113,8 +110,8 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   const canAccess = useTimeCheck({
     isAdmin,
     isEarlyAccess: preRegistrations.length > 0,
-    earlyAccessTimeAfterValid: REGISTRATION_OPEN_FOR_PREREGISTERED,
-    timeAfterValid: REGISTRATION_OPEN,
+    earlyAccessTimeAfterValid: registrationOpenForPreRegistered,
+    timeAfterValid: registrationOpen,
   })
 
   const [isWaitlistConfirmed, setIsWaitlistConfirmed] = React.useState(true)
@@ -300,7 +297,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
             },
           ]}
           reviewStepIndex={camperAndDemographicsEndIndex + 2}
-          loading={loading}
+          loading={loading || schedule.loading}
           canAccess={canAccess}
           blockedComponent={
             <>
@@ -320,10 +317,13 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
                   padding: 1,
                 }}
               >
-                Early Registration will open on{" "}
-                {REGISTRATION_OPEN_FOR_PREREGISTERED.format("MMMM D")} at{" "}
-                {REGISTRATION_OPEN_FOR_PREREGISTERED.format("h:mm A")} Pacific
-                Time for pre-registered campers
+                {schedule.earlyRegOpen
+                  ? `Early Registration will open on ${formatCampDate(
+                      schedule.earlyRegOpen
+                    )} at ${formatCampTime(
+                      schedule.earlyRegOpen
+                    )} for pre-registered campers`
+                  : "Early Registration dates for pre-registered campers will be announced soon"}
               </Typography>
               <Typography
                 variant="h4"
@@ -332,14 +332,20 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
                   padding: 1,
                 }}
               >
-                General Registration will open on{" "}
-                {REGISTRATION_OPEN.format("MMMM D")} at{" "}
-                {REGISTRATION_OPEN.format("h:mm A")} Pacific Time
+                {schedule.registrationOpen
+                  ? `General Registration will open on ${formatCampDate(
+                      schedule.registrationOpen
+                    )} at ${formatCampTime(schedule.registrationOpen)}`
+                  : "General Registration dates will be announced soon"}
               </Typography>
             </>
           }
           checkoutSteps={[
-            <InfoStep campTracksInfo={campTracksInfo} />,
+            <InfoStep
+              campTracksInfo={campTracksInfo}
+              campYear={campYear}
+              infoSessionDate={schedule.infoSessionDate}
+            />,
             <ParentGuardianStep />,
             <SelectNumCampersStep
               preRegistrations={preRegistrations}

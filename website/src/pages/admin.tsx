@@ -1,16 +1,34 @@
 import * as React from "react"
 import {
+  Box,
   Container,
   Grid,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  ListSubheader,
+  MenuItem,
+  Paper,
   Stack,
-  Tabs,
-  Tab,
+  TextField,
   Typography,
   useTheme,
   useMediaQuery,
 } from "@mui/material"
+import PeopleOutlinedIcon from "@mui/icons-material/PeopleOutlined"
+import PendingActionsOutlinedIcon from "@mui/icons-material/PendingActionsOutlined"
+import BarChartOutlinedIcon from "@mui/icons-material/BarChartOutlined"
+import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined"
+import FactCheckOutlinedIcon from "@mui/icons-material/FactCheckOutlined"
+import RedeemOutlinedIcon from "@mui/icons-material/RedeemOutlined"
+import Diversity3OutlinedIcon from "@mui/icons-material/Diversity3Outlined"
+import ScienceOutlinedIcon from "@mui/icons-material/ScienceOutlined"
+import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined"
+import EventOutlinedIcon from "@mui/icons-material/EventOutlined"
 import { DatePicker } from "@mui/x-date-pickers/DatePicker"
 import dayjs from "dayjs"
+import { Capability, roleHasCapability } from "lyf-registration-schemas"
 
 import AuthContext from "@components/Auth/AuthContext"
 import { LinkButton } from "@components/Button"
@@ -26,28 +44,120 @@ import {
 import { SmallGroupAssignmentsV2 } from "@components/SmallGroupAndCabinAssignments"
 import useRegistrations from "@hooks/useRegistrations"
 import getPageTitle from "@utils/getPageTitle"
-import TabPanel from "@components/TabPanel"
 import { SnackbarAlertProvider } from "@components/SnackbarAlert"
 import PaymentDashboard from "@components/Admin/PaymentDashboard"
 import CampCreditTab from "@components/Admin/CampCreditTab"
 import AdminManagement from "@components/Admin/AdminManagement"
-import { roleHasCapability } from "lyf-registration-schemas"
+import CampYearTab from "@components/Admin/CampYearTab"
 
-const enum AdminTab {
-  ALL_REGISTRATIONS,
-  WAITLIST_PENDING_PAYMENTS,
-  DEMOGRAPHICS,
-  PAYMENTS,
-  CAMPER_CHECKOUT,
-  CAMP_CREDITS,
-  CREATE_TEST_DATA,
-  SMALL_GROUP_ASSIGNMENTS,
-  ADMIN_MANAGEMENT,
+/**
+ * One entry in the admin navigation. `id` doubles as the URL hash
+ * (`/admin#payments`) and the DOM id of the section's panel.
+ */
+type AdminSection = {
+  id: string
+  label: string
+  icon: React.ReactElement
+  /** When set, the section is only offered to roles with this capability. */
+  capability?: Capability
+}
+
+type AdminSectionGroup = {
+  title: string
+  sections: AdminSection[]
+}
+
+const SECTION_GROUPS: AdminSectionGroup[] = [
+  {
+    title: "Registrations",
+    sections: [
+      {
+        id: "all-registrations",
+        label: "All Registrations",
+        icon: <PeopleOutlinedIcon />,
+      },
+      {
+        id: "waitlist",
+        label: "Waitlist & Pending Payments",
+        icon: <PendingActionsOutlinedIcon />,
+      },
+      {
+        id: "camper-checkout",
+        label: "Camper Checkout",
+        icon: <FactCheckOutlinedIcon />,
+      },
+      {
+        id: "demographics",
+        label: "Demographics",
+        icon: <BarChartOutlinedIcon />,
+        capability: "readDemographics",
+      },
+    ],
+  },
+  {
+    title: "Finance",
+    sections: [
+      {
+        id: "payments",
+        label: "Payments",
+        icon: <PaymentsOutlinedIcon />,
+        capability: "managePayments",
+      },
+      {
+        id: "camp-credits",
+        label: "Camp Credits",
+        icon: <RedeemOutlinedIcon />,
+        capability: "manageCredits",
+      },
+    ],
+  },
+  {
+    title: "Camp Setup",
+    sections: [
+      {
+        id: "small-group-assignments",
+        label: "Small Group Assignments",
+        icon: <Diversity3OutlinedIcon />,
+      },
+      {
+        id: "camp-year",
+        label: "Camp Year",
+        icon: <EventOutlinedIcon />,
+        capability: "manageCampYear",
+      },
+    ],
+  },
+  {
+    title: "Administration",
+    sections: [
+      {
+        id: "create-test-data",
+        label: "Create Test Data",
+        icon: <ScienceOutlinedIcon />,
+        capability: "createTestData",
+      },
+      {
+        id: "admin-management",
+        label: "Admin Management",
+        icon: <AdminPanelSettingsOutlinedIcon />,
+        capability: "manageAdmins",
+      },
+    ],
+  },
+]
+
+const DEFAULT_SECTION_ID = SECTION_GROUPS[0].sections[0].id
+const SIDEBAR_WIDTH = 272
+
+const readSectionFromHash = (): string | null => {
+  if (typeof window === "undefined") return null
+  const id = window.location.hash.replace(/^#/, "")
+  return id || null
 }
 
 const AdminPage: React.FC = () => {
   const { isAdmin, adminRole } = React.useContext(AuthContext)
-  const { firestore } = React.useContext(ProdContext)
+  const { firestore, isTestData } = React.useContext(ProdContext)
   const [year, setYear] = React.useState<number>(dayjs().year())
   const [data, loading, error] = useRegistrations({
     isAdmin,
@@ -55,11 +165,40 @@ const AdminPage: React.FC = () => {
     campYear: year,
     firestore,
   })
-  const [tab, setTab] = React.useState<AdminTab>(AdminTab.ALL_REGISTRATIONS)
-  const handleChange = (_: React.SyntheticEvent, newTab: AdminTab) =>
-    setTab(newTab)
 
-  // Media query used for some of the layout params below.
+  // The requested section is remembered even if the role that unlocks it has
+  // not loaded yet, so a deep link like /admin#payments survives auth loading.
+  const [requestedSectionId, setRequestedSectionId] =
+    React.useState<string>(DEFAULT_SECTION_ID)
+  React.useEffect(() => {
+    const fromHash = readSectionFromHash()
+    if (fromHash) setRequestedSectionId(fromHash)
+  }, [])
+
+  const visibleGroups = React.useMemo(
+    () =>
+      SECTION_GROUPS.map((group) => ({
+        ...group,
+        sections: group.sections.filter(
+          (section) =>
+            !section.capability ||
+            roleHasCapability(adminRole, section.capability)
+        ),
+      })).filter((group) => group.sections.length > 0),
+    [adminRole]
+  )
+  const visibleSections = visibleGroups.flatMap((group) => group.sections)
+  const activeSection =
+    visibleSections.find((section) => section.id === requestedSectionId) ??
+    visibleSections[0]
+
+  const selectSection = (id: string) => {
+    setRequestedSectionId(id)
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", `#${id}`)
+    }
+  }
+
   const theme = useTheme()
   const isLargeScreen = useMediaQuery(theme.breakpoints.up("md"))
 
@@ -78,64 +217,19 @@ const AdminPage: React.FC = () => {
     )
   }
 
-  return (
-    <Container maxWidth="xl" sx={{ padding: 1 }}>
-      <Typography variant="h2" textAlign="center" sx={{ padding: 2 }}>
-        Admin Dashboard
-      </Typography>
-      {error && <Typography>{error.message}</Typography>}
-      <Grid container justifyContent="center">
-        <DatePicker
-          value={dayjs().set("year", year)}
-          onChange={(newYear) => setYear(newYear?.year() || dayjs().year())}
-          views={["year"]}
-          minDate={dayjs().set("year", 2017)}
-          maxDate={dayjs().add(1, "year")}
-        />
-      </Grid>
-      <Tabs
-        value={tab}
-        onChange={handleChange}
-        aria-label="admin-tabs"
-        centered={isLargeScreen}
-        variant={isLargeScreen ? "standard" : "scrollable"}
-        scrollButtons="auto"
-        allowScrollButtonsMobile
-        sx={{
-          marginLeft: "auto",
-          marginRight: "auto",
-        }}
-      >
-        <Tab value={AdminTab.ALL_REGISTRATIONS} label="All Registrations" id="tab-all-registrations" />
-        <Tab value={AdminTab.WAITLIST_PENDING_PAYMENTS} label="Waitlist and Pending Payments" id="tab-waitlist" />
-        {roleHasCapability(adminRole, "readDemographics") && (
-          <Tab value={AdminTab.DEMOGRAPHICS} label="Demographics" id="tab-demographics" />
-        )}
-        {roleHasCapability(adminRole, "managePayments") && (
-          <Tab value={AdminTab.PAYMENTS} label="Payments" id="tab-payments" />
-        )}
-        <Tab value={AdminTab.CAMPER_CHECKOUT} label="Camper Checkout" id="tab-camper-checkout" />
-        {roleHasCapability(adminRole, "manageCredits") && (
-          <Tab value={AdminTab.CAMP_CREDITS} label="Camp Credits" id="tab-camp-credits" />
-        )}
-        {roleHasCapability(adminRole, "createTestData") && (
-          <Tab value={AdminTab.CREATE_TEST_DATA} label="Create Test Data" id="tab-create-test-data" />
-        )}
-        <Tab value={AdminTab.SMALL_GROUP_ASSIGNMENTS} label="Small Group Assignments" id="tab-small-group-assignments" />
-        {roleHasCapability(adminRole, "manageAdmins") && (
-          <Tab value={AdminTab.ADMIN_MANAGEMENT} label="Admin Management" id="tab-admin-management" />
-        )}
-      </Tabs>
-      <SnackbarAlertProvider>
-        <TabPanel index={AdminTab.ALL_REGISTRATIONS} value={tab} id="all-registrations">
+  const renderSection = (id: string) => {
+    switch (id) {
+      case "all-registrations":
+        return (
           <RegistrationDashboard
             data={data}
             loading={loading}
             campYear={year}
             adminRole={adminRole}
           />
-        </TabPanel>
-        <TabPanel index={AdminTab.WAITLIST_PENDING_PAYMENTS} value={tab} id="waitlist">
+        )
+      case "waitlist":
+        return (
           <Grid container justifyContent="center" spacing={1}>
             <Grid size={12}>
               <Waitlist data={data} loading={loading} campYear={year} />
@@ -144,37 +238,205 @@ const AdminPage: React.FC = () => {
               <PendingPayments data={data} loading={loading} />
             </Grid>
           </Grid>
-        </TabPanel>
-        {roleHasCapability(adminRole, "readDemographics") && (
-          <TabPanel index={AdminTab.DEMOGRAPHICS} value={tab} id="demographics">
-            <Demographics data={data} />
-          </TabPanel>
-        )}
-        {roleHasCapability(adminRole, "managePayments") && (
-          <TabPanel index={AdminTab.PAYMENTS} value={tab} id="payments">
-            <PaymentDashboard />
-          </TabPanel>
-        )}
-        <TabPanel index={AdminTab.CAMPER_CHECKOUT} value={tab} id="camper-checkout">
-          <CamperCheckout data={data} loading={loading} />
-        </TabPanel>
-        {roleHasCapability(adminRole, "manageCredits") && (
-          <TabPanel index={AdminTab.CAMP_CREDITS} value={tab} id="camp-credits">
-            <CampCreditTab />
-          </TabPanel>
-        )}
-        {roleHasCapability(adminRole, "createTestData") && (
-          <TabPanel index={AdminTab.CREATE_TEST_DATA} value={tab} id="create-test-data">
-            <CreateTestData campYear={year} />
-          </TabPanel>
-        )}
-        <TabPanel index={AdminTab.SMALL_GROUP_ASSIGNMENTS} value={tab} id="small-group-assignments">
-          <SmallGroupAssignmentsV2 registrations={data} campYear={year}/>
-        </TabPanel>
-        {roleHasCapability(adminRole, "manageAdmins") && (
-          <TabPanel index={AdminTab.ADMIN_MANAGEMENT} value={tab} id="admin-management">
-            <AdminManagement />
-          </TabPanel>
+        )
+      case "camper-checkout":
+        return <CamperCheckout data={data} loading={loading} />
+      case "demographics":
+        return <Demographics data={data} />
+      case "payments":
+        return <PaymentDashboard />
+      case "camp-credits":
+        return <CampCreditTab />
+      case "small-group-assignments":
+        return <SmallGroupAssignmentsV2 registrations={data} campYear={year} />
+      case "camp-year":
+        return <CampYearTab />
+      case "create-test-data":
+        return <CreateTestData campYear={year} />
+      case "admin-management":
+        return <AdminManagement />
+      default:
+        return null
+    }
+  }
+
+  const yearPicker = (
+    <DatePicker
+      label="Camp year"
+      value={dayjs().set("year", year)}
+      onChange={(newYear) => setYear(newYear?.year() || dayjs().year())}
+      views={["year"]}
+      minDate={dayjs().set("year", 2017)}
+      maxDate={dayjs().add(1, "year")}
+      slotProps={{ textField: { size: "small", fullWidth: true } }}
+    />
+  )
+
+  const sidebar = (
+    <Paper
+      variant="outlined"
+      component="nav"
+      aria-label="Admin sections"
+      sx={{
+        width: SIDEBAR_WIDTH,
+        flexShrink: 0,
+        alignSelf: "flex-start",
+        position: "sticky",
+        top: theme.spacing(2),
+        borderRadius: 2,
+        overflow: "hidden",
+      }}
+    >
+      <Box sx={{ padding: 2, paddingBottom: 1 }}>
+        <Typography variant="h5" component="h1" sx={{ marginBottom: 1.5 }}>
+          Admin Dashboard
+        </Typography>
+        {yearPicker}
+      </Box>
+      <List dense disablePadding sx={{ paddingBottom: 1 }}>
+        {visibleGroups.map((group) => (
+          <li key={group.title}>
+            <ul style={{ padding: 0 }}>
+              <ListSubheader
+                disableSticky
+                sx={{
+                  lineHeight: "32px",
+                  fontSize: "0.7rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "text.secondary",
+                  backgroundColor: "transparent",
+                }}
+              >
+                {group.title}
+              </ListSubheader>
+              {group.sections.map((section) => {
+                const selected = section.id === activeSection?.id
+                return (
+                  <ListItemButton
+                    key={section.id}
+                    aria-current={selected ? "page" : undefined}
+                    selected={selected}
+                    onClick={() => selectSection(section.id)}
+                    sx={{
+                      marginX: 1,
+                      marginY: 0.25,
+                      borderRadius: 1,
+                      paddingY: 0.75,
+                      "&.Mui-selected": {
+                        backgroundColor: "primary.light",
+                        color: "primary.dark",
+                        "& .MuiListItemIcon-root": { color: "primary.dark" },
+                        "& .MuiListItemText-primary": { fontWeight: 700 },
+                      },
+                      "&.Mui-selected:hover": {
+                        backgroundColor: "primary.light",
+                      },
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      {section.icon}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={section.label}
+                      slotProps={{ primary: { fontSize: "0.9rem" } }}
+                    />
+                  </ListItemButton>
+                )
+              })}
+            </ul>
+          </li>
+        ))}
+      </List>
+    </Paper>
+  )
+
+  const mobileHeader = (
+    <Stack spacing={1.5} sx={{ marginBottom: 2 }}>
+      <Typography variant="h4" component="h1">
+        Admin Dashboard
+      </Typography>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+        <Box sx={{ width: { xs: 1, sm: 180 }, flexShrink: 0 }}>{yearPicker}</Box>
+        <TextField
+          select
+          fullWidth
+          size="small"
+          label="Section"
+          value={activeSection?.id ?? ""}
+          onChange={(event) => selectSection(event.target.value)}
+          slotProps={{
+            select: {
+              // Show only the label once chosen; icons stay in the open menu.
+              renderValue: (value) =>
+                visibleSections.find((section) => section.id === value)
+                  ?.label ?? "",
+            },
+          }}
+        >
+          {visibleGroups.flatMap((group) => [
+            <ListSubheader key={`header-${group.title}`} disableSticky>
+              {group.title}
+            </ListSubheader>,
+            ...group.sections.map((section) => (
+              <MenuItem key={section.id} value={section.id}>
+                <ListItemIcon sx={{ minWidth: 36 }}>{section.icon}</ListItemIcon>
+                {section.label}
+              </MenuItem>
+            )),
+          ])}
+        </TextField>
+      </Stack>
+    </Stack>
+  )
+
+  const content = (
+    <Box
+      component="section"
+      id={activeSection?.id}
+      aria-label={activeSection?.label}
+      sx={{ flexGrow: 1, minWidth: 0 }}
+    >
+      {isLargeScreen && (
+        <Stack
+          direction="row"
+          alignItems="baseline"
+          justifyContent="space-between"
+          flexWrap="wrap"
+          sx={{ marginBottom: 2 }}
+        >
+          <Typography variant="h4" component="h2">
+            {activeSection?.label}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {year}
+            {isTestData ? " · test data" : ""}
+          </Typography>
+        </Stack>
+      )}
+      {error && (
+        <Typography color="error" sx={{ marginBottom: 2 }}>
+          {error.message}
+        </Typography>
+      )}
+      {activeSection && renderSection(activeSection.id)}
+    </Box>
+  )
+
+  return (
+    <Container maxWidth="xl" sx={{ paddingX: { xs: 2, md: 3 }, paddingY: 2 }}>
+      <SnackbarAlertProvider>
+        {isLargeScreen ? (
+          <Stack direction="row" spacing={3} alignItems="flex-start">
+            {sidebar}
+            {content}
+          </Stack>
+        ) : (
+          <>
+            {mobileHeader}
+            {content}
+          </>
         )}
       </SnackbarAlertProvider>
     </Container>

@@ -38,6 +38,30 @@ export const callableOptions = {
 };
 
 /**
+ * The website's own origins — the only pages that should ever call the
+ * admin callables from a browser. Same list Stripe may redirect back to, so
+ * adding a host is one environment variable.
+ */
+export const SITE_ORIGINS: readonly string[] = ALLOWED_REDIRECT_ORIGINS;
+
+/**
+ * Options for callables that only the admin dashboard uses (manageAdmin,
+ * manageCampYear, moveCampersOffWaitlist, issueStripeRefund).
+ *
+ * CORS is limited to SITE_ORIGINS, so a page on any other origin cannot make
+ * a browser call these functions even with a signed-in admin's session. This
+ * is defence in depth, not the access control: a non-browser client can set
+ * any Origin header, and the real gate remains assertAdmin (Firebase Auth +
+ * the admins/ roster) inside each function. To bind calls to the genuine
+ * web app itself, enable Firebase App Check and add `enforceAppCheck: true`
+ * here once the site initialises it.
+ */
+export const adminCallableOptions = {
+  cors: [...SITE_ORIGINS],
+  invoker: "public" as const,
+};
+
+/**
  * Looks up the caller's admin role from the `admins` Firestore collection.
  * Fails closed: a missing doc, a disabled admin, or an unknown/missing role
  * value all resolve to null.

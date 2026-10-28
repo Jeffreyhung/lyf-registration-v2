@@ -7,7 +7,7 @@ import {getStripe} from "../utils";
 import {sendMessageToRegistrationErrorMessages} from "../slack/slackChannelWebhooks";
 import {
   assertAdmin,
-  callableOptions,
+  adminCallableOptions,
   validateDollarAmount,
 } from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
@@ -26,7 +26,7 @@ type IssueStripeRefundRequest = {
  * @returns Code 200 if successful, 402 if any error occurs
  */
 export const issueStripeRefund = onCall<IssueStripeRefundRequest>(
-  callableOptions,
+  adminCallableOptions,
   withSentryCallable("issueStripeRefund", async (request) => {
     await assertAdmin(request, "managePayments");
 

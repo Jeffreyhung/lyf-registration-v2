@@ -28,8 +28,59 @@ import { MainHeaderCardWithShadow } from "@components/Card"
 import { TriangleBorder } from "@components/FullScreenDesign"
 import { AnimatedLinkButton } from "@components/Button"
 
+// Hooks
+import useSiteConfig from "@hooks/useSiteConfig"
+import useCampSchedule from "@hooks/useCampSchedule"
+import useServerNow from "@hooks/useServerNow"
+import { CAMP_TIME_ZONE } from "@utils/campTime"
+
+// Shown until camps/{year} supplies real values.
+const FALLBACK_CAMP_DATES = "Dates to be announced"
+const FALLBACK_CAMPSITE = "Alliance Redwoods Conference Grounds"
+const FALLBACK_CAMPSITE_ADDRESS = "6250 Bohemian Hwy, Occidental, CA 95465"
+
 const IndexPage: React.FC<PageProps> = () => {
   const { isSignedIn, isAdmin } = React.useContext(AuthContext)
+
+  // The home page points at whichever flow is open right now: registration
+  // for the current camp year, or pre-registration for the next one once
+  // registration has closed and the pre-registration window is open.
+  const { currentCampYear, preRegistrationCampYear } = useSiteConfig()
+  const current = useCampSchedule(currentCampYear)
+  const preReg = useCampSchedule(preRegistrationCampYear)
+  const now = useServerNow()
+
+  const registrationStillOpen =
+    !!now && !!current.registrationClose && now.isBefore(current.registrationClose)
+  const preRegistrationOpen =
+    !!now &&
+    !!preReg.preRegistrationOpen &&
+    !!preReg.preRegistrationClose &&
+    now.isAfter(preReg.preRegistrationOpen) &&
+    now.isBefore(preReg.preRegistrationClose)
+  const showPreRegistration = preRegistrationOpen && !registrationStillOpen
+
+  const heroYear = showPreRegistration ? preRegistrationCampYear : currentCampYear
+  const heroVerb = showPreRegistration ? "Pre-Register" : "Register"
+  const ctaTo = showPreRegistration ? "/preregistration" : "/registration"
+  const ctaLabel = showPreRegistration
+    ? "Continue to Pre-Registration"
+    : "Continue to Registration"
+
+  const campDates =
+    current.campStart && current.campEnd
+      ? `${current.campStart.tz(CAMP_TIME_ZONE).format("dddd, MMMM D")} - ` +
+        `${current.campEnd.tz(CAMP_TIME_ZONE).format("dddd, MMMM D")}`
+      : FALLBACK_CAMP_DATES
+  const nights =
+    current.campStart && current.campEnd
+      ? current.campEnd.startOf("day").diff(current.campStart.startOf("day"), "day")
+      : null
+  const campDuration = nights ? `${nights + 1} days, ${nights} nights` : undefined
+  const campsite = current.campInfo?.campsite || FALLBACK_CAMPSITE
+  const campsiteAddress =
+    current.campInfo?.campsiteAddress || FALLBACK_CAMPSITE_ADDRESS
+
   return (
     <Stack alignItems="center" spacing={2}>
       <TriangleBorder />
@@ -44,12 +95,12 @@ const IndexPage: React.FC<PageProps> = () => {
         }}
       >
         <Typography variant="h3" textAlign="center">
-          Register for TACL-LYF Camp 2026!
+          {heroVerb} for TACL-LYF Camp{heroYear ? ` ${heroYear}` : ""}!
         </Typography>
       </Container>
 
       <AnimatedLinkButton
-        to="/registration"
+        to={ctaTo}
         boopProps={{
           x: 3,
           scale: 1.01,
@@ -58,7 +109,7 @@ const IndexPage: React.FC<PageProps> = () => {
         color="secondary"
         variant="contained"
       >
-        Continue to Registration
+        {ctaLabel}
       </AnimatedLinkButton>
 
       {/* Main Content */}
@@ -66,7 +117,7 @@ const IndexPage: React.FC<PageProps> = () => {
         {/* First Card */}
         <Grid size={{ xs: 12, md: 4 }}>
           <MainHeaderCardWithShadow
-            title="2026 Camp Details"
+            title={`${currentCampYear ?? ""} Camp Details`.trim()}
             mainColor="secondary"
           >
             <CardContent
@@ -83,19 +134,13 @@ const IndexPage: React.FC<PageProps> = () => {
                     <ListItemIcon>
                       <CalendarMonthOutlined fontSize="large" />
                     </ListItemIcon>
-                    <ListItemText
-                      primary="Sunday, July 12 - Saturday, July 18"
-                      secondary="7 days, 6 nights"
-                    />
+                    <ListItemText primary={campDates} secondary={campDuration} />
                   </ListItem>
                   <ListItem disablePadding>
                     <ListItemIcon>
                       <PlaceOutlined fontSize="large" />
                     </ListItemIcon>
-                    <ListItemText
-                      primary="Alliance Redwoods Conference Grounds"
-                      secondary="6250 Bohemian Hwy, Occidental, CA 95465"
-                    />
+                    <ListItemText primary={campsite} secondary={campsiteAddress} />
                   </ListItem>
                   <ListItem disablePadding>
                     <ListItemIcon>

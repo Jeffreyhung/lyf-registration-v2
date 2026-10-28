@@ -24,6 +24,13 @@
  * DRY RUN by default. APPLY=1 writes.
  *   SOURCE_DB='(default)' TARGET_DB=lyf-v2 ./run.sh -n migrateV1ToV2Database
  *   APPLY=1 SOURCE_DB='(default)' TARGET_DB=lyf-v2 ./run.sh -n migrateV1ToV2Database
+ *
+ * Seeding the test database from the v1 test database, with the admin roster
+ * mirrored from the live v2 database rather than derived from v1 Auth claims
+ * (security rules resolve admins/{email} per database, so the test database
+ * needs its own copy of the roster):
+ *   APPLY=1 SOURCE_DB=internal-test TARGET_DB=lyf-v2-test ADMINS_FROM_DB=lyf-v2 \
+ *     ./run.sh -n migrateV1ToV2Database
  */
 import * as admin from "firebase-admin"
 import {
@@ -41,6 +48,9 @@ import {
 const APPLY = process.env.APPLY === "1" || process.argv.includes("--apply")
 const SOURCE_DB = process.env.SOURCE_DB ?? "(default)"
 const TARGET_DB = process.env.TARGET_DB ?? "lyf-v2"
+// When set, the admin roster is copied verbatim from this database instead of
+// being rebuilt from SOURCE_DB admins + v1 Auth custom claims.
+const ADMINS_FROM_DB = process.env.ADMINS_FROM_DB
 const SCHEMA_VERSION = 2
 const BATCH_LIMIT = 400
 
@@ -49,9 +59,15 @@ if (SOURCE_DB === TARGET_DB) {
   process.exit(1)
 }
 
+if (ADMINS_FROM_DB === TARGET_DB) {
+  console.error(`ADMINS_FROM_DB and TARGET_DB are both "${TARGET_DB}" — refusing to run.`)
+  process.exit(1)
+}
+
 const app = admin.initializeApp()
 const source = getFirestore(app, SOURCE_DB)
 const target = getFirestore(app, TARGET_DB)
+const adminsSource = ADMINS_FROM_DB ? getFirestore(app, ADMINS_FROM_DB) : null
 
 // ---------------------------------------------------------------------------
 // Bookkeeping
@@ -314,44 +330,63 @@ async function migrateRegistration(reg: DocumentSnapshot, targetReg: DocumentRef
 // admins — v1 used Auth custom claims, v2 uses a collection
 // ---------------------------------------------------------------------------
 
-const VALID_ROLES = new Set(["full_admin", "program_staff", "health_staff"])
+const VALID_ROLES = new Set([
+  "full_admin",
+  "program_admin",
+  "program_staff",
+  "health_staff",
+])
 
 async function migrateAdmins() {
   // email -> admin doc to create
   const entries = new Map<string, Record<string, unknown>>()
 
-  // Existing admin docs in the source keep their role (if valid)
-  const existing = await source.collection("admins").get()
-  for (const doc of existing.docs) {
-    bump(sourceCounts, "admins")
-    const data = doc.data()
-    entries.set(normalizeEmail(doc.id), {
-      ...data,
-      role: VALID_ROLES.has(data.role) ? data.role : "full_admin",
-      disabled: data.disabled === true,
-      addedBy: data.addedBy ?? "v1-migration",
-      addedAt: data.addedAt ?? FieldValue.serverTimestamp(),
-    })
+  if (adminsSource) {
+    // Mirror an existing v2 roster as-is: roles, disabled flags and audit
+    // fields are already in v2 shape there.
+    console.log(`  roster mirrored from ${ADMINS_FROM_DB}`)
+    const roster = await adminsSource.collection("admins").get()
+    for (const doc of roster.docs) {
+      bump(sourceCounts, "admins")
+      entries.set(normalizeEmail(doc.id), rewrite(doc.data()) as Record<string, unknown>)
+    }
+  } else {
+    // Existing admin docs in the source keep their role (if valid)
+    const existing = await source.collection("admins").get()
+    for (const doc of existing.docs) {
+      bump(sourceCounts, "admins")
+      const data = doc.data()
+      entries.set(normalizeEmail(doc.id), {
+        ...data,
+        role: VALID_ROLES.has(data.role) ? data.role : "full_admin",
+        disabled: data.disabled === true,
+        addedBy: data.addedBy ?? "v1-migration",
+        addedAt: data.addedAt ?? FieldValue.serverTimestamp(),
+      })
+    }
   }
 
-  // Auth users carrying the v1 claim become full admins
-  let pageToken: string | undefined
-  do {
-    const page = await admin.auth(app).listUsers(1000, pageToken)
-    for (const user of page.users) {
-      if (user.customClaims?.admin !== true || !user.email) continue
-      const email = normalizeEmail(user.email)
-      if (!entries.has(email)) {
-        entries.set(email, {
-          role: "full_admin",
-          disabled: false,
-          addedBy: "v1-migration (auth claim)",
-          addedAt: FieldValue.serverTimestamp(),
-        })
+  // Auth users carrying the v1 claim become full admins (v1 source only —
+  // a mirrored v2 roster is already authoritative)
+  if (!adminsSource) {
+    let pageToken: string | undefined
+    do {
+      const page = await admin.auth(app).listUsers(1000, pageToken)
+      for (const user of page.users) {
+        if (user.customClaims?.admin !== true || !user.email) continue
+        const email = normalizeEmail(user.email)
+        if (!entries.has(email)) {
+          entries.set(email, {
+            role: "full_admin",
+            disabled: false,
+            addedBy: "v1-migration (auth claim)",
+            addedAt: FieldValue.serverTimestamp(),
+          })
+        }
       }
-    }
-    pageToken = page.pageToken
-  } while (pageToken)
+      pageToken = page.pageToken
+    } while (pageToken)
+  }
 
   for (const [email, data] of entries) {
     const ref = target.collection("admins").doc(email)

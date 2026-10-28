@@ -44,6 +44,7 @@ type AdminEntry = {
 
 const ROLE_LABELS: Record<AdminRole, string> = {
   full_admin: "Full Admin",
+  program_admin: "Program Admin",
   program_staff: "Program Staff",
   health_staff: "Health Staff",
 }
