@@ -4,27 +4,33 @@ import { Box, Divider, Link, Stack, Typography } from "@mui/material"
 
 import RegistrationStep from "./RegistrationStep"
 import { CampTrackInfo } from "lyf-registration-schemas"
-import { StaticImage } from "gatsby-plugin-image"
 import { formatCampDateWithYear } from "@utils/campTime"
+import fallbackBanner from "../../images/vis_2026.jpg"
 
 type InfoStepProps = {
   campTracksInfo: CampTrackInfo[]
   campYear: number
   /** camps/{year}.infoSessionDate; the sentence is omitted when unset. */
   infoSessionDate: Dayjs | null
+  /** camps/{year}.infoSessionImageUrl; the bundled banner is used when unset. */
+  infoSessionImageUrl?: string
+  /** camps/{year}.showRemainingSpots (hidden since 2026 unless switched on). */
+  showRemainingSpots?: boolean
 }
 
-/// Changed in 2026 to hide remaing spots per camp track
-const SHOW_REMAINING_SPOTS = false
-
 // TODO: Move this into a CMS to better manage support
-// The VIS banner image and the long notice copy below are still edited by
-// hand each year; the year and info-session date come from Firestore.
+// The long notice copy below is still edited by hand each year; the year,
+// info-session date, banner image and the remaining-spots toggle come from
+// camps/{year} (Camp Year tab).
 export default function InfoStep({
   campTracksInfo,
   campYear,
   infoSessionDate,
+  infoSessionImageUrl,
+  showRemainingSpots = false,
 }: InfoStepProps) {
+  // A runtime URL cannot go through StaticImage, so this is a plain <img>.
+  const bannerSrc = infoSessionImageUrl?.trim() || fallbackBanner
   return (
     <RegistrationStep
       primaryButtonText="Next"
@@ -40,11 +46,14 @@ export default function InfoStep({
             width: 1,
           }}
         >
-          <StaticImage
-            src="../../images/vis_2026.jpg"
+          <Box
+            component="img"
+            src={bannerSrc}
             alt="LYF Virtual Info Session banner"
-            formats={["webp"]}
-            style={{
+            sx={{
+              display: "block",
+              width: 1,
+              height: "auto",
               borderRadius: "16px",
             }}
           />
@@ -120,7 +129,7 @@ export default function InfoStep({
             marginBottom: 1,
           }}
         />
-        {SHOW_REMAINING_SPOTS &&
+        {showRemainingSpots &&
           campTracksInfo.map(({ track, remainingSpots }) => (
             <Typography key={track}>
               <b>{track} Camp Track</b>: {remainingSpots} spots remaining

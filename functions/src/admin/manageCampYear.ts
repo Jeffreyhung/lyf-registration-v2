@@ -8,6 +8,8 @@ import {
   CAMP_YEAR_DATE_KEYS,
   CAMP_YEAR_DATE_ORDER,
   CAMP_YEAR_FEE_KEYS,
+  CAMP_YEAR_FLAG_KEYS,
+  CAMP_YEAR_IMAGE_URL_KEYS,
   CAMP_YEAR_TEXT_KEYS,
   CampTrack,
   CampYearConfigInput,
@@ -437,6 +439,31 @@ function parseAmount(value: unknown, field: string, integer: boolean): number {
 const CAMP_TRACKS = new Set<string>(Object.values(CampTrack));
 
 /**
+ * Image URLs end up in an <img src> on the public site and in emails, so
+ * only absolute http(s) URLs are stored. Empty clears the field (fallback).
+ */
+function parseImageUrl(value: unknown, field: string): string {
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `${field} must be a string`);
+  }
+  const url = value.trim();
+  if (url === "") return url;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new HttpsError("invalid-argument", `${field} must be a valid URL`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} must be an http(s) URL`
+    );
+  }
+  return url;
+}
+
+/**
  * Turns the JSON payload into Firestore field values, rejecting any key
  * outside CAMP_YEAR_CONFIG_KEYS (so remainingSpots can never arrive here) and
  * any value of the wrong shape.
@@ -449,6 +476,8 @@ function parseConfigInput(input: unknown): CampYearDoc {
   const dateKeys = new Set<string>(CAMP_YEAR_DATE_KEYS);
   const feeKeys = new Set<string>(CAMP_YEAR_FEE_KEYS);
   const textKeys = new Set<string>(CAMP_YEAR_TEXT_KEYS);
+  const imageUrlKeys = new Set<string>(CAMP_YEAR_IMAGE_URL_KEYS);
+  const flagKeys = new Set<string>(CAMP_YEAR_FLAG_KEYS);
 
   const out: CampYearDoc = {};
   for (const [key, value] of Object.entries(input as CampYearConfigInput)) {
@@ -465,11 +494,18 @@ function parseConfigInput(input: unknown): CampYearDoc {
       out[key] = parseTimestamp(value, key);
     } else if (feeKeys.has(key)) {
       out[key] = parseAmount(value, key, false);
+    } else if (imageUrlKeys.has(key)) {
+      out[key] = parseImageUrl(value, key);
     } else if (textKeys.has(key)) {
       if (typeof value !== "string") {
         throw new HttpsError("invalid-argument", `${key} must be a string`);
       }
       out[key] = value.trim();
+    } else if (flagKeys.has(key)) {
+      if (typeof value !== "boolean") {
+        throw new HttpsError("invalid-argument", `${key} must be true or false`);
+      }
+      out[key] = value;
     } else if (key === "campTotalSizeCap") {
       out[key] = parseAmount(value, key, true);
     } else if (key === "campSizeCaps") {

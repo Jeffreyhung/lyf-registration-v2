@@ -32,6 +32,7 @@ import useFamilyData from "@hooks/useFamilyData"
 import { CampTrack, RegistrationStatus } from "lyf-registration-schemas"
 import { DataGridColumnAlign } from "@components/Table"
 import { OffWaitlistDialog } from "@components/Profile"
+import useCampSchedule from "@hooks/useCampSchedule"
 
 export type ParentDashboardRow = {
   registrationId: string
@@ -200,7 +201,8 @@ const ProfilePage: React.FC<PageProps> = () => {
     user,
     campYear: currentYear.toString(),
     firestore,
-    includeWaitlistPosition: false, // Changed in 2026 to no longer include waitlist position
+    includeWaitlistPosition:
+      useCampSchedule(currentYear).campInfo?.showWaitlistPosition === true, // camps/{year}.showWaitlistPosition (Camp Year tab); off since 2026
   })
   const campers = new Map(familyData.campers.map((c) => [c.ref.path, c]))
   const theme = useTheme()

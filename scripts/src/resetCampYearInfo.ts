@@ -16,6 +16,10 @@
  *   {
  *     "name": "LYF Camp 2027",
  *     "campsite": "...", "campsiteAddress": "...",
+ *     "infoSessionImageUrl": "https://.../vis_2027.jpg",
+ *     "emailHeaderImageUrl": "https://.../email_header_2027.jpg",
+ *     "showWaitlistHeaderBar": false, "showRemainingSpots": false,
+ *     "showWaitlistPosition": false,
  *     "preRegistrationOpenDate": "2026-07-18T00:00:00-07:00",
  *     "preRegistrationCloseDate": "2026-10-15T00:00:00-07:00",
  *     "earlyRegOpenDate": "2027-01-30T12:00:00-08:00",

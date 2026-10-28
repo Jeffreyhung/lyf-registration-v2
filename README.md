@@ -364,10 +364,15 @@ Firestore documents drive it, in both the prod (`lyf-v2`) and test
 - `camps/{year}` — dates (`preRegistrationOpenDate`, `preRegistrationCloseDate`,
   `earlyRegOpenDate`, `earlyRegEndDate`, `registrationOpenDate`,
   `registrationLateDate`, `registrationCloseDate`, `infoSessionDate`,
-  `campStartDate`, `campEndDate`), fees, caps and campsite. Public read, so
-  nothing personal may live here; configuration fields are written only by
-  the `manageCampYear` function, and `remainingSpots` only by the registration
-  functions.
+  `campStartDate`, `campEndDate`), fees, caps, campsite, the per-year images
+  (`infoSessionImageUrl` for the banner beside the registration Info step,
+  `emailHeaderImageUrl` for the hero image at the top of the registration,
+  waitlist and off-waitlist emails; both http(s) URLs, falling back to the
+  bundled images when empty) and the display toggles (`showWaitlistHeaderBar`,
+  `showRemainingSpots`, `showWaitlistPosition`; missing means off). Public
+  read, so nothing personal may live here; configuration fields are written
+  only by the `manageCampYear` function, and `remainingSpots` only by the
+  registration functions.
 - `camps/{year}/private/bypass/emails/{email}` — one document per family
   allowed to register after `registrationCloseDate`. A parent can read only
   their own entry (so the list cannot be enumerated), admins can list them,
@@ -398,7 +403,11 @@ Example: camp 2026 is the current year and camp 2027 is next.
    info step now refer to 2027; registration opens for pre-registered families
    at `earlyRegOpenDate`, for everyone at `registrationOpenDate`, and closes at
    `registrationCloseDate`. Set `infoSessionDate` so the InfoStep sentence is
-   right; the VIS banner image in `InfoStep.tsx` is still swapped by hand.
+   right, paste the new year's banner and email header image URLs into the
+   **Images** section (host them first, e.g. in Mailchimp's content studio),
+   and use the **Display toggles** switches for the waitlist header bar,
+   remaining-spots lines and profile waitlist position (all off since 2026).
+   Only the long notice copy in `InfoStep.tsx` is still edited in code.
 3. **Late registrations:** add the family's email to the bypass list on the
    current year and **Save** — they can use `/registration` after the close
    date without a deploy.

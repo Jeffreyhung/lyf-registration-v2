@@ -7,11 +7,14 @@ import {
   CircularProgress,
   Divider,
   FormControl,
+  FormControlLabel,
+  FormHelperText,
   Grid,
   InputLabel,
   MenuItem,
   Select,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from "@mui/material"
@@ -23,12 +26,16 @@ import { useDocumentData } from "react-firebase-hooks/firestore"
 import {
   CAMP_YEAR_DATE_KEYS,
   CAMP_YEAR_FEE_KEYS,
+  CAMP_YEAR_FLAG_KEYS,
+  CAMP_YEAR_IMAGE_URL_KEYS,
   CAMP_YEAR_TEXT_KEYS,
   CampTrack,
   CampYear,
   CampYearConfigInput,
   CampYearDateKey,
   CampYearFeeKey,
+  CampYearFlagKey,
+  CampYearImageUrlKey,
   CampYearTextKey,
   FUNCTION_NAMES,
   ManageCampYearRequest,
@@ -79,7 +86,40 @@ const TEXT_LABELS: Record<CampYearTextKey, string> = {
   name: "Name",
   campsite: "Campsite",
   campsiteAddress: "Campsite address",
+  infoSessionImageUrl: "Info session banner URL",
+  emailHeaderImageUrl: "Email header image URL",
 }
+
+// Image URLs are text keys with their own section (preview + stricter
+// validation in the function); the plain Details section skips them.
+const IMAGE_URL_KEYS = new Set<string>(CAMP_YEAR_IMAGE_URL_KEYS)
+const DETAIL_TEXT_KEYS = CAMP_YEAR_TEXT_KEYS.filter(
+  (key) => !IMAGE_URL_KEYS.has(key)
+)
+
+const IMAGE_HELP: Record<CampYearImageUrlKey, string> = {
+  infoSessionImageUrl:
+    "Shown beside the notice on the registration Info step. Leave empty to use the image bundled with the website.",
+  emailHeaderImageUrl:
+    "Hero image at the top of the registration, waitlist and off-waitlist emails. Leave empty to use the template's image.",
+}
+
+const FLAG_LABELS: Record<CampYearFlagKey, { label: string; help: string }> = {
+  showWaitlistHeaderBar: {
+    label: "Show waitlist header bar",
+    help: "Banner above the registration flow announcing which tracks are waitlisted.",
+  },
+  showRemainingSpots: {
+    label: "Show remaining spots",
+    help: "Spots-remaining line per track on the registration Info step.",
+  },
+  showWaitlistPosition: {
+    label: "Show waitlist position",
+    help: "Each waitlisted camper's position on the family profile page.",
+  },
+}
+
+const isHttpUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim())
 
 const TRACKS = Object.values(CampTrack)
 
@@ -87,6 +127,7 @@ type FormState = {
   dates: Record<CampYearDateKey, Dayjs | null>
   fees: Record<CampYearFeeKey, string>
   texts: Record<CampYearTextKey, string>
+  flags: Record<CampYearFlagKey, boolean>
   campTotalSizeCap: string
   campSizeCaps: Record<CampTrack, string>
   bypassEmails: string[]
@@ -111,6 +152,10 @@ function formFromCampYear(
   for (const key of CAMP_YEAR_TEXT_KEYS) {
     texts[key] = camp?.[key] ?? ""
   }
+  const flags = {} as FormState["flags"]
+  for (const key of CAMP_YEAR_FLAG_KEYS) {
+    flags[key] = camp?.[key] === true
+  }
   const campSizeCaps = {} as FormState["campSizeCaps"]
   for (const track of TRACKS) {
     campSizeCaps[track] = numberToField(camp?.campSizeCaps?.[track])
@@ -119,6 +164,7 @@ function formFromCampYear(
     dates,
     fees,
     texts,
+    flags,
     campTotalSizeCap: numberToField(camp?.campTotalSizeCap),
     campSizeCaps,
     bypassEmails,
@@ -140,6 +186,9 @@ function formToInput(form: FormState): CampYearConfigInput {
   }
   for (const key of CAMP_YEAR_TEXT_KEYS) {
     input[key] = form.texts[key]
+  }
+  for (const key of CAMP_YEAR_FLAG_KEYS) {
+    input[key] = form.flags[key]
   }
   if (form.campTotalSizeCap.trim() !== "") {
     input.campTotalSizeCap = Number(form.campTotalSizeCap)
@@ -523,7 +572,7 @@ export default function CampYearTab() {
             <Stack spacing={3}>
               <Divider textAlign="left">Details</Divider>
               <Grid container spacing={2}>
-                {CAMP_YEAR_TEXT_KEYS.map((key) => (
+                {DETAIL_TEXT_KEYS.map((key) => (
                   <Grid key={key} size={{ xs: 12, md: key === "name" ? 12 : 6 }}>
                     <TextField
                       label={TEXT_LABELS[key]}
@@ -537,6 +586,84 @@ export default function CampYearTab() {
                       fullWidth
                       size="small"
                     />
+                  </Grid>
+                ))}
+              </Grid>
+
+              <Divider textAlign="left">Images</Divider>
+              <Grid container spacing={2}>
+                {CAMP_YEAR_IMAGE_URL_KEYS.map((key) => {
+                  const value = form.texts[key]
+                  const valid = value.trim() === "" || isHttpUrl(value)
+                  return (
+                    <Grid key={key} size={{ xs: 12, md: 6 }}>
+                      <Stack spacing={1}>
+                        <TextField
+                          label={TEXT_LABELS[key]}
+                          type="url"
+                          placeholder="https://…"
+                          value={value}
+                          onChange={(e) =>
+                            update((prev) => ({
+                              ...prev,
+                              texts: { ...prev.texts, [key]: e.target.value },
+                            }))
+                          }
+                          error={!valid}
+                          helperText={
+                            valid ? IMAGE_HELP[key] : "Must be an http(s) URL"
+                          }
+                          fullWidth
+                          size="small"
+                        />
+                        {valid && value.trim() !== "" && (
+                          <Box
+                            component="img"
+                            src={value.trim()}
+                            alt={`${TEXT_LABELS[key]} preview`}
+                            sx={{
+                              display: "block",
+                              maxWidth: 1,
+                              maxHeight: 160,
+                              objectFit: "contain",
+                              borderRadius: 1,
+                              border: 1,
+                              borderColor: "divider",
+                            }}
+                          />
+                        )}
+                      </Stack>
+                    </Grid>
+                  )
+                })}
+              </Grid>
+
+              <Divider textAlign="left">Display toggles</Divider>
+              <Grid container spacing={2}>
+                {CAMP_YEAR_FLAG_KEYS.map((key) => (
+                  <Grid key={key} size={{ xs: 12, md: 4 }}>
+                    <FormControl>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={form.flags[key]}
+                            onChange={(e) =>
+                              update((prev) => ({
+                                ...prev,
+                                flags: {
+                                  ...prev.flags,
+                                  [key]: e.target.checked,
+                                },
+                              }))
+                            }
+                          />
+                        }
+                        label={FLAG_LABELS[key].label}
+                      />
+                      <FormHelperText sx={{ mx: 0 }}>
+                        {FLAG_LABELS[key].help}
+                      </FormHelperText>
+                    </FormControl>
                   </Grid>
                 ))}
               </Grid>
