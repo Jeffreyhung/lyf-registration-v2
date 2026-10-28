@@ -351,6 +351,38 @@ Helper function that manages database document creation and updates:
 - Error handling with user-friendly messages
 
 
+## Admin dashboard
+
+The admin dashboard lives at `/admin` on the website. Its **All Registrations**
+grid (`website/src/components/Admin/RegistrationDashboard.tsx`) lists every
+registration for the selected camp year joined with the camper, the parents and
+the family document (`website/src/hooks/useRegistrations.tsx`). Health columns
+appear only for roles with the `readHealth` capability.
+
+### Exports
+
+Data exports come from the All Registrations grid; there are no longer any
+Admin SDK scripts for them. The grid toolbar's **Export** menu offers
+*CSV (visible columns)*, *CSV (all columns)* and *Print*. Files are named
+`<camp year>-lyf-registrations-<YYYY-MM-DD>.csv`. Every export honours the
+status filter above the grid, the toolbar's filter panel and the search box,
+across all pages; if any rows are checked, only those rows are exported.
+
+Address (street, suite, city, state, zip, country), household-culture and
+family-account-email columns are hidden by default to keep the grid readable.
+Turn them on from **Columns**, or use *CSV (all columns)*, which includes
+hidden columns. The **?** button next to Export repeats the recipes below.
+
+| Need | Steps |
+| --- | --- |
+| Mailing addresses (December mailing) | Status filter = Active, then Export → CSV (all columns), or show the address columns and export visible columns. |
+| Pre-registered parent emails | Filters → Pre-Registered is *yes*, then Export, or **Copy Parent Emails** for a one-per-line list. |
+| Parent emails for specific campers | Type part of each name in the search box, then Export or copy. |
+
+The two copy-to-clipboard buttons above the grid (parent emails; parent email,
+first and last name tab-separated) stay as quick paths for the rows that match
+the current status filter.
+
 ## Camp year rollover
 
 Nothing about a camp year is hardcoded in the website any more. Two kinds of
