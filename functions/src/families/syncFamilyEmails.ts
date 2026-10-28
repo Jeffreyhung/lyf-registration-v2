@@ -6,7 +6,12 @@ import {
   Change,
   QueryDocumentSnapshot,
 } from "firebase-functions/v2/firestore";
-import {Camper, Family, normalizeEmails} from "lyf-registration-schemas";
+import {
+  Camper,
+  Family,
+  normalizeEmails,
+  validateRegistrationWrite,
+} from "lyf-registration-schemas";
 
 import {PROD_DATABASE_ID, TEST_DATABASE_ID} from "../utils";
 import {withSentryEvent} from "../utils/sentry";
@@ -47,11 +52,13 @@ async function syncFamilyEmails(
   // whole batch.
   const existing = (await db.getAll(...registrationRefs)).filter((s) => s.exists);
 
+  // The same patch goes on every registration, so validate it once up front.
+  const update = validateRegistrationWrite({familyEmails: after});
   for (let i = 0; i < existing.length; i += BATCH_SIZE) {
     const batch = db.batch();
     existing
       .slice(i, i + BATCH_SIZE)
-      .forEach((snap) => batch.update(snap.ref, {familyEmails: after}));
+      .forEach((snap) => batch.update(snap.ref, {...update}));
     await batch.commit();
   }
 

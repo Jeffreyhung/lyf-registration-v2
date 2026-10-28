@@ -67,6 +67,20 @@ describe("getStripeCustomerId", () => {
     });
   });
 
+  it("refuses to store a customer id that is not a string", async () => {
+    mockCreate.mockResolvedValue({id: 12345});
+    const db = new FakeFirestore().seed(PARENTS, "ada@example.com", {
+      firstName: "Ada",
+      lastName: "Lovelace",
+    });
+
+    await expect(
+      getStripeCustomerId(db.doc(PARENT_PATH).as(), "ada@example.com")
+    ).rejects.toThrow(/Parent write.*stripeCustomerId/);
+
+    expect(db.read(PARENTS, "ada@example.com")).not.toHaveProperty("stripeCustomerId");
+  });
+
   it("uses the production Stripe client by default and the test client for test data", async () => {
     await getStripeCustomerId(undefined, "ada@example.com");
     expect(mockGetStripe).toHaveBeenLastCalledWith(true);

@@ -1,5 +1,6 @@
 import {DocumentReference} from "firebase-admin/firestore";
 import {logger} from "firebase-functions";
+import {validateParentWrite} from "lyf-registration-schemas";
 
 // Local imports
 import {getStripe} from "../utils";
@@ -48,9 +49,11 @@ export async function getStripeCustomerId(
     email: email,
   });
 
-  await parentRef.update({
-    stripeCustomerId: customer.id,
-  });
+  await parentRef.update(
+    validateParentWrite({
+      stripeCustomerId: customer.id,
+    })
+  );
 
   logger.info(`Created a new customer id: ${customer.id}`);
 

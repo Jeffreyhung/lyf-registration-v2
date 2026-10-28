@@ -15,8 +15,11 @@ import type { Family } from "./families"
  *   1 (implicit) — 2023-2025 layout: health + demographics inline on camper docs
  *   2 — RBAC revamp: health/demographics moved to private/ sub-documents,
  *       familyEmails denormalized onto registrations, emails normalized lowercase
+ *   3 — Admin-grid denormalization: camper profile fields + parentContacts on
+ *       registrations; spotReserved capacity flag; new registrations use the
+ *       camper id as their document id (camps/{year}/registrations/{camperId})
  */
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 /**
  * Canonical form for emails used as identity keys (family membership,

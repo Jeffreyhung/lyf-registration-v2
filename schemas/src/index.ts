@@ -8,5 +8,6 @@ export * from "./registrationPayload"
 export * from "./verifier"
 export * from "./moveCampersOffWaitlist"
 export * from "./credits"
+export * from "./validation"
 
 export * from "./utils"

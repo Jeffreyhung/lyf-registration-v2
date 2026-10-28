@@ -64,6 +64,14 @@ export enum RegistrationStatus {
   PROCESSING_PAYMENT = "Processing Payment",
 }
 
+// Subset of Parent denormalized onto each registration (see Registration.parentContacts).
+export type ParentContact = {
+  firstName: string
+  lastName: string
+  email: string
+  phoneNumber: string
+}
+
 // Information that changes year to year
 export type Registration = Partial<{
   camperName: string
@@ -72,6 +80,9 @@ export type Registration = Partial<{
 
   grade: number
   isPreRegistered: boolean
+  // Dollars paid toward this registration so far. Written (incremented) by
+  // fulfillPreRegistrations when the pre-registration deposit lands.
+  amountPaid: number
   status: RegistrationStatus
   shirtSize: string
   isReturning: boolean
@@ -110,6 +121,30 @@ export type Registration = Partial<{
 
   // Test Data
   isTestData: boolean
+
+  // ---- Denormalized for the admin grid (schemaVersion 3) ----
+  // Tier-0 camper profile fields copied from families/{f}/campers/{c} so the
+  // admin dashboard needs no per-row camper read. NEVER copy health or
+  // demographics here: this document is readable by every admin role, and
+  // those live under private/ precisely so rules can gate them by role.
+  // Kept in sync by the registration function on write and by the
+  // syncCamperProfile trigger when a parent edits the camper from the profile.
+  preferredName: string | null
+  birthDate: string
+  gender: string[]
+  pronouns: string | null
+  // Parent contact info copied from families/{f}/parents, ordered like
+  // Family.emails (signed-in parent first). Written by the registration
+  // function; parents cannot edit parent docs from the client.
+  parentContacts: ParentContact[]
+
+  // ---- Capacity accounting ----
+  // True once this registration has been counted against
+  // CampYear.remainingSpots (reserved in the registration transaction, or by
+  // moveCampersOffWaitlist). The Stripe webhook and the camp-credit fast path
+  // must not decrement again when this is set; checkout.session.expired
+  // releases the hold and clears it.
+  spotReserved: boolean
 
   // Denormalized from the parent family for Firestore rule ownership checks.
   // Always lowercase (see normalizeEmail in utils.ts).

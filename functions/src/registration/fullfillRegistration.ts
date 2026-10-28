@@ -15,11 +15,17 @@ import {
   Payment,
   Registration,
   RegistrationStatus,
+  validateCampCreditWrite,
+  validateCampYearWrite,
+  validatePaymentWrite,
+  validateRegistrationWrite,
 } from "lyf-registration-schemas";
 import {RegistrationLineItemMetadata} from "./createRegistrationSession";
 import {
+  applySpotDelta,
   createDiscountName,
   DEFAULT_SIBLING_DISCOUNT,
+  RemainingSpotsMap,
 } from "../registrationUtils";
 import {
   sendMessageToRegistrationForCampChannel,
@@ -68,7 +74,7 @@ async function calculateDiscountAmounts(
  * 1. Sending confirmation emails for each of the registered campers
  * 2. Sending messages to the registration channel for each camper
  * 3. Adding the parents to the mailchimp list
- * 4. Updating the remaining spots
+ * 4. Updating the remaining spots for registrations that don't already hold one
  * 5. Subtracting camp credit if it was used
  *
  * @param db
@@ -79,7 +85,8 @@ async function calculateDiscountAmounts(
  * @param registrationRefs
  * @param registrationDescriptions
  * @param campCreditUsed
- * @param campTrackSpots
+ * @param campTrackSpots Tracks being registered for (used for the mailing
+ *   list); the spot decrement itself is derived from the registration docs.
  */
 export async function completeRegistration(
   db: Firestore,
@@ -151,29 +158,35 @@ export async function completeRegistration(
     Array.from(campTrackSpots.keys()) as CampTrack[]
   );
 
-  // Update the remaining spots
-  if (campTrackSpots.size > 0) {
+  // Update the remaining spots. A registration that already holds a spot
+  // (reserved in the registration transaction or by moveCampersOffWaitlist)
+  // must not be counted twice, so only decrement for the ones whose
+  // `spotReserved` is not set, and mark them reserved in the same transaction.
+  if (registrationRefs.length > 0) {
     const campYearRef = db.collection("camps").doc(campYear);
     await db.runTransaction(async (t) => {
       const campYearDoc = await t.get(campYearRef);
+      const registrationDocs = await t.getAll(...registrationRefs);
+
+      const toReserve = registrationDocs.filter(
+        (doc) => doc.exists && doc.data()?.spotReserved !== true
+      );
+      if (toReserve.length === 0) return;
+
       const campYear = campYearDoc.data() as CampYear;
+      let remainingSpots: RemainingSpotsMap | undefined =
+        campYear?.remainingSpots;
+      toReserve.forEach((doc) => {
+        const track = doc.data()?.campTrack;
+        if (track && remainingSpots) {
+          remainingSpots = applySpotDelta(remainingSpots, track, -1);
+        }
+        t.update(doc.ref, validateRegistrationWrite({spotReserved: true}));
+      });
 
-      const remainingSpots = campYear?.remainingSpots;
-      // No camp year data found so just early return
+      // No camp year capacity data found so just flag the registrations
       if (!remainingSpots) return;
-
-      const newRemainingSpots = new Map<CampTrack, number>();
-      Object.entries(remainingSpots).forEach(([campTrack, spots]) => {
-        const spotsToSubtract = campTrackSpots.get(campTrack as CampTrack) ?? 0;
-        newRemainingSpots.set(
-          campTrack as CampTrack,
-          Math.max(0, spots - spotsToSubtract)
-        );
-      });
-
-      t.update(campYearRef, {
-        remainingSpots: Object.fromEntries(newRemainingSpots),
-      });
+      t.update(campYearRef, validateCampYearWrite({remainingSpots}));
     });
   }
 
@@ -185,12 +198,14 @@ export async function completeRegistration(
     await sendMessageToRegistrationForCampChannel(message);
 
     const creditRef = db.collection("credits").doc(familyId);
-    await creditRef.update({
-      amountRemaining: FieldValue.increment(-campCreditUsed),
-      notes: FieldValue.arrayUnion(
-        `-${campCreditUsed}: ${campYear} LYF Camp Registration`
-      ),
-    });
+    await creditRef.update(
+      validateCampCreditWrite({
+        amountRemaining: FieldValue.increment(-campCreditUsed),
+        notes: FieldValue.arrayUnion(
+          `-${campCreditUsed}: ${campYear} LYF Camp Registration`
+        ),
+      })
+    );
   }
 }
 
@@ -299,7 +314,7 @@ export async function fulfillRegistration(
     .collection("payments")
     .doc(checkoutSession.id);
   await paymentRef.set(
-    {
+    validatePaymentWrite({
       customerEmail: customerEmail,
       customerName: checkoutSession.customer_details?.name ?? "",
       customerId: (checkoutSession.customer as string) ?? "",
@@ -327,7 +342,7 @@ export async function fulfillRegistration(
 
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
-    },
+    }),
     {
       merge: true,
     }
@@ -336,14 +351,16 @@ export async function fulfillRegistration(
   // Link the payment to the registration and update the status to active
   await Promise.all(
     registrationRefs.map(async (ref) => {
-      await ref.update({
-        payments: FieldValue.arrayUnion(paymentRef),
-        status:
-          checkoutSession.payment_status === "paid"
-            ? RegistrationStatus.ACTIVE
-            : RegistrationStatus.PROCESSING_PAYMENT,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      await ref.update(
+        validateRegistrationWrite({
+          payments: FieldValue.arrayUnion(paymentRef),
+          status:
+            checkoutSession.payment_status === "paid"
+              ? RegistrationStatus.ACTIVE
+              : RegistrationStatus.PROCESSING_PAYMENT,
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      );
     })
   );
 

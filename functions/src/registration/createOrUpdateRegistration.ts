@@ -5,8 +5,7 @@ import {
 } from "firebase-admin/firestore";
 import {
   Camper,
-  CamperHealth,
-  CampRemainingSpots,
+  CampYear,
   Demographics,
   Family,
   HouseholdCulture,
@@ -19,8 +18,17 @@ import {
   CURRENT_SCHEMA_VERSION,
   normalizeEmail,
   normalizeEmails,
+  validateCamperHealthWrite,
+  validateCamperWrite,
+  validateCampYearWrite,
+  validateDemographicsWrite,
+  validateFamilyWrite,
+  validateParentWrite,
+  validateRegistrationWrite,
 } from "lyf-registration-schemas";
 import {
+  buildParentContacts,
+  decideAdmissions,
   findOrCreateCamper,
   findOrCreateFamily,
   findOrCreateParent,
@@ -34,6 +42,14 @@ type CamperAndStatus = {
   isWaitlisted: boolean;
   status: RegistrationStatus;
   registrationRef: DocumentReference<Registration>;
+};
+
+type PreparedCamper = {
+  camperRef: DocumentReference<Camper>;
+  registrationRef: DocumentReference<Registration>;
+  camperAndRegInfo: CamperAndRegInfo;
+  campTrack: CampTrack;
+  camperName: string;
 };
 
 export type RegistrationReferences = {
@@ -69,7 +85,7 @@ async function updateAndGetFamily(
     joinFamilyId
   );
   await familyRef.set(
-    {
+    validateFamilyWrite({
       emails: FieldValue.arrayUnion(...emails),
       // The caller registered through this family themselves, so from now on
       // it is theirs without asking (see isEstablishedFamilyMember). Only the
@@ -84,7 +100,7 @@ async function updateAndGetFamily(
       // Stamp the creator once so findOrCreateFamily can tell this family
       // apart from one the caller was merely listed in by someone else.
       ...(didExist ? {} : {createdBy: callerEmail}),
-    },
+    }),
     {
       merge: true,
     }
@@ -111,14 +127,14 @@ async function updateAndGetParents(
       const parentRef = await findOrCreateParent(familyRef, parent);
       parentRefs.push(parentRef);
       await parentRef.set(
-        {
+        validateParentWrite({
           email: parent.email ? normalizeEmail(parent.email) : parent.email,
           firstName: parent.firstName,
           lastName: parent.lastName,
           phoneNumber: parent.phoneNumber,
           lineId: parent.lineId,
           subscribeToMailingList: parent.subscribeToMailingList,
-        },
+        }),
         {
           merge: true,
         }
@@ -142,7 +158,7 @@ async function updateAndGetCamper(
 
   // Base camper doc — accessible to all admin roles
   await camperRef.set(
-    {
+    validateCamperWrite({
       firstName: camperAndRegInfo.firstName,
       lastName: camperAndRegInfo.lastName,
       preferredName: camperAndRegInfo.preferredName ?? null,
@@ -151,7 +167,7 @@ async function updateAndGetCamper(
       gender: camperAndRegInfo.gender,
       pronouns: camperAndRegInfo.pronouns ?? null,
       schemaVersion: CURRENT_SCHEMA_VERSION,
-    },
+    }),
     {
       merge: true,
     }
@@ -160,29 +176,42 @@ async function updateAndGetCamper(
   // Private health sub-doc — accessible to health_staff and full_admin
   const healthRef = camperRef.collection("private").doc("health");
   await healthRef.set(
-    {
+    validateCamperHealthWrite({
       dietAndFoodAllergies: camperAndRegInfo.dietAndFoodAllergies ?? null,
       medicalConditions: camperAndRegInfo.medicalConditions ?? null,
-    } as CamperHealth,
-    { merge: true }
+    }),
+    {merge: true}
   );
 
   // Private demographics sub-doc — accessible to full_admin only
   const demographicsRef = camperRef.collection("private").doc("demographics");
-  await demographicsRef.set(demographics as Demographics, { merge: true });
+  await demographicsRef.set(validateDemographicsWrite(demographics), {
+    merge: true,
+  });
 
   return camperRef;
 }
 
 /**
  * Either create new family, camper, or registration references
- * or update the existing ones
+ * or update the existing ones.
+ *
+ * The family, parent and camper upserts are plain writes. The registration
+ * writes and the capacity decision happen together in ONE transaction: it
+ * reads the camp year's remaining spots and every camper's existing
+ * registration, decides per camper (see decideAdmissions), writes each
+ * registration with its status and `spotReserved`, and decrements
+ * `remainingSpots` by the number admitted. Reserving the spot here, rather
+ * than when payment lands minutes later, closes the oversubscription window
+ * between two families reading the same stale count.
+ *
  * @param registrationPayload The client-provided registration information.
+ * @param forceWaitlist Staff flag that waitlists every camper regardless of capacity.
+ * @param authEmail The caller's verified email from Firebase Auth.
  */
 export async function createOrUpdateRegistration(
   db: Firestore,
   registrationPayload: RegistrationPayload,
-  remainingSpots: CampRemainingSpots,
   forceWaitlist: boolean,
   authEmail: string
 ): Promise<RegistrationReferences> {
@@ -197,7 +226,9 @@ export async function createOrUpdateRegistration(
     joinFamilyId,
   } = registrationPayload;
 
-  const campRef = db.collection("camps").doc(campYear.toString());
+  const campRef = db
+    .collection("camps")
+    .doc(campYear.toString()) as DocumentReference<CampYear>;
 
   // Normalize at the boundary: family membership emails are identity keys
   // compared verbatim against request.auth.token.email in firestore.rules.
@@ -210,56 +241,71 @@ export async function createOrUpdateRegistration(
     db, family, emails, household, authEmail, joinFamilyId
   );
   const parentRefs = await updateAndGetParents(db, familyRef, parents);
+  const parentContacts = buildParentContacts(parents);
 
-  // Update each camper and create an initial registration for them
-  const camperAndStatuses: CamperAndStatus[] = [];
-  await Promise.all(
+  // Update each camper and make sure a registration document exists for them.
+  // Order is preserved so decisions can be matched back by index.
+  const prepared: PreparedCamper[] = await Promise.all(
     campers.map(async (camperAndRegInfo, index) => {
       const camperRef = await updateAndGetCamper(
         familyRef,
         camperAndRegInfo,
         demographics[index]
       );
-
-      // Find or create the registration
-      const registrationRefAndDidExist = await findOrCreateRegistration(
+      const {ref: registrationRef} = await findOrCreateRegistration(
         camperRef,
         campRef
       );
+      return {
+        camperRef,
+        registrationRef,
+        camperAndRegInfo,
+        campTrack: getCampTrack(camperAndRegInfo.grade ?? 4),
+        camperName: `${camperAndRegInfo?.firstName} ${camperAndRegInfo?.lastName}`,
+      };
+    })
+  );
 
-      // If the camper should be waitlisted and they didn't already exist, then
-      // mark the registration as Waitlist. Otherwise, we'll mark them as Pending Payment
-      // until the Stripe payment succeeds.
-      // NOTE: that it's possible we could have only one remaining spot but two campers we're registering here.
-      // In this scenario, we want to ensure both campers in the family can register, and we'll have one or two additional
-      // capacity. This is an edge case where we hope that other campers will end up cancelling.
-      const campTrack = getCampTrack(camperAndRegInfo.grade ?? 4);
-      const remainingSpotsForTrack = remainingSpots[campTrack] ?? 0;
-      const shouldWaitlist = forceWaitlist || remainingSpotsForTrack <= 0;
+  // Decide admission and write the registrations atomically against the
+  // camp's remaining spots. Firestore requires every transactional read to
+  // happen before the first write.
+  // NOTE: it's possible we could have only one remaining spot but two campers we're registering here.
+  // In this scenario, we want to ensure both campers in the family can register, and we'll have one or two additional
+  // capacity. This is an edge case where we hope that other campers will end up cancelling (see decideAdmissions).
+  const decisions = await db.runTransaction(async (t) => {
+    const campSnapshot = await t.get(campRef);
+    const registrationSnapshots =
+      prepared.length > 0 ?
+        await t.getAll(...prepared.map((p) => p.registrationRef)) :
+        [];
 
-      let status = shouldWaitlist
-        ? RegistrationStatus.WAITLIST
-        : RegistrationStatus.PENDING_PAYMENT;
-      if (shouldWaitlist && registrationRefAndDidExist.didExist) {
-        const existingRegistration = await registrationRefAndDidExist.ref.get();
+    const {decisions, remainingSpots, changed} = decideAdmissions(
+      prepared.map((p, i) => ({
+        key: p.registrationRef.path,
+        campTrack: p.campTrack,
+        existingStatus: registrationSnapshots[i]?.data()?.status,
+        existingSpotReserved: registrationSnapshots[i]?.data()?.spotReserved,
+      })),
+      campSnapshot.data()?.remainingSpots,
+      forceWaitlist
+    );
 
-        // If we hit the waitlist stage, but there's an existing status for pending payment
-        // meaning they've been moved off the waitlist, then we should continue with the pending registration.
-        const existingStatus = existingRegistration.data()?.status;
-        if (existingStatus == RegistrationStatus.PENDING_PAYMENT) {
-          status = RegistrationStatus.PENDING_PAYMENT;
-        }
-      }
-
-      const camperName = `${camperAndRegInfo?.firstName} ${camperAndRegInfo?.lastName}`;
-      await registrationRefAndDidExist.ref.set(
-        {
-          camperName: camperName,
-          camper: camperRef,
-          campTrack: campTrack,
+    prepared.forEach((p, i) => {
+      const decision = decisions[i];
+      const {camperAndRegInfo} = p;
+      t.set(
+        p.registrationRef,
+        validateRegistrationWrite({
+          camperName: p.camperName,
+          camper: p.camperRef,
+          campTrack: p.campTrack,
 
           grade: camperAndRegInfo.grade,
-          status: status,
+          status: decision.status,
+          // Left alone for registrations already past the hold stage.
+          ...(decision.spotReserved === undefined ?
+            {} :
+            {spotReserved: decision.spotReserved}),
           shirtSize: camperAndRegInfo.shirtSize,
           isReturning: camperAndRegInfo?.isReturning ?? false,
           cabinPreference: camperAndRegInfo?.cabinPreference ?? "",
@@ -277,29 +323,51 @@ export async function createOrUpdateRegistration(
           waiverSignature: camperAndRegInfo?.waiverSignature ?? "",
           waiverSignDate: camperAndRegInfo?.waiverSignDate ?? "",
 
+          // Denormalized for the admin grid (schemaVersion 3). Same
+          // normalization as the camper doc / syncCamperProfile: nullable
+          // text → null, birthDate → "", gender → []. Health and
+          // demographics are deliberately NOT copied here (private/, role-gated).
+          preferredName: camperAndRegInfo.preferredName ?? null,
+          birthDate: camperAndRegInfo.birthDate ?? "",
+          gender: camperAndRegInfo.gender ?? [],
+          pronouns: camperAndRegInfo.pronouns ?? null,
+          parentContacts: parentContacts,
+
           familyEmails: emails,
           schemaVersion: CURRENT_SCHEMA_VERSION,
-        },
+        }),
         {
           merge: true,
         }
       );
+    });
 
-      // Add the registration to the camper if it didn't already eixst
-      await camperRef.update({
-        registrations: FieldValue.arrayUnion(registrationRefAndDidExist.ref),
-      });
+    if (changed) {
+      t.set(campRef, validateCampYearWrite({remainingSpots}), {merge: true});
+    }
 
-      // Update camperAndStatuses so we can properly create the Stripe checkout session
-      camperAndStatuses.push({
-        camperName: camperName,
-        campTrack: campTrack,
-        isWaitlisted: status === RegistrationStatus.WAITLIST,
-        status: status,
-        registrationRef: registrationRefAndDidExist.ref,
-      });
-    })
+    return decisions;
+  });
+
+  // Link the registration to the camper (no-op if it is already there).
+  await Promise.all(
+    prepared.map((p) =>
+      p.camperRef.update(
+        validateCamperWrite({
+          registrations: FieldValue.arrayUnion(p.registrationRef),
+        })
+      )
+    )
   );
+
+  // camperAndStatuses lets the caller build the Stripe checkout session.
+  const camperAndStatuses: CamperAndStatus[] = prepared.map((p, i) => ({
+    camperName: p.camperName,
+    campTrack: p.campTrack,
+    isWaitlisted: decisions[i].isWaitlisted,
+    status: decisions[i].status,
+    registrationRef: p.registrationRef,
+  }));
 
   return {
     familyRef: familyRef,

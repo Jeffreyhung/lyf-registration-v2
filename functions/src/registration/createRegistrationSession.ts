@@ -27,21 +27,26 @@ import {
   resolveTestDataFlag,
   validateDollarAmount,
   validateRedirectUrl,
-  validateRegistrationPayloadShape,
 } from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
+import {parseCallablePayload} from "../utils/validate";
 
 // Import schema
 import {
-  CampTrack,
   CampYear,
   getRegistrationPrice,
   RegistrationPayload,
   RegistrationStatus,
+  validateRegistrationPayload,
+  validateRegistrationWrite,
 } from "lyf-registration-schemas";
 import {sendWaitlistEmail} from "../registrationUtils/sendWaitlistEmail";
 import {completeRegistration} from "./fullfillRegistration";
 import {FieldValue} from "firebase-admin/firestore";
+
+// How long a registration checkout session stays payable before Stripe
+// expires it and the webhook releases the held spots. Stripe's minimum is 30.
+export const REGISTRATION_CHECKOUT_EXPIRY_MINUTES = 45;
 
 export interface RegistrationLineItemMetadata extends Stripe.Metadata {
   familyRef: string;
@@ -57,6 +62,14 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
       throw new HttpsError("unauthenticated", "Not signed in");
     }
 
+    // Shape, bounds and enums are checked here; the allow-listed redirect
+    // origins and the donation cap below are policy the validator leaves to us.
+    // `payload` (not request.data) is used from here on: the validator strips
+    // the Firestore leftovers the website spreads into family/parents/campers.
+    const payload = parseCallablePayload(
+      validateRegistrationPayload,
+      request.data
+    );
     const {
       campYear,
       parents,
@@ -66,9 +79,8 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
       cancelUrl,
       isTestData: requestedTestData = false,
       forceWaitlist: requestedForceWaitlist = false,
-    } = request.data;
+    } = payload;
 
-    validateRegistrationPayloadShape(request.data);
     validateRedirectUrl(successUrl);
     validateRedirectUrl(cancelUrl);
     if (donation > 0) {
@@ -108,17 +120,14 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
     const campPreRegistrationFee = campData?.preRegistrationFee ?? 500;
     const siblingDiscount =
       campData?.siblingDiscount ?? DEFAULT_SIBLING_DISCOUNT;
-    const remainingSpots = campData?.remainingSpots ?? {
-      [CampTrack.YOUNGER]: 0,
-      [CampTrack.OLDER]: 0,
-    };
 
-    // Update the family, parent, camper, and registration info accordingly
+    // Update the family, parent, camper, and registration info accordingly.
+    // Capacity is read and reserved inside createOrUpdateRegistration's
+    // transaction, not from the (possibly stale) camp snapshot above.
     const {familyRef, parentRefs, camperAndStatuses} =
       await createOrUpdateRegistration(
         db,
-        request.data,
-        remainingSpots,
+        payload,
         forceWaitlist,
         request.auth.token.email!
       );
@@ -230,10 +239,12 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
       const campTrackSpots = new Map<string, number>();
       await Promise.all(
         registeredCampers.map(async (c) => {
-          await c.registrationRef.update({
-            status: RegistrationStatus.ACTIVE,
-            updatedAt: FieldValue.serverTimestamp(),
-          });
+          await c.registrationRef.update(
+            validateRegistrationWrite({
+              status: RegistrationStatus.ACTIVE,
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+          );
 
           campTrackSpots.set(
             c.campTrack,
@@ -331,7 +342,10 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
         StripeWebhookEventType.Registration,
         paymentDescription,
         isTestData,
-        discount
+        discount,
+        // The session holds camp spots (spotReserved); keep the hold short and
+        // let checkout.session.expired hand the spots back.
+        {expiresAfterMinutes: REGISTRATION_CHECKOUT_EXPIRY_MINUTES}
       );
       return {
         status: "success",

@@ -13,7 +13,8 @@
     },
     "dependencies": {
         "cross-env": "^7.0.3",
-        "firebase": "^10.6.0"
+        "firebase": "^10.6.0",
+        "zod": "^4.6.7"
     },
     "devDependencies": {
         "@types/jest": "^29.5.14",
