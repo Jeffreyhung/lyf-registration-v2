@@ -39,7 +39,21 @@ function handleStripeWebhookHelper(
   const stripe = getStripe(isProd);
 
   return async (request, response) => {
-    const sig = request.headers["stripe-signature"] as string;
+    // Stripe only ever POSTs signed events. Browsers and crawlers that open
+    // the function URL send a GET with no body, which used to reach the
+    // signature check and get reported to Sentry as an invalid event.
+    if (request.method !== "POST") {
+      response.set("Allow", "POST").status(405).send();
+      return;
+    }
+
+    const sig = request.headers["stripe-signature"];
+    if (typeof sig !== "string" || !request.rawBody) {
+      logger.warn("Stripe webhook request without a signature or body");
+      response.status(400).send();
+      return;
+    }
+
     let event: Stripe.Event;
     try {
       event = stripe.webhooks.constructEvent(
