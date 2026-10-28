@@ -362,22 +362,33 @@ appear only for roles with the `readHealth` capability.
 ### Exports
 
 Data exports come from the All Registrations grid; there are no longer any
-Admin SDK scripts for them. The grid toolbar's **Export** menu offers
-*CSV (visible columns)*, *CSV (all columns)* and *Print*. Files are named
-`<camp year>-lyf-registrations-<YYYY-MM-DD>.csv`. Every export honours the
-status filter above the grid, the toolbar's filter panel and the search box,
-across all pages; if any rows are checked, only those rows are exported.
+Admin SDK scripts for them. The grid toolbar's **Export** menu has two halves.
 
-Address (street, suite, city, state, zip, country), household-culture and
+**One-click exports (all registrations).** Each item downloads a ready-made
+CSV built from every registration for the selected camp year, ignoring the
+grid's filters. They replace the retired scripts one for one. Files are named
+`<camp year>-lyf-<export>-<YYYY-MM-DD>.csv`.
+
+| Menu item | Contents | Replaced script |
+| --- | --- | --- |
+| Active camper mailing addresses | One row per Active registration: camper, parent names, street, suite, city, state, zip, country. | `getCamperAddress` |
+| Active parent emails | Deduplicated parent and family-account emails for Active registrations, with names where known. | `getActiveRegEmails` |
+| Pre-registered parent emails | Same, for every registration flagged as pre-registered (any status). | `getPreRegEmails` |
+| Pre-registered campers | Pre-registered campers with status, grade and parent emails. | `getPreRegCampers` |
+| Active camper info | Names, birthday, grade, gender, pronouns, shirt size, flags, notes and, for roles with `readHealth`, the health fields. | `getActiveCamperInfo` |
+| Parent emails for specific campers… | Opens a dialog: paste camper names one per line, get their parents' emails and family-account emails. Names that match nothing are listed back. | `getParentEmailsForCamper` |
+
+The definitions live in `website/src/components/Admin/registrationExports.ts`;
+adding an export is adding an entry to `QUICK_EXPORTS`.
+
+**This grid (filtered rows).** *CSV (visible columns)*, *CSV (all columns)* and
+*Print* export what the grid currently shows. They honour the status filter
+above the grid, the toolbar's filter panel and the search box, across all
+pages; if any rows are checked, only those rows are exported. Address
+(street, suite, city, state, zip, country), household-culture and
 family-account-email columns are hidden by default to keep the grid readable.
 Turn them on from **Columns**, or use *CSV (all columns)*, which includes
-hidden columns. The **?** button next to Export repeats the recipes below.
-
-| Need | Steps |
-| --- | --- |
-| Mailing addresses (December mailing) | Status filter = Active, then Export → CSV (all columns), or show the address columns and export visible columns. |
-| Pre-registered parent emails | Filters → Pre-Registered is *yes*, then Export, or **Copy Parent Emails** for a one-per-line list. |
-| Parent emails for specific campers | Type part of each name in the search box, then Export or copy. |
+hidden columns. The **?** button next to Export summarises all of this.
 
 The two copy-to-clipboard buttons above the grid (parent emails; parent email,
 first and last name tab-separated) stay as quick paths for the rows that match

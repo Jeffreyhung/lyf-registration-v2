@@ -4,7 +4,9 @@ import {
   Button,
   Card,
   CardHeader,
+  Divider,
   IconButton,
+  ListSubheader,
   MenuItem,
   Stack,
   Tooltip,
@@ -53,6 +55,9 @@ import useFilterRegistrationStatus from "@hooks/useFilterRegistrationStatus"
 
 import CopyToClipboardButton from "./CopyToClipboardButton"
 import RefundDialog from "@components/Dialog/RefundDialog"
+import NamedCampersExportDialog from "./NamedCampersExportDialog"
+import { QUICK_EXPORTS, exportFileName } from "./registrationExports"
+import { downloadCsv, toCsv } from "@utils/csv"
 
 type RegistrationDashboardProps = {
   data: RegistrationData[]
@@ -293,25 +298,20 @@ function getColumnsForRole(role: AdminRole | null): GridColDef[] {
   return allColumns.filter((col) => !HEALTH_FIELDS.has(col.field))
 }
 
-type CsvExportMenuItemProps = {
+type ExportMenuItemProps = {
   label: string
-  options: GridCsvExportOptions
+  onClick: () => void
   // Injected by GridToolbarExportContainer.
   hideMenu?: () => void
 }
 
-// Same as the grid's built-in CSV menu item, but with our own label so the
-// menu can offer both a "visible columns" and an "all columns" download.
-function CsvExportMenuItem({
-  label,
-  options,
-  hideMenu,
-}: CsvExportMenuItemProps) {
-  const apiRef = useGridApiContext()
+// Replaces the grid's built-in export menu items so the menu can carry our
+// own labels and the one-click exports.
+function ExportMenuItem({ label, onClick, hideMenu }: ExportMenuItemProps) {
   return (
     <MenuItem
       onClick={() => {
-        apiRef.current.exportDataAsCsv(options)
+        onClick()
         hideMenu?.()
       }}
     >
@@ -320,18 +320,60 @@ function CsvExportMenuItem({
   )
 }
 
+type GridCsvExportMenuItemProps = {
+  label: string
+  options: GridCsvExportOptions
+  hideMenu?: () => void
+}
+
+// The grid's own CSV export (current filters, visible or all columns) under
+// our label.
+function GridCsvExportMenuItem({
+  label,
+  options,
+  hideMenu,
+}: GridCsvExportMenuItemProps) {
+  const apiRef = useGridApiContext()
+  return (
+    <ExportMenuItem
+      label={label}
+      hideMenu={hideMenu}
+      onClick={() => apiRef.current.exportDataAsCsv(options)}
+    />
+  )
+}
+
+// Also receives hideMenu from the container; it just has nothing to do with it.
+function ExportMenuSection({
+  label,
+  divider = true,
+}: {
+  label: string
+  divider?: boolean
+  hideMenu?: () => void
+}) {
+  return (
+    <>
+      {divider && <Divider />}
+      <ListSubheader disableSticky sx={{ lineHeight: "32px" }}>
+        {label}
+      </ListSubheader>
+    </>
+  )
+}
+
 const EXPORT_WORKFLOWS: [string, string][] = [
   [
-    "Mailing addresses",
-    "Keep the status filter on Active, then Export → CSV (all columns), or turn on the address columns under Columns and export visible columns.",
+    "One-click exports",
+    "The lower half of the Export menu downloads ready-made files: mailing addresses, parent email lists, pre-registered campers, camper info, and emails for a pasted list of campers. They use every registration for the year and ignore the filters.",
   ],
   [
-    "Pre-registered emails",
-    "Open Filters and set Pre-Registered to yes, then Export, or use Copy Parent Emails above for a one-per-line list.",
+    "Custom exports",
+    "Shape the grid with the status filter, Filters, the search box and Columns, then Export → CSV (visible columns). CSV (all columns) adds the hidden address and household columns.",
   ],
   [
-    "Emails for specific campers",
-    "Type part of a camper name in the search box to narrow the grid, then Export or copy.",
+    "Quick copies",
+    "The two buttons above the grid copy parent emails, or email with first and last name, for the rows matching the status filter.",
   ],
 ]
 
@@ -346,9 +388,9 @@ function ExportHelp() {
             Exporting from this grid
           </Typography>
           <Typography variant="caption" component="p" sx={{ mb: 1 }}>
-            Exports include only the rows that match the status filter, the grid
-            filters and the search box, on every page. If any rows are checked,
-            only those rows are exported.
+            Grid exports include only the rows that match the status filter, the
+            grid filters and the search box, on every page. If any rows are
+            checked, only those rows are exported.
           </Typography>
           {EXPORT_WORKFLOWS.map(([title, steps]) => (
             <Typography
@@ -393,6 +435,7 @@ export default function RegistrationDashboard({
   >(new Map())
   const [cancelPromiseContext, setCancelPromiseContext] =
     React.useState<CancelStatusPromise | null>(null)
+  const [namedExportOpen, setNamedExportOpen] = React.useState(false)
 
   const rows: RegDashboardRow[] = registrationData.map((reg, index) => ({
     id: index.toString(),
@@ -507,9 +550,8 @@ export default function RegistrationDashboard({
     })
 
   // e.g. 2026-lyf-registrations-2026-10-27 (.csv is appended by the grid).
-  const exportFileName = `${campYear}-lyf-registrations-${dayjs().format(
-    "YYYY-MM-DD"
-  )}`
+  const gridFileName = exportFileName(campYear, "registrations")
+  const canReadHealth = roleHasCapability(adminRole, "readHealth")
 
   const toolbar = (props: GridSlotProps["toolbar"]) => {
     const { rowSelection } = props
@@ -520,19 +562,40 @@ export default function RegistrationDashboard({
         <GridToolbarFilterButton />
         <GridToolbarDensitySelector />
         <GridToolbarExportContainer>
-          <CsvExportMenuItem
-            label="Download as CSV (visible columns)"
-            options={{ fileName: exportFileName, utf8WithBom: true }}
+          <ExportMenuSection
+            label="This grid (filtered rows)"
+            divider={false}
           />
-          <CsvExportMenuItem
+          <GridCsvExportMenuItem
+            label="Download as CSV (visible columns)"
+            options={{ fileName: gridFileName, utf8WithBom: true }}
+          />
+          <GridCsvExportMenuItem
             label="Download as CSV (all columns)"
             options={{
-              fileName: `${exportFileName}-all-columns`,
+              fileName: `${gridFileName}-all-columns`,
               allColumns: true,
               utf8WithBom: true,
             }}
           />
-          <GridPrintExportMenuItem options={{ fileName: exportFileName }} />
+          <GridPrintExportMenuItem options={{ fileName: gridFileName }} />
+          <ExportMenuSection label="One-click exports (all registrations)" />
+          {QUICK_EXPORTS.map((quickExport) => (
+            <ExportMenuItem
+              key={quickExport.id}
+              label={quickExport.label}
+              onClick={() =>
+                downloadCsv(
+                  exportFileName(campYear, quickExport.fileSuffix),
+                  toCsv(quickExport.build(data, { canReadHealth }))
+                )
+              }
+            />
+          ))}
+          <ExportMenuItem
+            label="Parent emails for specific campers…"
+            onClick={() => setNamedExportOpen(true)}
+          />
         </GridToolbarExportContainer>
         <ExportHelp />
         <GridToolbarQuickFilter debounceMs={300} />
@@ -588,6 +651,12 @@ export default function RegistrationDashboard({
           open={refundDialogOpen}
           setOpen={(b) => setRefundDialogOpen(b)}
         ></RefundDialog>
+        <NamedCampersExportDialog
+          open={namedExportOpen}
+          onClose={() => setNamedExportOpen(false)}
+          registrations={data}
+          campYear={campYear}
+        />
         {selectComponent}
         <Stack direction="row" sx={{ padding: 1 }} spacing={2}>
           <CopyToClipboardButton processDataFunc={copyEmails}>
