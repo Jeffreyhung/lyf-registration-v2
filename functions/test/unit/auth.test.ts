@@ -19,6 +19,7 @@ jest.mock("../../src/utils", () => ({
 }));
 
 import {
+  adminCallableOptions,
   assertAdmin,
   assertCallerEmailInList,
   callableOptions,
@@ -76,6 +77,14 @@ beforeEach(() => mockAdmins.clear());
 describe("callableOptions", () => {
   it("makes callables publicly invokable with CORS so auth is checked in-function", () => {
     expect(callableOptions).toEqual({cors: true, invoker: "public"});
+  });
+});
+
+describe("adminCallableOptions", () => {
+  it("keeps the public invoker but limits CORS to the site origins", () => {
+    expect(adminCallableOptions.invoker).toBe("public");
+    expect(adminCallableOptions.cors).toEqual(["https://lyf-registration.tacl.org"]);
+    expect(adminCallableOptions.cors).not.toContain("http://localhost:8000");
   });
 });
 
@@ -160,6 +169,24 @@ describe("validateRedirectUrl", () => {
         () => validate("https://lyf-registration.tacl.org/x"),
         "invalid-argument"
       );
+    });
+
+    it("admin callables' CORS follows ALLOWED_REDIRECT_ORIGINS and the emulator flag", () => {
+      const configured = loadWithEnv({
+        ALLOWED_REDIRECT_ORIGINS: "https://staging.example.com, https://lyf.example.org",
+      });
+      expect(configured.adminCallableOptions.cors).toEqual([
+        "https://staging.example.com",
+        "https://lyf.example.org",
+      ]);
+      expect(configured.callableOptions.cors).toBe(true);
+
+      const emulated = loadWithEnv({FUNCTIONS_EMULATOR: "true"});
+      expect(emulated.adminCallableOptions.cors).toEqual([
+        "https://lyf-registration.tacl.org",
+        "http://localhost:8000",
+        "http://localhost:9000",
+      ]);
     });
 
     it("only allows localhost when running in the Firebase emulator", () => {

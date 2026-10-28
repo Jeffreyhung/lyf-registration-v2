@@ -10,7 +10,7 @@ import {
 } from "lyf-registration-schemas";
 
 import {db} from "../utils";
-import {assertAdmin, callableOptions} from "../utils/auth";
+import {adminCallableOptions, assertAdmin} from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
 
 /**
@@ -26,7 +26,7 @@ import {withSentryCallable} from "../utils/sentry";
  * database; nothing here (or anywhere else) should write there directly.
  */
 export const manageAdmin = onCall<ManageAdminRequest, Promise<ManageAdminResponse>>(
-  callableOptions,
+  adminCallableOptions,
   withSentryCallable("manageAdmin", async (request) => {
     const {email: actorEmail} = await assertAdmin(request, "manageAdmins");
     const actor = normalizeEmail(actorEmail);
