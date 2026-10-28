@@ -1,0 +1,21 @@
+# Keeps the SHA-pinned actions in .github/workflows current. Dependabot reads
+# the "# vX.Y.Z" comment after each pin, bumps the SHA and rewrites the comment.
+# Only the actions ecosystem is covered here; npm/yarn dependencies are left to
+# the existing manual process.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    # One PR per week bumping every action at once instead of one PR per action.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"
+    labels:
+      - dependencies
+      - github-actions
