@@ -21,7 +21,7 @@ import {
 } from "lyf-registration-schemas";
 
 import {getFirestoreDb, PROD_DATABASE_ID, TEST_DATABASE_ID} from "../utils";
-import {assertAdmin, callableOptions} from "../utils/auth";
+import {adminCallableOptions, assertAdmin} from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
 
 // Camp runs on Pacific time; "the same date next year" is a calendar shift in
@@ -51,7 +51,7 @@ export const manageCampYear = onCall<
   ManageCampYearRequest,
   Promise<ManageCampYearResponse>
 >(
-  callableOptions,
+  adminCallableOptions,
   withSentryCallable("manageCampYear", async (request) => {
     const {email: actorEmail} = await assertAdmin(request, "manageCampYear");
     const actor = normalizeEmail(actorEmail);
