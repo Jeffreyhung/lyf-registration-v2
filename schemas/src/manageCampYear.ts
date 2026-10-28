@@ -29,8 +29,33 @@ export const CAMP_YEAR_FEE_KEYS = [
   "siblingDiscount",
 ] as const
 
-/** Free-text fields. */
-export const CAMP_YEAR_TEXT_KEYS = ["name", "campsite", "campsiteAddress"] as const
+/**
+ * Per-year image URLs (must be http(s)). Empty string clears the field, in
+ * which case the website and email templates fall back to their bundled
+ * images. A subset of CAMP_YEAR_TEXT_KEYS.
+ */
+export const CAMP_YEAR_IMAGE_URL_KEYS = [
+  "infoSessionImageUrl",
+  "emailHeaderImageUrl",
+] as const
+
+/** Free-text fields (the image URLs are validated more strictly). */
+export const CAMP_YEAR_TEXT_KEYS = [
+  "name",
+  "campsite",
+  "campsiteAddress",
+  ...CAMP_YEAR_IMAGE_URL_KEYS,
+] as const
+
+/**
+ * Display toggles the website reads from the camp document. Missing means
+ * false, so a year created before these existed behaves as today.
+ */
+export const CAMP_YEAR_FLAG_KEYS = [
+  "showWaitlistHeaderBar",
+  "showRemainingSpots",
+  "showWaitlistPosition",
+] as const
 
 /**
  * Every key the callable will accept. remainingSpots is deliberately absent:
@@ -43,6 +68,7 @@ export const CAMP_YEAR_CONFIG_KEYS = [
   ...CAMP_YEAR_DATE_KEYS,
   ...CAMP_YEAR_FEE_KEYS,
   ...CAMP_YEAR_TEXT_KEYS,
+  ...CAMP_YEAR_FLAG_KEYS,
   "campTotalSizeCap",
   "campSizeCaps",
   "registrationBypassEmails",
@@ -51,6 +77,8 @@ export const CAMP_YEAR_CONFIG_KEYS = [
 export type CampYearDateKey = (typeof CAMP_YEAR_DATE_KEYS)[number]
 export type CampYearFeeKey = (typeof CAMP_YEAR_FEE_KEYS)[number]
 export type CampYearTextKey = (typeof CAMP_YEAR_TEXT_KEYS)[number]
+export type CampYearImageUrlKey = (typeof CAMP_YEAR_IMAGE_URL_KEYS)[number]
+export type CampYearFlagKey = (typeof CAMP_YEAR_FLAG_KEYS)[number]
 export type CampYearConfigKey = (typeof CAMP_YEAR_CONFIG_KEYS)[number]
 
 /**
@@ -61,7 +89,8 @@ export type CampYearConfigKey = (typeof CAMP_YEAR_CONFIG_KEYS)[number]
 export type CampYearConfigInput = Partial<
   Record<CampYearDateKey, string> &
     Record<CampYearFeeKey, number> &
-    Record<CampYearTextKey, string> & {
+    Record<CampYearTextKey, string> &
+    Record<CampYearFlagKey, boolean> & {
       campTotalSizeCap: number
       campSizeCaps: Record<CampTrack, number>
       registrationBypassEmails: string[]

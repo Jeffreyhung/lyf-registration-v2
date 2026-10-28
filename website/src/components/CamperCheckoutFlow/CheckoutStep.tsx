@@ -36,6 +36,8 @@ type CheckoutProps = {
   preRegisteredCampersIds: string[]
   setPreRegisteredCampersIds: React.Dispatch<string[]>
   donationAmount: number
+  /** Per-camper price from camps/{nextCampYear}.preRegistrationFee. */
+  preRegistrationFee: number
   hideCamperCheckout?: boolean
 }
 
@@ -51,13 +53,15 @@ export default function CheckoutStep({
   campers,
   preRegisteredCampersIds,
   donationAmount,
+  preRegistrationFee,
   hideCamperCheckout = false,
 }: CheckoutProps) {
   const { user } = React.useContext(AuthContext)
   const { getStripe, isTestData } = React.useContext(ProdContext)
   const [error, setError] = React.useState<string | null>(null)
   const [parentName, setParentName] = React.useState<string>("")
-  const total = preRegisteredCampersIds.length * 500 + donationAmount
+  const total =
+    preRegisteredCampersIds.length * preRegistrationFee + donationAmount
   const preRegisteredCampers = campers.filter((camper) =>
     preRegisteredCampersIds.includes(camper.id)
   )
@@ -185,7 +189,9 @@ export default function CheckoutStep({
                 return (
                   <Box key={camperName + index}>
                     <ListItem
-                      secondaryAction={<Cost cost={shouldCheckOut ? 0 : 500} />}
+                      secondaryAction={
+                        <Cost cost={shouldCheckOut ? 0 : preRegistrationFee} />
+                      }
                     >
                       <ListItemText
                         primary={
@@ -196,7 +202,9 @@ export default function CheckoutStep({
                       />
                     </ListItem>
                     {shouldCheckOut && shouldPreRegister && (
-                      <ListItem secondaryAction={<Cost cost={500} />}>
+                      <ListItem
+                        secondaryAction={<Cost cost={preRegistrationFee} />}
+                      >
                         <ListItemText
                           primary={`LYF Camp ${nextCampYear} Pre-Registration`}
                           sx={{

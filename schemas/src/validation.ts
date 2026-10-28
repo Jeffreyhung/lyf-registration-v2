@@ -538,6 +538,13 @@ const campYearShape = <F extends Flavour>(f: F) => ({
   preRegistrationCloseDate: field(f, timestamp, TIMESTAMP_KINDS),
   infoSessionDate: field(f, timestamp, TIMESTAMP_KINDS),
 
+  // Per-year images and display toggles (set from the Camp Year tab).
+  infoSessionImageUrl: field(f, z.string()),
+  emailHeaderImageUrl: field(f, z.string()),
+  showWaitlistHeaderBar: field(f, z.boolean()),
+  showRemainingSpots: field(f, z.boolean()),
+  showWaitlistPosition: field(f, z.boolean()),
+
   name: field(f, z.string()),
 
   preRegistrationFee: field(f, amount(f), NUMBER_KINDS),

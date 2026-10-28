@@ -29,9 +29,11 @@ import PrivateRoute from "@components/Auth/PrivateRoute"
 import { Section } from "@components/Layout"
 import { SnackbarAlertProvider } from "@components/SnackbarAlert"
 import useFamilyData from "@hooks/useFamilyData"
+import useSiteConfig from "@hooks/useSiteConfig"
 import { CampTrack, RegistrationStatus } from "lyf-registration-schemas"
 import { DataGridColumnAlign } from "@components/Table"
 import { OffWaitlistDialog } from "@components/Profile"
+import useCampSchedule from "@hooks/useCampSchedule"
 
 export type ParentDashboardRow = {
   registrationId: string
@@ -194,13 +196,20 @@ const editableColumns: GridColDef[] = [
 const ProfilePage: React.FC<PageProps> = () => {
   const { isSignedIn, user } = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
-  const currentYear = dayjs().year()
+  // "Current" means the camp year the site is registering for (config/site),
+  // which stops matching the calendar year once the rollover happens. The
+  // calendar year is only a fallback for a missing config/site document.
+  // Family data is not requested until config resolves, so the hook's
+  // per-year registration listener is created once, for the right year.
+  const { currentCampYear, loading: configLoading } = useSiteConfig()
+  const currentYear = currentCampYear ?? dayjs().year()
   const [familyData, loading, _] = useFamilyData({
-    isSignedIn,
+    isSignedIn: isSignedIn && !configLoading,
     user,
     campYear: currentYear.toString(),
     firestore,
-    includeWaitlistPosition: false, // Changed in 2026 to no longer include waitlist position
+    includeWaitlistPosition:
+      useCampSchedule(currentYear).campInfo?.showWaitlistPosition === true, // camps/{year}.showWaitlistPosition (Camp Year tab); off since 2026
   })
   const campers = new Map(familyData.campers.map((c) => [c.ref.path, c]))
   const theme = useTheme()
@@ -403,7 +412,7 @@ const ProfilePage: React.FC<PageProps> = () => {
               columns={columns
                 .concat(actions)
                 .concat(editableColumns.map((c) => ({ ...c, editable: true })))}
-              loading={loading || saving}
+              loading={configLoading || loading || saving}
               editMode="row"
               rowModesModel={rowModesModel}
               onRowModesModelChange={(m) => setRowModesModel(m)}
@@ -443,7 +452,7 @@ const ProfilePage: React.FC<PageProps> = () => {
             <DataGrid
               rows={prevRows}
               columns={columns.concat(editableColumns)}
-              loading={loading || saving}
+              loading={configLoading || loading || saving}
               initialState={{
                 pagination: {
                   paginationModel: {

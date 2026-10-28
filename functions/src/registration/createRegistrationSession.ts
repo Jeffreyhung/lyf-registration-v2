@@ -167,6 +167,7 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
 
         // TODO: Replace this with an individualized waitlist email once we have that ready.
         await sendWaitlistEmail(
+          db,
           signedInParentEmail,
           campYear,
           campTrack,

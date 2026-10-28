@@ -48,8 +48,6 @@ type RegistrationFlowProps = {
   campYear: number
 }
 
-const SHOW_WAITLIST_HEADER_BAR = false
-
 export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   const { isSignedIn, user, isAdmin } = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
@@ -62,6 +60,11 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   // families, registrationOpenDate for everyone) and are edited from the
   // admin dashboard. A missing date means "not open".
   const schedule = useCampSchedule(campYear)
+  // Display toggles live on camps/{year} too (Camp Year tab); missing = off,
+  // which is how both have been set since 2026.
+  const showWaitlistHeaderBar =
+    schedule.campInfo?.showWaitlistHeaderBar === true
+  const showRemainingSpots = schedule.campInfo?.showRemainingSpots === true
   const registrationOpenForPreRegistered = schedule.earlyRegOpen ?? FAR_FUTURE
   const registrationOpen = schedule.registrationOpen ?? FAR_FUTURE
   const [familyData, loading, error] = useFamilyData({
@@ -270,7 +273,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
     // Provide the context for the registration data and dispatch. This way we don't need to pass them down through each step.
     <RegistrationDataContext.Provider value={registrationData}>
       <RegistrationDispatchContext.Provider value={dispatch}>
-        {SHOW_WAITLIST_HEADER_BAR && (
+        {showWaitlistHeaderBar && (
           <WaitlistHeaderBar campTracksInfo={campTracksInfo} />
         )}
         <CheckoutFlow
@@ -345,6 +348,8 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
               campTracksInfo={campTracksInfo}
               campYear={campYear}
               infoSessionDate={schedule.infoSessionDate}
+              infoSessionImageUrl={schedule.campInfo?.infoSessionImageUrl}
+              showRemainingSpots={showRemainingSpots}
             />,
             <ParentGuardianStep />,
             <SelectNumCampersStep

@@ -23,7 +23,7 @@
     <mj-section>
       <mj-column>
         <mj-image
-          src="https://mcusercontent.com/723f6baf2c99017f0ff638067/_compresseds/e3a31227-4ec5-6864-fb06-6cf57a124b1c.jpg"
+          src="{{#emailHeaderImageUrl}}{{emailHeaderImageUrl}}{{/emailHeaderImageUrl}}{{^emailHeaderImageUrl}}https://mcusercontent.com/723f6baf2c99017f0ff638067/_compresseds/e3a31227-4ec5-6864-fb06-6cf57a124b1c.jpg{{/emailHeaderImageUrl}}"
         ></mj-image>
 
         <mj-text font-size="24px" font-family="helvetica" font-weight="bold"

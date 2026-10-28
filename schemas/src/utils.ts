@@ -31,8 +31,41 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
 }
 
-export function normalizeEmails(emails: (string | undefined | null)[]): string[] {
-  return [...new Set(emails.filter((e): e is string => !!e).map(normalizeEmail))]
+/** Longest image URL the camp-year callable stores (and the dashboard sends). */
+export const MAX_IMAGE_URL_LENGTH = 2048
+
+/**
+ * Whether `value` may be used as an <img src> for camps/{year} images
+ * (infoSessionImageUrl, emailHeaderImageUrl). The URL lands on the public
+ * registration page and in every confirmation email, so it must be an
+ * absolute https URL (the site's CSP only allows https images, and http
+ * would be mixed content), carry no embedded credentials, and be a sane
+ * length. Trim before calling; an empty string is not allowed (callers treat
+ * empty as "unset" themselves).
+ */
+export function isAllowedImageUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false
+  if (value.length === 0 || value.length > MAX_IMAGE_URL_LENGTH) return false
+  if (value !== value.trim()) return false
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    return false
+  }
+  return (
+    parsed.protocol === "https:" &&
+    parsed.username === "" &&
+    parsed.password === ""
+  )
+}
+
+export function normalizeEmails(
+  emails: (string | undefined | null)[]
+): string[] {
+  return [
+    ...new Set(emails.filter((e): e is string => !!e).map(normalizeEmail)),
+  ]
 }
 
 /**
@@ -49,7 +82,10 @@ export function normalizeEmails(emails: (string | undefined | null)[]): string[]
  * the server will register them into it; the website asks, the function
  * enforces, and both use this one rule.
  */
-export function isEstablishedFamilyMember(family: Family, email: string): boolean {
+export function isEstablishedFamilyMember(
+  family: Family,
+  email: string
+): boolean {
   const me = normalizeEmail(email)
   if (family.createdBy && normalizeEmail(family.createdBy) === me) return true
   if (normalizeEmails(family.confirmedEmails ?? []).includes(me)) return true

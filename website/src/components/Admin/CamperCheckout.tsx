@@ -15,9 +15,10 @@ import { RegistrationStatus } from "lyf-registration-schemas"
 import { RowWithStatusAndNotes } from "./CancelStatusDialog"
 import useFilterRegistrationStatus from "@hooks/useFilterRegistrationStatus"
 
-type RegistrationDashboardProps = {
+type CamperCheckoutProps = {
   data: RegistrationData[]
   loading: boolean
+  campYear: number
 }
 
 export interface CamperCheckoutRow extends RowWithStatusAndNotes {
@@ -104,7 +105,8 @@ const columns: GridColDef[] = [
 export default function CamperCheckout({
   data,
   loading,
-}: RegistrationDashboardProps) {
+  campYear,
+}: CamperCheckoutProps) {
   const [filteredData] = useFilterRegistrationStatus(data, [
     RegistrationStatus.ACTIVE,
   ])
@@ -180,7 +182,7 @@ export default function CamperCheckout({
     <>
       <Card>
         <CardHeader
-          title="2023 LYF Camp Camper Checkout"
+          title={`${campYear} LYF Camp Camper Checkout`}
           titleTypographyProps={{
             align: "center",
             variant: "h4",

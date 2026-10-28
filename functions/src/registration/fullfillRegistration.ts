@@ -117,6 +117,7 @@ export async function completeRegistration(
       logger.info(`Sending confirmation email to ${email}`);
       try {
         await sendRegistrationEmail(
+          db,
           email,
           Number.parseInt(campYear),
           camper,
