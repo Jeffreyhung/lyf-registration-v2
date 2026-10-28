@@ -5,18 +5,20 @@ import { Box, Stack, Typography } from "@mui/material"
 import { CheckoutFlowStep } from "@components/CheckoutFlow"
 
 type PreRegistrationAgreementStepProps = {
+  /** Per-camper price from camps/{nextCampYear}.preRegistrationFee. */
+  preRegistrationFee: number
   hideCamperCheckout?: boolean
 }
 
+const formatDollars = (amount: number) =>
+  `$${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`
+
 export default function PreRegistrationAgreementStep({
+  preRegistrationFee,
   hideCamperCheckout = false,
 }: PreRegistrationAgreementStepProps) {
   return (
-    <CheckoutFlowStep
-      index={0}
-      hideBack
-      continueText="I understand, continue"
-    >
+    <CheckoutFlowStep index={0} hideBack continueText="I understand, continue">
       {!hideCamperCheckout && (
         <Box
           sx={{
@@ -46,10 +48,11 @@ export default function PreRegistrationAgreementStep({
         <Typography>
           On the next screen, you will be able to pre-register your camper for
           next year's LYF camp before spots are open to general public.
-          Pre-registration costs $500 per camper, and you will be notified of
-          the full camp cost in the following months. If you cancel before the
-          end of the year, you will be fully refunded minus a processing fee.
-          Email reminders will be sent out towards the end of the year.
+          Pre-registration costs {formatDollars(preRegistrationFee)} per camper,
+          and you will be notified of the full camp cost in the following
+          months. If you cancel before the end of the year, you will be fully
+          refunded minus a processing fee. Email reminders will be sent out
+          towards the end of the year.
         </Typography>
       </Box>
     </CheckoutFlowStep>

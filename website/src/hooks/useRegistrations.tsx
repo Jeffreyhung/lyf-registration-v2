@@ -26,7 +26,8 @@ import {
 type useRegistrationsProps = {
   isAdmin: boolean
   adminRole: AdminRole | null
-  campYear: number
+  /** `null` while the camp year is still being resolved: nothing is queried and the hook reports loading. */
+  campYear: number | null
   constraints?: QueryConstraint[]
   firestore: Firestore
 }
@@ -98,7 +99,7 @@ export default function useRegistrations({
   }
 
   const [values, loading, error] = useCollection<Registration>(
-    isAdmin && adminRole
+    isAdmin && adminRole && campYear !== null
       ? query<Registration, DocumentData>(
           // @ts-ignore
           collection(firestore, `camps/${campYear}/registrations`),
@@ -258,7 +259,7 @@ export default function useRegistrations({
     })
   }, [values, adminRole, campYear, firestore])
 
-  return [allData, loading, error ?? loadError]
+  return [allData, campYear === null || loading, error ?? loadError]
 }
 
 /**

@@ -17,12 +17,14 @@ import AuthContext from "@components/Auth/AuthContext"
 import ProdContext from "@components/ProdContext"
 import {
   Camper,
+  DEFAULT_PRE_REGISTRATION_FEE,
   Registration,
   RegistrationStatus,
 } from "lyf-registration-schemas"
 
 // Hooks
 import useFamilyData, { DocumentIdWithType } from "@hooks/useFamilyData"
+import useCampSchedule from "@hooks/useCampSchedule"
 
 type CamperCheckoutFlowProps = {
   campYear: number
@@ -55,6 +57,31 @@ export default function CamperCheckoutFlow({
     string[]
   >([])
   const [donationAmount, setDonationAmount] = React.useState(0)
+
+  // The per-camper price lives on the document of the year being pre-registered
+  // for; createPreRegistrationSession prices the Stripe session from the same
+  // field, so the two stay in step without a deploy.
+  const {
+    campInfo,
+    loading: campInfoLoading,
+    error: campInfoError,
+  } = useCampSchedule(nextCampYear)
+  const configuredFee = campInfo?.preRegistrationFee
+  const hasConfiguredFee =
+    typeof configuredFee === "number" && Number.isFinite(configuredFee)
+  const preRegistrationFee = hasConfiguredFee
+    ? configuredFee
+    : DEFAULT_PRE_REGISTRATION_FEE
+  React.useEffect(() => {
+    if (campInfoLoading || hasConfiguredFee) {
+      return
+    }
+    console.warn(
+      `camps/${nextCampYear}.preRegistrationFee is not set; ` +
+        `falling back to $${DEFAULT_PRE_REGISTRATION_FEE}`,
+      campInfoError ?? ""
+    )
+  }, [campInfoLoading, hasConfiguredFee, nextCampYear, campInfoError])
 
   // Combine the camper and registration data
   const campersWithRegistration: CamperWithRegistration[] = campers.map(
@@ -104,14 +131,18 @@ export default function CamperCheckoutFlow({
 
   return (
     <CheckoutFlow
-      title={hideCamperCheckout ? `LYF Camp ${nextCampYear}  Pre-Registration` : "Camper Checkout"}
+      title={
+        hideCamperCheckout
+          ? `LYF Camp ${nextCampYear}  Pre-Registration`
+          : "Camper Checkout"
+      }
       checkoutStepTitles={[
         { stepIndex: 0, title: "Info" },
         { stepIndex: 1, title: "Pre-Register" },
         { stepIndex: 2, title: "Donate" },
         { stepIndex: 3, title: "Checkout" },
       ]}
-      loading={loading}
+      loading={loading || campInfoLoading}
       canAccess={activeCampers.length > 0}
       reviewStepIndex={3}
       blockedComponent={
@@ -139,6 +170,7 @@ export default function CamperCheckoutFlow({
       checkoutSteps={[
         <PreRegistrationAgreementStep
           hideCamperCheckout={hideCamperCheckout}
+          preRegistrationFee={preRegistrationFee}
         />,
         <PreRegistrationStep
           campers={campersWithRegistration}
@@ -155,6 +187,7 @@ export default function CamperCheckoutFlow({
           preRegisteredCampersIds={preRegisteredCampersIds}
           setPreRegisteredCampersIds={setPreRegisteredCampersIds}
           donationAmount={donationAmount}
+          preRegistrationFee={preRegistrationFee}
           hideCamperCheckout={hideCamperCheckout}
         />,
       ]}

@@ -22,6 +22,13 @@ export type CampTrackInfo = {
   remainingSpots: number
 }
 
+/**
+ * Pre-registration price used when camps/{year}.preRegistrationFee is unset.
+ * Must match the fallback in functions/src/preRegistration/createPreRegistrationSession.ts,
+ * which prices the Stripe session from the same document.
+ */
+export const DEFAULT_PRE_REGISTRATION_FEE = 500
+
 // Every CampYear document has a subcollection of registrations associated with it.
 export type CampYear = Partial<{
   campEndDate: Timestamp
@@ -176,5 +183,7 @@ export type RegistrationBypassEntry = Partial<{
 export const registrationBypassCollectionPath = (year: number | string) =>
   `camps/${year}/private/bypass/emails`
 
-export const registrationBypassDocPath = (year: number | string, email: string) =>
-  `${registrationBypassCollectionPath(year)}/${email}`
+export const registrationBypassDocPath = (
+  year: number | string,
+  email: string
+) => `${registrationBypassCollectionPath(year)}/${email}`
