@@ -38,8 +38,10 @@ import {
   CampYearImageUrlKey,
   CampYearTextKey,
   FUNCTION_NAMES,
+  isAllowedImageUrl,
   ManageCampYearRequest,
   ManageCampYearResponse,
+  MAX_IMAGE_URL_LENGTH,
   normalizeEmail,
   registrationBypassCollectionPath,
 } from "lyf-registration-schemas"
@@ -99,9 +101,9 @@ const DETAIL_TEXT_KEYS = CAMP_YEAR_TEXT_KEYS.filter(
 
 const IMAGE_HELP: Record<CampYearImageUrlKey, string> = {
   infoSessionImageUrl:
-    "Shown beside the notice on the registration Info step. Leave empty to use the image bundled with the website.",
+    "Shown beside the notice on the registration Info step. https:// only; leave empty to use the image bundled with the website.",
   emailHeaderImageUrl:
-    "Hero image at the top of the registration, waitlist and off-waitlist emails. Leave empty to use the template's image.",
+    "Hero image at the top of the registration, waitlist and off-waitlist emails. https:// only; leave empty to use the template's image.",
 }
 
 const FLAG_LABELS: Record<CampYearFlagKey, { label: string; help: string }> = {
@@ -119,7 +121,9 @@ const FLAG_LABELS: Record<CampYearFlagKey, { label: string; help: string }> = {
   },
 }
 
-const isHttpUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim())
+// Mirrors the callable's check so the admin sees the problem before saving
+// (and no preview is attempted for a URL that will be rejected).
+const IMAGE_URL_ERROR = `Must be an https:// URL without a username/password, at most ${MAX_IMAGE_URL_LENGTH} characters`
 
 const TRACKS = Object.values(CampTrack)
 
@@ -594,7 +598,7 @@ export default function CampYearTab() {
               <Grid container spacing={2}>
                 {CAMP_YEAR_IMAGE_URL_KEYS.map((key) => {
                   const value = form.texts[key]
-                  const valid = value.trim() === "" || isHttpUrl(value)
+                  const valid = value.trim() === "" || isAllowedImageUrl(value.trim())
                   return (
                     <Grid key={key} size={{ xs: 12, md: 6 }}>
                       <Stack spacing={1}>
@@ -602,6 +606,7 @@ export default function CampYearTab() {
                           label={TEXT_LABELS[key]}
                           type="url"
                           placeholder="https://…"
+                          inputProps={{ maxLength: MAX_IMAGE_URL_LENGTH }}
                           value={value}
                           onChange={(e) =>
                             update((prev) => ({
@@ -611,7 +616,7 @@ export default function CampYearTab() {
                           }
                           error={!valid}
                           helperText={
-                            valid ? IMAGE_HELP[key] : "Must be an http(s) URL"
+                            valid ? IMAGE_HELP[key] : IMAGE_URL_ERROR
                           }
                           fullWidth
                           size="small"
@@ -621,6 +626,7 @@ export default function CampYearTab() {
                             component="img"
                             src={value.trim()}
                             alt={`${TEXT_LABELS[key]} preview`}
+                            referrerPolicy="no-referrer"
                             sx={{
                               display: "block",
                               maxWidth: 1,

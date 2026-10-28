@@ -367,8 +367,9 @@ Firestore documents drive it, in both the prod (`lyf-v2`) and test
   `campStartDate`, `campEndDate`), fees, caps, campsite, the per-year images
   (`infoSessionImageUrl` for the banner beside the registration Info step,
   `emailHeaderImageUrl` for the hero image at the top of the registration,
-  waitlist and off-waitlist emails; both http(s) URLs, falling back to the
-  bundled images when empty) and the display toggles (`showWaitlistHeaderBar`,
+  waitlist and off-waitlist emails; both must be https URLs without embedded
+  credentials, the only kind the site's CSP lets an image load from, and
+  both fall back to the bundled images when empty) and the display toggles (`showWaitlistHeaderBar`,
   `showRemainingSpots`, `showWaitlistPosition`; missing means off). Public
   read, so nothing personal may live here; configuration fields are written
   only by the `manageCampYear` function, and `remainingSpots` only by the

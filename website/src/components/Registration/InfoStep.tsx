@@ -3,7 +3,7 @@ import { Dayjs } from "dayjs"
 import { Box, Divider, Link, Stack, Typography } from "@mui/material"
 
 import RegistrationStep from "./RegistrationStep"
-import { CampTrackInfo } from "lyf-registration-schemas"
+import { CampTrackInfo, isAllowedImageUrl } from "lyf-registration-schemas"
 import { formatCampDateWithYear } from "@utils/campTime"
 import fallbackBanner from "../../images/vis_2026.jpg"
 
@@ -30,7 +30,12 @@ export default function InfoStep({
   showRemainingSpots = false,
 }: InfoStepProps) {
   // A runtime URL cannot go through StaticImage, so this is a plain <img>.
-  const bannerSrc = infoSessionImageUrl?.trim() || fallbackBanner
+  // Only an allowed https URL is used (the callable stores nothing else, but
+  // the public document is re-checked here anyway); otherwise the bundled one.
+  const configuredBanner = infoSessionImageUrl?.trim() ?? ""
+  const bannerSrc = isAllowedImageUrl(configuredBanner)
+    ? configuredBanner
+    : fallbackBanner
   return (
     <RegistrationStep
       primaryButtonText="Next"
@@ -50,6 +55,7 @@ export default function InfoStep({
             component="img"
             src={bannerSrc}
             alt="LYF Virtual Info Session banner"
+            referrerPolicy="no-referrer"
             sx={{
               display: "block",
               width: 1,
