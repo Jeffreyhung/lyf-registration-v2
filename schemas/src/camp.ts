@@ -64,6 +64,17 @@ export type CampYear = Partial<{
 
   // Virtual Parent Info Session, shown on the registration InfoStep.
   infoSessionDate: Timestamp
+  // Banner shown beside the InfoStep notice (http(s) URL). Unset or empty
+  // falls back to the image bundled with the website.
+  infoSessionImageUrl: string
+  // Hero image at the top of the registration / waitlist / off-waitlist
+  // emails (http(s) URL). Unset or empty falls back to the template's image.
+  emailHeaderImageUrl: string
+
+  // Display toggles, flipped from the Camp Year tab. Missing means false.
+  showWaitlistHeaderBar: boolean /* Waitlist bar above the registration flow */
+  showRemainingSpots: boolean /* Spots-remaining lines on the InfoStep */
+  showWaitlistPosition: boolean /* Waitlist position on the family profile */
 
   // Used to determine at what point do we start waitlisting campers.
   // Purposely separate from campSizeCap because we don't want cancellations to open up spots that could bypass

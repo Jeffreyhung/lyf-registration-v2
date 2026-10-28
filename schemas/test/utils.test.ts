@@ -5,9 +5,45 @@ import {
   getCampTrack,
   getCampTracksFromCamp,
   getRegistrationPrice,
+  isAllowedImageUrl,
+  MAX_IMAGE_URL_LENGTH,
   normalizeEmail,
   normalizeEmails,
 } from "../src/utils"
+
+describe("isAllowedImageUrl", () => {
+  it("accepts an absolute https URL", () => {
+    expect(isAllowedImageUrl("https://mcusercontent.com/a/b.jpg")).toBe(true)
+    expect(isAllowedImageUrl("https://example.com/i.png?w=600&v=2")).toBe(true)
+  })
+
+  it.each([
+    ["http", "http://example.com/a.jpg"],
+    ["javascript:", "javascript:alert(1)"],
+    ["data:", "data:image/png;base64,AAAA"],
+    ["blob:", "blob:https://example.com/uuid"],
+    ["relative", "/a.jpg"],
+    ["protocol-relative", "//example.com/a.jpg"],
+    ["credentials", "https://u:p@example.com/a.jpg"],
+    ["username only", "https://u@example.com/a.jpg"],
+    ["untrimmed", " https://example.com/a.jpg"],
+    ["empty", ""],
+    ["too long", `https://example.com/${"a".repeat(MAX_IMAGE_URL_LENGTH)}`],
+    ["not a string", 42],
+    ["null", null],
+  ])("rejects %s", (_label, value) => {
+    expect(isAllowedImageUrl(value)).toBe(false)
+  })
+
+  it("allows a URL exactly at the length limit", () => {
+    const prefix = "https://example.com/"
+    expect(
+      isAllowedImageUrl(
+        prefix + "a".repeat(MAX_IMAGE_URL_LENGTH - prefix.length)
+      )
+    ).toBe(true)
+  })
+})
 
 describe("normalizeEmail", () => {
   it("lowercases and trims", () => {
@@ -80,7 +116,10 @@ describe("getRegistrationPrice", () => {
 
   it("falls back to the regular fee when no late fee is configured", () => {
     expect(
-      getRegistrationPrice({ ...campYear, registrationLateFee: undefined }, afterLate)
+      getRegistrationPrice(
+        { ...campYear, registrationLateFee: undefined },
+        afterLate
+      )
     ).toBe(700)
   })
 
@@ -133,7 +172,9 @@ describe("getCampTracksFromCamp", () => {
       campSizeCaps: { [CampTrack.YOUNGER]: 60, [CampTrack.OLDER]: 40 },
       remainingSpots: { [CampTrack.YOUNGER]: 10 } as CampYear["remainingSpots"],
     })
-    expect(tracks.find((t) => t.track === CampTrack.OLDER)?.remainingSpots).toBe(0)
+    expect(
+      tracks.find((t) => t.track === CampTrack.OLDER)?.remainingSpots
+    ).toBe(0)
   })
 
   it("returns nothing when caps or remaining spots are missing", () => {

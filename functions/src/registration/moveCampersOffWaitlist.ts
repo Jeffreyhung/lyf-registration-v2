@@ -19,6 +19,7 @@ import {
   RegistrationStatus,
   MoveCampersOffWaitlistRequest,
 } from "lyf-registration-schemas";
+import {getEmailHeaderImageUrl} from "../registrationUtils/emailHeaderImage";
 import {sendMessageToRegistrationErrorMessages} from "../slack/slackChannelWebhooks";
 import {
   assertAdmin,
@@ -34,6 +35,8 @@ type BodyTemplateInput = {
   registrationDate: string;
   camperName: string;
   campTrack: string;
+  /** camps/{year}.emailHeaderImageUrl; the template falls back when unset. */
+  emailHeaderImageUrl: string | undefined;
 };
 
 const mjmlTemplate = fs.readFileSync(
@@ -99,6 +102,7 @@ export const moveCampersOffWaitlist = onCall<MoveCampersOffWaitlistRequest>(
       ),
       camperName: camperName,
       campTrack: campTrack,
+      emailHeaderImageUrl: await getEmailHeaderImageUrl(db, campYear),
     };
 
     const htmlBody = Mustache.render(htmlTemplate, templateInput);

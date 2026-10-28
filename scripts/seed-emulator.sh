@@ -98,6 +98,11 @@ put_doc() {
 ts() { echo "{ \"timestampValue\": \"$1\" }"; }
 int() { echo "{ \"integerValue\": \"$1\" }"; }
 str() { echo "{ \"stringValue\": \"$1\" }"; }
+bool() { echo "{ \"booleanValue\": $1 }"; }
+
+# Hero image the email templates already ship with; reused for the info
+# session banner so the Camp Year tab's previews have something to show.
+SAMPLE_IMAGE_URL="https://mcusercontent.com/723f6baf2c99017f0ff638067/_compresseds/e3a31227-4ec5-6864-fb06-6cf57a124b1c.jpg"
 
 # A full camps/{year} document for year $1 (times are UTC for Pacific noon/midnight).
 camp_year_doc() {
@@ -108,6 +113,11 @@ camp_year_doc() {
     "name": $(str "LYF Camp ${y}"),
     "campsite": $(str "Alliance Redwoods Conference Grounds"),
     "campsiteAddress": $(str "6250 Bohemian Hwy, Occidental, CA 95465"),
+    "infoSessionImageUrl": $(str "${SAMPLE_IMAGE_URL}"),
+    "emailHeaderImageUrl": $(str "${SAMPLE_IMAGE_URL}"),
+    "showWaitlistHeaderBar": $(bool false),
+    "showRemainingSpots": $(bool false),
+    "showWaitlistPosition": $(bool false),
     "preRegistrationOpenDate": $(ts "${prev}-07-12T22:00:00Z"),
     "preRegistrationCloseDate": $(ts "${prev}-08-04T07:00:00Z"),
     "earlyRegOpenDate": $(ts "${y}-01-31T20:00:00Z"),
