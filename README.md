@@ -377,6 +377,13 @@ Firestore documents drive it, in both the prod (`lyf-v2`) and test
   a registration after the close unless the caller has an entry, so calling
   the function directly does not get around it.
 
+The admin dashboard (`/admin`) and the parent profile page (`/user/profile`)
+also follow `config/site`: the dashboard's year picker starts on
+`currentCampYear` (admins can still pick a past year), and the profile page
+splits registrations into current and past around it. Both fall back to the
+calendar year, with a warning on the dashboard, only if `config/site` is
+missing.
+
 Both are edited from the admin dashboard's **Camp Year** tab, visible to
 `full_admin` and `program_admin` (the `manageCampYear` capability). Every
 write goes through the `manageCampYearV2` callable, which enforces the key

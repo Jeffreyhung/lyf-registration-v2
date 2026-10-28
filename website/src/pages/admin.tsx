@@ -1,8 +1,10 @@
 import * as React from "react"
 import {
+  Alert,
   Box,
   Container,
   Grid,
+  LinearProgress,
   List,
   ListItemButton,
   ListItemIcon,
@@ -43,6 +45,7 @@ import {
 } from "@components/Admin"
 import { SmallGroupAssignmentsV2 } from "@components/SmallGroupAndCabinAssignments"
 import useRegistrations from "@hooks/useRegistrations"
+import useSiteConfig from "@hooks/useSiteConfig"
 import getPageTitle from "@utils/getPageTitle"
 import { SnackbarAlertProvider } from "@components/SnackbarAlert"
 import PaymentDashboard from "@components/Admin/PaymentDashboard"
@@ -158,7 +161,16 @@ const readSectionFromHash = (): string | null => {
 const AdminPage: React.FC = () => {
   const { isAdmin, adminRole } = React.useContext(AuthContext)
   const { firestore, isTestData } = React.useContext(ProdContext)
-  const [year, setYear] = React.useState<number>(dayjs().year())
+  // The dashboard opens on config/site's currentCampYear (the year the site is
+  // registering for, which is not the calendar year after the rollover). The
+  // picker lets admins look at other years; until config resolves the year is
+  // null and every section stays in its loading state instead of flashing the
+  // calendar year. If config/site is missing the calendar year is a fallback.
+  const { currentCampYear, loading: configLoading } = useSiteConfig()
+  const configMissing = !configLoading && currentCampYear === null
+  const defaultYear = configLoading ? null : currentCampYear ?? dayjs().year()
+  const [selectedYear, setSelectedYear] = React.useState<number | null>(null)
+  const year = selectedYear ?? defaultYear
   const [data, loading, error] = useRegistrations({
     isAdmin,
     adminRole,
@@ -218,6 +230,11 @@ const AdminPage: React.FC = () => {
   }
 
   const renderSection = (id: string) => {
+    // Every section is keyed on a concrete camp year, so none is mounted
+    // until config/site has told us which year the site is on.
+    if (year === null) {
+      return <LinearProgress aria-label="Loading camp year" />
+    }
     switch (id) {
       case "all-registrations":
         return (
@@ -263,8 +280,9 @@ const AdminPage: React.FC = () => {
   const yearPicker = (
     <DatePicker
       label="Camp year"
-      value={dayjs().set("year", year)}
-      onChange={(newYear) => setYear(newYear?.year() || dayjs().year())}
+      value={year === null ? null : dayjs().set("year", year)}
+      onChange={(newYear) => setSelectedYear(newYear?.year() ?? null)}
+      disabled={year === null}
       views={["year"]}
       minDate={dayjs().set("year", 2017)}
       maxDate={dayjs().add(1, "year")}
@@ -358,7 +376,9 @@ const AdminPage: React.FC = () => {
         Admin Dashboard
       </Typography>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
-        <Box sx={{ width: { xs: 1, sm: 180 }, flexShrink: 0 }}>{yearPicker}</Box>
+        <Box sx={{ width: { xs: 1, sm: 180 }, flexShrink: 0 }}>
+          {yearPicker}
+        </Box>
         <TextField
           select
           fullWidth
@@ -381,7 +401,9 @@ const AdminPage: React.FC = () => {
             </ListSubheader>,
             ...group.sections.map((section) => (
               <MenuItem key={section.id} value={section.id}>
-                <ListItemIcon sx={{ minWidth: 36 }}>{section.icon}</ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 36 }}>
+                  {section.icon}
+                </ListItemIcon>
                 {section.label}
               </MenuItem>
             )),
@@ -414,6 +436,12 @@ const AdminPage: React.FC = () => {
             {isTestData ? " · test data" : ""}
           </Typography>
         </Stack>
+      )}
+      {configMissing && (
+        <Alert severity="warning" sx={{ marginBottom: 2 }}>
+          config/site has no current camp year, so the dashboard is showing the
+          calendar year. Set it from the Camp Year section.
+        </Alert>
       )}
       {error && (
         <Typography color="error" sx={{ marginBottom: 2 }}>
