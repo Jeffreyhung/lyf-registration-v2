@@ -42,6 +42,8 @@ type CampYearDoc = Record<string, unknown>;
  *  - roll a year forward by copying the previous one
  *  - keep the registration-close bypass emails OFF the public camp document,
  *    as one private document per email under camps/{year}/private/bypass
+ *  - mirror a year or the site pointers from production into the test
+ *    database (test mode only; production is never written by a copy)
  *  - append an entry to `adminAuditLog`
  *
  * Unlike the admin roster, camp data exists in both the prod and test
@@ -60,6 +62,48 @@ export const manageCampYear = onCall<
     const isTestData = data.isTestData === true;
     const db = getFirestoreDb(!isTestData);
     const database = isTestData ? TEST_DATABASE_ID : PROD_DATABASE_ID;
+
+    // The copy actions read production and write the test database. They
+    // are refused in production mode so there is no path that writes prod
+    // from a copy, and the reads happen up front because a transaction
+    // cannot span two databases.
+    const isCopy =
+      data.action === "copyYearFromProd" ||
+      data.action === "copySiteConfigFromProd";
+    if (isCopy && !isTestData) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Copying from production is only available in test mode"
+      );
+    }
+    const prodDb = getFirestoreDb(true);
+    let prodCamp: CampYearDoc | null = null;
+    let prodBypass: string[] = [];
+    let prodSite: CampYearDoc | null = null;
+    if (data.action === "copyYearFromProd") {
+      const year = parseYear(data.year, "year");
+      const snap = await prodDb.collection("camps").doc(String(year)).get();
+      if (!snap.exists) {
+        throw new HttpsError(
+          "not-found",
+          `camps/${year} does not exist in production`
+        );
+      }
+      prodCamp = snap.data() as CampYearDoc;
+      const entries = await prodDb
+        .collection(registrationBypassCollectionPath(year))
+        .listDocuments();
+      prodBypass = entries.map((d) => d.id).sort();
+    } else if (data.action === "copySiteConfigFromProd") {
+      const snap = await prodDb.doc(SITE_CONFIG_PATH).get();
+      if (!snap.exists) {
+        throw new HttpsError(
+          "not-found",
+          `${SITE_CONFIG_PATH} does not exist in production`
+        );
+      }
+      prodSite = snap.data() as CampYearDoc;
+    }
 
     let target = "";
 
@@ -222,6 +266,72 @@ export const manageCampYear = onCall<
             {merge: true}
           );
           audit("setSiteConfig", before, after);
+          break;
+        }
+
+        case "copyYearFromProd": {
+          const year = parseYear(data.year, "year");
+          target = `camps/${year}`;
+          const ref = db.collection("camps").doc(String(year));
+          const snap = await tx.get(ref);
+          const bypassBefore = await readBypass(tx, db, year);
+          const before = snap.exists ? (snap.data() as CampYearDoc) : null;
+
+          // Full replace so the test year is an exact mirror, remainingSpots
+          // included; a legacy bypass field on the prod doc is still dropped.
+          const after: CampYearDoc = {...(prodCamp as CampYearDoc)};
+          delete after.registrationBypassEmails;
+          tx.set(ref, after);
+          const bypassAfter = writeBypass(tx, db, year, prodBypass, bypassBefore, actor);
+          audit(
+            "copyYearFromProd",
+            before && {...before, registrationBypassEmails: bypassBefore},
+            {...after, registrationBypassEmails: bypassAfter}
+          );
+          break;
+        }
+
+        case "copySiteConfigFromProd": {
+          target = SITE_CONFIG_PATH;
+          const update: Record<string, number> = {};
+          for (const key of ["currentCampYear", "preRegistrationCampYear"] as const) {
+            const value = (prodSite as CampYearDoc)[key];
+            if (value !== undefined) update[key] = parseYear(value, key);
+          }
+          if (Object.keys(update).length === 0) {
+            throw new HttpsError(
+              "failed-precondition",
+              `${SITE_CONFIG_PATH} in production has no year pointers`
+            );
+          }
+
+          const ref = db.doc(SITE_CONFIG_PATH);
+          const snap = await tx.get(ref);
+          const before = snap.exists ? (snap.data() as CampYearDoc) : null;
+          for (const year of Object.values(update)) {
+            const campSnap = await tx.get(
+              db.collection("camps").doc(String(year))
+            );
+            if (!campSnap.exists) {
+              throw new HttpsError(
+                "failed-precondition",
+                `camps/${year} does not exist in the test database — copy it ` +
+                  "from production first"
+              );
+            }
+          }
+
+          const after: CampYearDoc = {
+            ...(before ?? {}),
+            ...update,
+            updatedBy: actor,
+          };
+          tx.set(
+            ref,
+            {...update, updatedBy: actor, updatedAt: FieldValue.serverTimestamp()},
+            {merge: true}
+          );
+          audit("copySiteConfigFromProd", before, after);
           break;
         }
 

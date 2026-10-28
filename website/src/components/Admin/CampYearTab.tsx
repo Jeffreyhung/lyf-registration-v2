@@ -39,7 +39,7 @@ import {
 
 import { ProdContext } from "@components/ProdContext"
 import { SnackbarAlertContext } from "@components/SnackbarAlert"
-import { firebaseFunctions } from "@utils/firebaseApp"
+import { firebaseFunctions, prodFirestore } from "@utils/firebaseApp"
 import { CAMP_TIME_ZONE, timestampToCampTime } from "@utils/campTime"
 import useSiteConfig from "@hooks/useSiteConfig"
 
@@ -176,6 +176,9 @@ export default function CampYearTab() {
   const [bypassLoading, setBypassLoading] = React.useState(false)
   const [dirty, setDirty] = React.useState(false)
   const [emailInput, setEmailInput] = React.useState("")
+  // Test mode only: years that exist in production, offered for copying.
+  const [prodYears, setProdYears] = React.useState<number[]>([])
+  const [copyYear, setCopyYear] = React.useState<number | "">("")
 
   const loadYears = React.useCallback(async () => {
     setYearsLoading(true)
@@ -201,6 +204,36 @@ export default function CampYearTab() {
   React.useEffect(() => {
     loadYears()
   }, [loadYears])
+
+  React.useEffect(() => {
+    if (!isTestData) {
+      setProdYears([])
+      setCopyYear("")
+      return
+    }
+    let cancelled = false
+    getDocs(collection(prodFirestore, "camps"))
+      .then((snapshot) => {
+        if (cancelled) return
+        const found = snapshot.docs
+          .map((d) => Number(d.id))
+          .filter((y) => Number.isInteger(y))
+          .sort((a, b) => b - a)
+        setProdYears(found)
+        setCopyYear((prev) => (prev !== "" && found.includes(prev) ? prev : found[0] ?? ""))
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSnackbar({
+            children: errorMessage(err, "Failed to load production camp years"),
+            severity: "error",
+          })
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isTestData, setSnackbar])
 
   // Default the selector to the current camp year once both are known.
   React.useEffect(() => {
@@ -326,6 +359,30 @@ export default function CampYearTab() {
     )
   }
 
+  const handleCopyYearFromProd = () => {
+    if (copyYear === "") return
+    const year = copyYear
+    run(
+      "Copy from production",
+      { action: "copyYearFromProd", year },
+      `Copied camps/${year} and its bypass list from production into the test database`,
+      async () => {
+        await loadYears()
+        setDirty(false)
+        setSelectedYear(year)
+        await loadBypass(year)
+      }
+    )
+  }
+
+  const handleCopySiteConfigFromProd = () => {
+    run(
+      "Copy site pointers from production",
+      { action: "copySiteConfigFromProd" },
+      "Copied the current and pre-registration years from production into the test database"
+    )
+  }
+
   const addEmail = () => {
     const email = normalizeEmail(emailInput)
     if (!email.includes("@")) return
@@ -364,6 +421,50 @@ export default function CampYearTab() {
         year: <b>{currentCampYear ?? "not set"}</b>. Pre-registration year:{" "}
         <b>{preRegistrationCampYear ?? "not set"}</b>.
       </Alert>
+
+      {isTestData && (
+        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <Typography variant="body2" color="text.secondary">
+            Mirror production into the test database:
+          </Typography>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel>Production year</InputLabel>
+            <Select
+              value={copyYear}
+              label="Production year"
+              onChange={(e) => setCopyYear(Number(e.target.value))}
+              disabled={busy !== null || prodYears.length === 0}
+            >
+              {prodYears.map((y) => (
+                <MenuItem key={y} value={y}>
+                  {y}
+                  {years.includes(y) ? " (overwrites test copy)" : " (not in test yet)"}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={handleCopyYearFromProd}
+            disabled={busy !== null || copyYear === ""}
+          >
+            {busy === "Copy from production" ? (
+              <CircularProgress size={20} />
+            ) : (
+              `Copy ${copyYear || "year"} from production`
+            )}
+          </Button>
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={handleCopySiteConfigFromProd}
+            disabled={busy !== null}
+          >
+            Copy site pointers from production
+          </Button>
+        </Stack>
+      )}
 
       {years.length === 0 ? (
         <Alert severity="error">

@@ -405,7 +405,11 @@ Example: camp 2026 is the current year and camp 2027 is next.
 4. Repeat from step 1 with 2027 as the source year.
 
 Flip the dashboard's test-data toggle to make the same changes in the test
-database. Scripts remain for bootstrapping: `scripts/src/resetCampYearInfo.ts`
+database. In test mode the tab also offers **Copy … from production** and
+**Copy site pointers from production**, which mirror a production camp year
+(including its private bypass entries and remaining spots) or the
+`config/site` pointers into `lyf-v2-test`; the production database is never
+written by these. Scripts remain for bootstrapping: `scripts/src/resetCampYearInfo.ts`
 writes a `camps/{year}` document in the test database from a JSON file (the
 expected shape is in its header comment), and `scripts/seed-emulator.sh`
 seeds `config/site` plus two sample camp years into the emulator.

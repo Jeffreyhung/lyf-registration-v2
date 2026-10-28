@@ -85,7 +85,12 @@ export const CAMP_YEAR_DATE_ORDER: ReadonlyArray<
   ["campStartDate", "campEndDate"],
 ]
 
-export type ManageCampYearAction = "createYear" | "updateYear" | "setSiteConfig"
+export type ManageCampYearAction =
+  | "createYear"
+  | "updateYear"
+  | "setSiteConfig"
+  | "copyYearFromProd"
+  | "copySiteConfigFromProd"
 
 export type CreateYearRequest = {
   action: "createYear"
@@ -112,10 +117,27 @@ export type SetSiteConfigRequest = {
   config: Pick<SiteConfig, "currentCampYear" | "preRegistrationCampYear">
 }
 
+/**
+ * Mirror camps/{year} (configuration, remainingSpots and the private bypass
+ * entries) from the production database into the test database. Only valid
+ * with isTestData: true; the production database is never written.
+ */
+export type CopyYearFromProdRequest = {
+  action: "copyYearFromProd"
+  year: number
+}
+
+/** Mirror config/site's year pointers from production into the test database. */
+export type CopySiteConfigFromProdRequest = {
+  action: "copySiteConfigFromProd"
+}
+
 export type ManageCampYearRequest = (
   | CreateYearRequest
   | UpdateYearRequest
   | SetSiteConfigRequest
+  | CopyYearFromProdRequest
+  | CopySiteConfigFromProdRequest
 ) & {
   /** Write to the test database instead of prod (mirrors the dashboard toggle). */
   isTestData?: boolean
