@@ -53,8 +53,8 @@ jobs:
       functions: ${{ steps.filter.outputs.functions }}
       firestore: ${{ steps.filter.outputs.firestore }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v7
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -82,9 +82,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: firebase
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: yarn
@@ -100,7 +100,7 @@ jobs:
           fi
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
@@ -119,9 +119,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: firebase
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: yarn
@@ -229,7 +229,7 @@ jobs:
           SLACK_ERROR_WEBHOOK: ${{ secrets.SLACK_ERROR_WEBHOOK }}
 
       - name: Authenticate to Google Cloud (Workload Identity Federation)
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
