@@ -144,7 +144,12 @@ export type AdminAuditLogEntry = {
 // `database` says which data set (prod or test) the write went to.
 export type CampYearAuditLogEntry = {
   actor: string
-  action: "createYear" | "updateYear" | "setSiteConfig"
+  action:
+    | "createYear"
+    | "updateYear"
+    | "setSiteConfig"
+    | "copyYearFromProd"
+    | "copySiteConfigFromProd"
   target: string
   database: string
   before: Record<string, unknown> | null
