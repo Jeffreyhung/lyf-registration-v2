@@ -423,7 +423,13 @@ export default function CampYearTab() {
       </Alert>
 
       {isTestData && (
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+        <Stack
+          direction="row"
+          spacing={2}
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+        >
           <Typography variant="body2" color="text.secondary">
             Mirror production into the test database:
           </Typography>
@@ -473,7 +479,13 @@ export default function CampYearTab() {
         </Alert>
       ) : (
         <>
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+          <Stack
+            direction="row"
+            spacing={2}
+            alignItems="center"
+            flexWrap="wrap"
+            useFlexGap
+          >
             <FormControl size="small" sx={{ minWidth: 160 }}>
               <InputLabel>Camp year</InputLabel>
               <Select
