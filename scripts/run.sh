@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Data exports (camper addresses for mailings, parent / pre-registration email
+# lists, per-camper parent emails) no longer live here. Use the admin
+# dashboard's All Registrations grid instead: filter, pick columns, then
+# Export -> CSV. See "Exports" under "Admin dashboard" in the root README.
+# The scripts that remain are one-off migrations, seeding and statistics.
+
 # Add the path to the private key that enables the Admin SDK
 export GOOGLE_APPLICATION_CREDENTIALS="../lyf-registration-firebase-admin-private-key.json"
 unset FIRESTORE_EMULATOR_HOST

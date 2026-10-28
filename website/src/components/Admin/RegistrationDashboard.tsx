@@ -1,15 +1,32 @@
 import * as React from "react"
-import { Box, Button, Card, CardHeader, Stack } from "@mui/material"
+import {
+  Box,
+  Button,
+  Card,
+  CardHeader,
+  Divider,
+  IconButton,
+  ListSubheader,
+  MenuItem,
+  Stack,
+  Tooltip,
+  Typography,
+} from "@mui/material"
+import { HelpOutline } from "@mui/icons-material"
 import {
   GridColDef,
+  GridCsvExportOptions,
   GridRowModel,
   GridSlotProps,
   GridToolbarContainer,
   GridToolbarColumnsButton,
   GridToolbarFilterButton,
   GridToolbarDensitySelector,
-  GridToolbarExport,
+  GridToolbarExportContainer,
+  GridToolbarQuickFilter,
+  GridPrintExportMenuItem,
   GridRowSelectionModel,
+  useGridApiContext,
 } from "@mui/x-data-grid"
 import { getDoc, serverTimestamp, updateDoc } from "firebase/firestore"
 import dayjs from "dayjs"
@@ -38,6 +55,9 @@ import useFilterRegistrationStatus from "@hooks/useFilterRegistrationStatus"
 
 import CopyToClipboardButton from "./CopyToClipboardButton"
 import RefundDialog from "@components/Dialog/RefundDialog"
+import NamedCampersExportDialog from "./NamedCampersExportDialog"
+import { QUICK_EXPORTS, exportFileName } from "./registrationExports"
+import { downloadCsv, toCsv } from "@utils/csv"
 
 type RegistrationDashboardProps = {
   data: RegistrationData[]
@@ -60,11 +80,73 @@ export interface RegDashboardRow extends RowWithStatusAndNotes {
   isReturning: boolean
   parentNames: string
   parentEmails: string
+  // Account emails on the family document (Family.emails). Usually the same
+  // as parentEmails, but it is the list the old export scripts used.
+  familyEmails: string
+  // Family mailing address.
+  street: string
+  suite: string
+  city: string
+  state: string
+  zip: string
+  country: string
+  // Household culture survey answers (Family.household).
+  householdCamperMessage: string
+  householdLanguageFrequency: string
+  householdCultureConfidence: string
+  householdCultureLearn: string
+  householdCultureBarrier: string
+  householdCultureLesson: string
   createdAt: Date
   internalNotes: string
 }
 
 const HEALTH_FIELDS = new Set(["medicalConditions", "dietAndFoodAllergies"])
+
+// Columns that are hidden until picked from the toolbar's Columns menu.
+// They are still exported by the "all columns" CSV option. Keeping them out of
+// the default view is what keeps the grid readable; the address and household
+// columns exist for exports (mailing lists), not for day-to-day browsing.
+const ADDRESS_COLUMNS: GridColDef[] = [
+  { field: "street", headerName: "Street", minWidth: 150, flex: 0.5 },
+  { field: "suite", headerName: "Suite / Apt", width: 100 },
+  { field: "city", headerName: "City", minWidth: 120, flex: 0.25 },
+  { field: "state", headerName: "State", width: 80 },
+  { field: "zip", headerName: "Zip", width: 90 },
+  { field: "country", headerName: "Country", width: 100 },
+].map((col) => ({ ...col, type: "string", ...DataGridColumnAlign }))
+
+const HOUSEHOLD_COLUMNS: GridColDef[] = [
+  {
+    field: "householdLanguageFrequency",
+    headerName: "Household: Language Frequency",
+  },
+  {
+    field: "householdCultureConfidence",
+    headerName: "Household: Culture Confidence",
+  },
+  { field: "householdCultureLearn", headerName: "Household: Culture to Learn" },
+  {
+    field: "householdCultureBarrier",
+    headerName: "Household: Culture Barriers",
+  },
+  { field: "householdCultureLesson", headerName: "Household: Culture Lesson" },
+  { field: "householdCamperMessage", headerName: "Household: Camper Message" },
+].map((col) => ({
+  ...col,
+  type: "string",
+  minWidth: 150,
+  flex: 0.5,
+  ...DataGridColumnAlign,
+}))
+
+const HIDDEN_BY_DEFAULT = [
+  "createdAt",
+  "isReturning",
+  "familyEmails",
+  ...ADDRESS_COLUMNS.map((col) => col.field),
+  ...HOUSEHOLD_COLUMNS.map((col) => col.field),
+]
 
 const allColumns: GridColDef[] = [
   {
@@ -185,6 +267,16 @@ const allColumns: GridColDef[] = [
     ...DataGridColumnAlign,
   },
   {
+    field: "familyEmails",
+    headerName: "Family Account Emails",
+    type: "string",
+    minWidth: 150,
+    flex: 1,
+    ...DataGridColumnAlign,
+  },
+  ...ADDRESS_COLUMNS,
+  ...HOUSEHOLD_COLUMNS,
+  {
     field: "createdAt",
     headerName: "Created At",
     type: "dateTime",
@@ -204,6 +296,120 @@ function getColumnsForRole(role: AdminRole | null): GridColDef[] {
   const canSeeHealth = roleHasCapability(role, "readHealth")
   if (canSeeHealth) return allColumns
   return allColumns.filter((col) => !HEALTH_FIELDS.has(col.field))
+}
+
+type ExportMenuItemProps = {
+  label: string
+  onClick: () => void
+  // Injected by GridToolbarExportContainer.
+  hideMenu?: () => void
+}
+
+// Replaces the grid's built-in export menu items so the menu can carry our
+// own labels and the one-click exports.
+function ExportMenuItem({ label, onClick, hideMenu }: ExportMenuItemProps) {
+  return (
+    <MenuItem
+      onClick={() => {
+        onClick()
+        hideMenu?.()
+      }}
+    >
+      {label}
+    </MenuItem>
+  )
+}
+
+type GridCsvExportMenuItemProps = {
+  label: string
+  options: GridCsvExportOptions
+  hideMenu?: () => void
+}
+
+// The grid's own CSV export (current filters, visible or all columns) under
+// our label.
+function GridCsvExportMenuItem({
+  label,
+  options,
+  hideMenu,
+}: GridCsvExportMenuItemProps) {
+  const apiRef = useGridApiContext()
+  return (
+    <ExportMenuItem
+      label={label}
+      hideMenu={hideMenu}
+      onClick={() => apiRef.current.exportDataAsCsv(options)}
+    />
+  )
+}
+
+// Also receives hideMenu from the container; it just has nothing to do with it.
+function ExportMenuSection({
+  label,
+  divider = true,
+}: {
+  label: string
+  divider?: boolean
+  hideMenu?: () => void
+}) {
+  return (
+    <>
+      {divider && <Divider />}
+      <ListSubheader disableSticky sx={{ lineHeight: "32px" }}>
+        {label}
+      </ListSubheader>
+    </>
+  )
+}
+
+const EXPORT_WORKFLOWS: [string, string][] = [
+  [
+    "One-click exports",
+    "The lower half of the Export menu downloads ready-made files: mailing addresses, parent email lists, pre-registered campers, camper info, and emails for a pasted list of campers. They use every registration for the year and ignore the filters.",
+  ],
+  [
+    "Custom exports",
+    "Shape the grid with the status filter, Filters, the search box and Columns, then Export → CSV (visible columns). CSV (all columns) adds the hidden address and household columns.",
+  ],
+  [
+    "Quick copies",
+    "The two buttons above the grid copy parent emails, or email with first and last name, for the rows matching the status filter.",
+  ],
+]
+
+function ExportHelp() {
+  return (
+    <Tooltip
+      enterTouchDelay={0}
+      leaveTouchDelay={10000}
+      title={
+        <Box sx={{ p: 0.5 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            Exporting from this grid
+          </Typography>
+          <Typography variant="caption" component="p" sx={{ mb: 1 }}>
+            Grid exports include only the rows that match the status filter, the
+            grid filters and the search box, on every page. If any rows are
+            checked, only those rows are exported.
+          </Typography>
+          {EXPORT_WORKFLOWS.map(([title, steps]) => (
+            <Typography
+              key={title}
+              variant="caption"
+              component="p"
+              sx={{ mb: 0.5 }}
+            >
+              <strong>{title}:</strong> {steps}
+            </Typography>
+          ))}
+        </Box>
+      }
+    >
+      <IconButton size="small" aria-label="How to export registrations">
+        <HelpOutline fontSize="small" />
+      </IconButton>
+    </Tooltip>
+  )
 }
 
 export default function RegistrationDashboard({
@@ -229,6 +435,7 @@ export default function RegistrationDashboard({
   >(new Map())
   const [cancelPromiseContext, setCancelPromiseContext] =
     React.useState<CancelStatusPromise | null>(null)
+  const [namedExportOpen, setNamedExportOpen] = React.useState(false)
 
   const rows: RegDashboardRow[] = registrationData.map((reg, index) => ({
     id: index.toString(),
@@ -253,6 +460,22 @@ export default function RegistrationDashboard({
     parentEmails: getParentEmails(reg),
     // Join the parent's phone numbers if they exist.
     parentPhoneNumbers: getParentPhoneNumbers(reg),
+
+    familyEmails: (reg.familyData?.emails ?? []).join(", "),
+    street: reg.familyData?.street ?? "",
+    suite: reg.familyData?.suite ?? "",
+    city: reg.familyData?.city ?? "",
+    state: reg.familyData?.state ?? "",
+    zip: reg.familyData?.zip ?? "",
+    country: reg.familyData?.country ?? "",
+    householdCamperMessage: reg.familyData?.household?.camperMessage ?? "",
+    householdLanguageFrequency:
+      reg.familyData?.household?.languageFrequency ?? "",
+    householdCultureConfidence:
+      reg.familyData?.household?.cultureConfidence ?? "",
+    householdCultureLearn: reg.familyData?.household?.cultureLearn ?? "",
+    householdCultureBarrier: reg.familyData?.household?.cultureBarrier ?? "",
+    householdCultureLesson: reg.familyData?.household?.cultureLesson ?? "",
 
     internalNotes: reg.internalNotes,
     createdAt: reg.createdAt.toDate(),
@@ -326,6 +549,10 @@ export default function RegistrationDashboard({
       }
     })
 
+  // e.g. 2026-lyf-registrations-2026-10-27 (.csv is appended by the grid).
+  const gridFileName = exportFileName(campYear, "registrations")
+  const canReadHealth = roleHasCapability(adminRole, "readHealth")
+
   const toolbar = (props: GridSlotProps["toolbar"]) => {
     const { rowSelection } = props
 
@@ -334,7 +561,44 @@ export default function RegistrationDashboard({
         <GridToolbarColumnsButton />
         <GridToolbarFilterButton />
         <GridToolbarDensitySelector />
-        <GridToolbarExport />
+        <GridToolbarExportContainer>
+          <ExportMenuSection
+            label="This grid (filtered rows)"
+            divider={false}
+          />
+          <GridCsvExportMenuItem
+            label="Download as CSV (visible columns)"
+            options={{ fileName: gridFileName, utf8WithBom: true }}
+          />
+          <GridCsvExportMenuItem
+            label="Download as CSV (all columns)"
+            options={{
+              fileName: `${gridFileName}-all-columns`,
+              allColumns: true,
+              utf8WithBom: true,
+            }}
+          />
+          <GridPrintExportMenuItem options={{ fileName: gridFileName }} />
+          <ExportMenuSection label="One-click exports (all registrations)" />
+          {QUICK_EXPORTS.map((quickExport) => (
+            <ExportMenuItem
+              key={quickExport.id}
+              label={quickExport.label}
+              onClick={() =>
+                downloadCsv(
+                  exportFileName(campYear, quickExport.fileSuffix),
+                  toCsv(quickExport.build(data, { canReadHealth }))
+                )
+              }
+            />
+          ))}
+          <ExportMenuItem
+            label="Parent emails for specific campers…"
+            onClick={() => setNamedExportOpen(true)}
+          />
+        </GridToolbarExportContainer>
+        <ExportHelp />
+        <GridToolbarQuickFilter debounceMs={300} />
         <Box sx={{ flexGrow: 1 }} />
         {roleHasCapability(adminRole, "managePayments") && (
           <Button
@@ -387,6 +651,12 @@ export default function RegistrationDashboard({
           open={refundDialogOpen}
           setOpen={(b) => setRefundDialogOpen(b)}
         ></RefundDialog>
+        <NamedCampersExportDialog
+          open={namedExportOpen}
+          onClose={() => setNamedExportOpen(false)}
+          registrations={data}
+          campYear={campYear}
+        />
         {selectComponent}
         <Stack direction="row" sx={{ padding: 1 }} spacing={2}>
           <CopyToClipboardButton processDataFunc={copyEmails}>
@@ -402,7 +672,7 @@ export default function RegistrationDashboard({
           loading={loading}
           pageSize={100}
           updateRow={updateRowPromise}
-          hiddenColumns={["createdAt", "isReturning"]}
+          hiddenColumns={HIDDEN_BY_DEFAULT}
           toolbar={toolbar}
           rowSelectionModel={rowSelection}
           setRowSelectionModel={setRowSelection}
