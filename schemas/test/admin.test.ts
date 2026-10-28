@@ -79,7 +79,12 @@ describe("rolesWithCapability", () => {
     ])
     expect(rolesWithCapability("writeRegistrations")).toEqual([
       "full_admin",
+      "program_admin",
       "program_staff",
+    ])
+    expect(rolesWithCapability("manageCampYear")).toEqual([
+      "full_admin",
+      "program_admin",
     ])
   })
 

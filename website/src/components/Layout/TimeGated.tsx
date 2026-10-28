@@ -11,6 +11,8 @@ type TimeGatedProps = React.PropsWithChildren<{
   forceHide?: boolean
   allowAdmin?: boolean
   allowEmails?: string[]
+  /** Caller already established that this viewer may pass (e.g. useRegistrationBypass). */
+  allowBypass?: boolean
 }>
 
 // Because this time can be duped by changing the computer's system clock,
@@ -22,11 +24,13 @@ export default function TimeGated({
   forceHide = false,
   allowAdmin = false,
   allowEmails = [],
+  allowBypass = false,
   children,
 }: TimeGatedProps) {
   const { isAdmin, user } = React.useContext(AuthContext)
   const userEmailLower = user?.email?.toLowerCase() ?? ""
   const shouldBypassTimeGate =
+    allowBypass ||
     (allowAdmin && isAdmin) ||
     allowEmails.some((e) => e.toLowerCase() === userEmailLower)
   const [isHidden, setIsHidden] = React.useState(
@@ -46,7 +50,8 @@ export default function TimeGated({
       setIsLoading(false)
     }
     checkTime()
-  }, [hideAfterDateTime])
+    // Re-evaluate when the bypass decision arrives after sign-in.
+  }, [hideAfterDateTime, shouldBypassTimeGate])
 
   return (
     <>

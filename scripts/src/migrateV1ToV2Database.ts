@@ -330,7 +330,12 @@ async function migrateRegistration(reg: DocumentSnapshot, targetReg: DocumentRef
 // admins — v1 used Auth custom claims, v2 uses a collection
 // ---------------------------------------------------------------------------
 
-const VALID_ROLES = new Set(["full_admin", "program_staff", "health_staff"])
+const VALID_ROLES = new Set([
+  "full_admin",
+  "program_admin",
+  "program_staff",
+  "health_staff",
+])
 
 async function migrateAdmins() {
   // email -> admin doc to create

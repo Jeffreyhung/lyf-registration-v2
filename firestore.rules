@@ -3,7 +3,11 @@ rules_version = '2';
 // Role checks in this file mirror ROLE_CAPABILITIES in schemas/src/admin.ts —
 // rules cannot import TS, so when a role or capability changes there, update
 // the corresponding hasRole/hasAnyRole calls here and keep validRoles() in sync.
-// The matrix is enforced by firestore-rules-tests/ (run against the emulator).
+// Capabilities that are only exercised through callables (manageAdmins,
+// manageCampYear) have no rule here: the matching collections (admins/,
+// camps/{year} itself, config/) deny every client write and the function
+// enforces the capability with assertAdmin. The matrix is enforced by
+// firestore-rules-tests/ (run against the emulator).
 service cloud.firestore {
   match /databases/{database}/documents {
     // ---------- Identity helpers ----------
@@ -23,7 +27,7 @@ service cloud.firestore {
     // ---------- Admin role helpers ----------
 
     function validRoles() {
-      return ['full_admin', 'program_staff', 'health_staff'];
+      return ['full_admin', 'program_admin', 'program_staff', 'health_staff'];
     }
 
     function adminDocPath() {
@@ -150,22 +154,47 @@ service cloud.firestore {
       }
     }
 
+    // ---------- Site config & camp years ----------
+
+    // Which camp year the site is registering / pre-registering for. Read by
+    // the time gates before sign-in, so it must be public. Written only by the
+    // manageCampYear callable (manageCampYear capability).
+    match /config/site {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // ---------- Camp years & registrations ----------
 
-    // Any signed-in user can read camp info (pricing, dates, remaining spots)
+    // Camp info (dates, pricing, remaining spots) is public: the registration
+    // and pre-registration pages decide whether they are open from these dates
+    // before the visitor signs in. Nothing personal may live on this document.
+    // Writes go through the manageCampYear callable (dates/fees/caps) and the
+    // registration functions (remainingSpots).
     match /camps/{campYear} {
-      allow read: if isSignedIn();
-      allow write: if isFullAdmin();
+      allow read: if true;
+      allow write: if false;
+
+      // Registration-close bypass list, one document per email so a parent
+      // can confirm only their own extension and never enumerate the list.
+      // Admins may list it (the Camp Year tab); manageCampYear writes it.
+      match /private/bypass/emails/{email} {
+        allow read: if isAnyAdmin() || (hasEmail() && callerEmail() == email);
+        allow write: if false;
+      }
+
+      // Any other camps/{year}/private/* path falls through to the root
+      // catch-all: full_admin may inspect, nobody writes from the client.
 
       match /registrations/{registrationId} {
         allow read: if isAnyAdmin() ||
           (hasEmail() && callerEmail() in resource.data.familyEmails);
         allow create, delete: if isFullAdmin();
         allow update: if isFullAdmin();
-        // writeRegistrations capability: program_staff may edit the
-        // operational fields the admin console exposes, nothing structural
-        // (camper ref, payments, familyEmails, waiver, pricing state).
-        allow update: if hasRole('program_staff') &&
+        // writeRegistrations capability: program_staff and program_admin may
+        // edit the operational fields the admin console exposes, nothing
+        // structural (camper ref, payments, familyEmails, waiver, pricing state).
+        allow update: if hasAnyRole(['program_staff', 'program_admin']) &&
           onlyUpdates(['status', 'internalNotes', 'hasContacted', 'isCheckedOut',
                        'nameOfParentCheckedOut', 'checkedOutTime', 'smallGroup',
                        'cabinPreference', 'updatedAt']);

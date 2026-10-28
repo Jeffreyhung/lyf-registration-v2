@@ -12,4 +12,5 @@ export const FUNCTION_NAMES = {
   moveCampersOffWaitlist: "moveCampersOffWaitlistV2",
   issueStripeRefund: "issueStripeRefundV2",
   manageAdmin: "manageAdminV2",
+  manageCampYear: "manageCampYearV2",
 } as const

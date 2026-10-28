@@ -13,7 +13,7 @@
 import * as admin from "firebase-admin"
 import {getFirestore} from "firebase-admin/firestore"
 
-const VALID_ROLES = ["full_admin", "program_staff", "health_staff"]
+const VALID_ROLES = ["full_admin", "program_admin", "program_staff", "health_staff"]
 
 const app = admin.initializeApp()
 // v2 data lives in a named database; "(default)" belongs to v1

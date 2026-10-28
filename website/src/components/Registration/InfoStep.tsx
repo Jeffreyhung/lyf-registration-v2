@@ -1,19 +1,30 @@
 import React from "react"
+import { Dayjs } from "dayjs"
 import { Box, Divider, Link, Stack, Typography } from "@mui/material"
 
 import RegistrationStep from "./RegistrationStep"
 import { CampTrackInfo } from "lyf-registration-schemas"
 import { StaticImage } from "gatsby-plugin-image"
+import { formatCampDateWithYear } from "@utils/campTime"
 
 type InfoStepProps = {
   campTracksInfo: CampTrackInfo[]
+  campYear: number
+  /** camps/{year}.infoSessionDate; the sentence is omitted when unset. */
+  infoSessionDate: Dayjs | null
 }
 
 /// Changed in 2026 to hide remaing spots per camp track
 const SHOW_REMAINING_SPOTS = false
 
 // TODO: Move this into a CMS to better manage support
-export default function InfoStep({ campTracksInfo }: InfoStepProps) {
+// The VIS banner image and the long notice copy below are still edited by
+// hand each year; the year and info-session date come from Firestore.
+export default function InfoStep({
+  campTracksInfo,
+  campYear,
+  infoSessionDate,
+}: InfoStepProps) {
   return (
     <RegistrationStep
       primaryButtonText="Next"
@@ -48,7 +59,7 @@ export default function InfoStep({ campTracksInfo }: InfoStepProps) {
         }}
       >
         <Typography variant="h4" sx={{ paddingBottom: 1 }}>
-          Important notice for TACL-LYF Camp 2026!
+          Important notice for TACL-LYF Camp {campYear}!
         </Typography>
         <Typography variant="body1">
           TACL-LYF Camp will be split into two age-specific tracks: younger
@@ -89,13 +100,18 @@ export default function InfoStep({ campTracksInfo }: InfoStepProps) {
 
         <Typography variant="body1">
           Please contact us with any questions or concerns at{" "}
-          <Link href="mailto:lyf@tacl.org">lyf@tacl.org</Link> . We will also be
-          hosting a{" "}
-          <Link href="https://luma.com/3i4afmyf">
-            Virtual Parent Info Session
-          </Link>{" "}
-          on February 4th, 2026, where we will be going over camp in more
-          detail.
+          <Link href="mailto:lyf@tacl.org">lyf@tacl.org</Link>.
+          {infoSessionDate && (
+            <>
+              {" "}
+              We will also be hosting a{" "}
+              <Link href="https://luma.com/3i4afmyf">
+                Virtual Parent Info Session
+              </Link>{" "}
+              on {formatCampDateWithYear(infoSessionDate)}, where we will be
+              going over camp in more detail.
+            </>
+          )}
         </Typography>
 
         <Divider

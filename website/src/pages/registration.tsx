@@ -1,7 +1,6 @@
 import React from "react"
 import { PageProps } from "gatsby"
 import { Stack, Typography } from "@mui/material"
-import dayjs from "dayjs"
 
 // Utils
 import getPageTitle from "@utils/getPageTitle"
@@ -9,19 +8,32 @@ import getPageTitle from "@utils/getPageTitle"
 // Components
 import PrivateRoute from "@components/Auth/PrivateRoute"
 import { SnackbarAlertProvider } from "@components/SnackbarAlert"
-import { TimeGated } from "@components/Layout"
+import { ScheduleGated } from "@components/Layout"
 import { LinkButton } from "@components/Button"
 import { RegistrationFlow } from "@components/Registration"
 
-// TODO: Replace this hardcoded list with a list of emails from Firebase or some other dynamic source.
-// We're only including this functionality for people who missed the end of registration and need to
-// bypass the time gating. We need better functionality for allowing specific people to bypass size restrictions.
-const TEMP_ALLOWED_EMAILS = []
+// Hooks
+import useSiteConfig from "@hooks/useSiteConfig"
+import useCampSchedule from "@hooks/useCampSchedule"
+import useRegistrationBypass from "@hooks/useRegistrationBypass"
 
+// Which year this page registers for and when it closes come from Firestore
+// (config/site -> camps/{year}, public). Whether the signed-in family may
+// register after the close is a private per-email document that only they
+// and admins can read. All of it is edited from the Camp Year tab.
 const RegistrationPage: React.FC<PageProps> = () => {
+  const { currentCampYear, loading: configLoading } = useSiteConfig()
+  const schedule = useCampSchedule(currentCampYear)
+  const bypass = useRegistrationBypass(currentCampYear)
+  const loading =
+    configLoading ||
+    (currentCampYear !== null && (schedule.loading || bypass.loading))
+
   return (
-    <TimeGated
-      hideAfterDateTime={dayjs("2026-04-20 12:00 AM", "YYYY-MM-DD h:mm A")}
+    <ScheduleGated
+      loading={loading}
+      hideAfterDateTime={schedule.registrationClose}
+      allowBypass={bypass.canBypass}
       contentIfHidden={
         <Stack
           justifyContent="center"
@@ -30,22 +42,21 @@ const RegistrationPage: React.FC<PageProps> = () => {
           sx={{ padding: 2 }}
         >
           <Typography variant="h3" textAlign="center">
-            Registration for LYF Camp 2026 is now closed!
+            Registration for LYF Camp {currentCampYear} is now closed!
           </Typography>
           <LinkButton to="/" variant="contained">
             Return to Home Page
           </LinkButton>
         </Stack>
       }
-      allowEmails={TEMP_ALLOWED_EMAILS}
     >
       <SnackbarAlertProvider>
         <PrivateRoute>
           {/* Used as a separate component to reduce the number of renders from not logged in */}
-          <RegistrationFlow campYear={2026} />
+          <RegistrationFlow campYear={currentCampYear as number} />
         </PrivateRoute>
       </SnackbarAlertProvider>
-    </TimeGated>
+    </ScheduleGated>
   )
 }
 
