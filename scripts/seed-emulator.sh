@@ -78,14 +78,14 @@ echo "  ✔ Created admins/${PROGRAM_ADMIN_EMAIL} with role: program_admin"
 
 # ---- Site config and camp years ----
 # config/site points the website at the current and pre-registration years;
-# camps/{year} carries the dates the time gates read. Every file in
-# scripts/camp-years/ (one per year, reconstructed from the v1 repo's history)
-# is written as-is, with remainingSpots reset to campSizeCaps. In production
-# these are edited from the admin dashboard's Camp Year tab (manageCampYear).
+# camps/{year} carries the dates the time gates read. The two years below are
+# sample data following the usual calendar (pre-registration during the
+# previous summer, early registration late January, general mid-February,
+# close in April, camp in July). In production these are edited from the
+# admin dashboard's Camp Year tab (manageCampYear function).
 DOCS_URL="${FIRESTORE_HOST}/v1/projects/${PROJECT_ID}/databases/${DATABASE_ID}/documents"
 CURRENT_YEAR="${CAMP_YEAR:-2026}"
 PREREG_YEAR="${PREREG_CAMP_YEAR:-$((CURRENT_YEAR + 1))}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 put_doc() {
   # PATCH without an updateMask replaces the whole document.
@@ -95,46 +95,57 @@ put_doc() {
     -d "$2" > /dev/null
 }
 
-# Converts a camp-years/{year}.json file into the Firestore REST document shape.
+ts() { echo "{ \"timestampValue\": \"$1\" }"; }
+int() { echo "{ \"integerValue\": \"$1\" }"; }
+str() { echo "{ \"stringValue\": \"$1\" }"; }
+
+# A full camps/{year} document for year $1 (times are UTC for Pacific noon/midnight).
 camp_year_doc() {
-  node -e '
-    const raw = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
-    const iso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)$/;
-    const enc = (v) =>
-      typeof v === "string" ? (iso.test(v) ? { timestampValue: new Date(v).toISOString() } : { stringValue: v })
-      : typeof v === "number" ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v })
-      : typeof v === "boolean" ? { booleanValue: v }
-      : Array.isArray(v) ? { arrayValue: { values: v.map(enc) } }
-      : { mapValue: { fields: Object.fromEntries(Object.entries(v).map(([k, x]) => [k, enc(x)])) } };
-    const fields = {};
-    for (const [k, v] of Object.entries(raw)) {
-      // Bypass emails are private per-email documents, never on the public doc.
-      if (k.startsWith("_") || k === "registrationBypassEmails") continue;
-      fields[k] = enc(v);
-    }
-    if (raw.campSizeCaps) fields.remainingSpots = enc(raw.campSizeCaps);
-    process.stdout.write(JSON.stringify({ fields }));
-  ' "$1"
+  local y="$1" prev=$(( $1 - 1 ))
+  cat <<JSON
+{
+  "fields": {
+    "name": $(str "LYF Camp ${y}"),
+    "campsite": $(str "Alliance Redwoods Conference Grounds"),
+    "campsiteAddress": $(str "6250 Bohemian Hwy, Occidental, CA 95465"),
+    "preRegistrationOpenDate": $(ts "${prev}-07-12T22:00:00Z"),
+    "preRegistrationCloseDate": $(ts "${prev}-08-04T07:00:00Z"),
+    "earlyRegOpenDate": $(ts "${y}-01-31T20:00:00Z"),
+    "earlyRegEndDate": $(ts "${y}-02-14T20:00:00Z"),
+    "registrationOpenDate": $(ts "${y}-02-15T20:00:00Z"),
+    "registrationLateDate": $(ts "${y}-03-31T19:00:00Z"),
+    "registrationCloseDate": $(ts "${y}-04-20T07:00:00Z"),
+    "infoSessionDate": $(ts "${y}-02-04T03:00:00Z"),
+    "campStartDate": $(ts "${y}-07-12T22:00:00Z"),
+    "campEndDate": $(ts "${y}-07-18T22:00:00Z"),
+    "preRegistrationFee": $(int 500),
+    "registrationFee": $(int 1325),
+    "registrationLateFee": $(int 1525),
+    "shirtPrice": $(int 0),
+    "siblingDiscount": $(int 0),
+    "campTotalSizeCap": $(int 185),
+    "campSizeCaps": { "mapValue": { "fields": { "Younger": $(int 85), "Older": $(int 85) } } },
+    "remainingSpots": { "mapValue": { "fields": { "Younger": $(int 85), "Older": $(int 85) } } }
+  }
+}
+JSON
 }
 
-bypass_emails() {
-  node -e 'console.log((JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).registrationBypassEmails || []).join("\n"))' "$1"
-}
-
-for file in "${SCRIPT_DIR}"/camp-years/*.json; do
-  year="$(basename "${file}" .json)"
-  put_doc "camps/${year}" "$(camp_year_doc "${file}")"
-  echo "  ✔ Created camps/${year} from $(basename "${file}")"
-  for email in $(bypass_emails "${file}"); do
-    put_doc "camps/${year}/private/bypass/emails/${email}" "{
-      \"fields\": {
-        \"email\": $(str "${email}"),
-        \"addedBy\": $(str "seed-script")
-      }
-    }"
-    echo "    ✔ bypass entry ${email}"
-  done
+for year in "${CURRENT_YEAR}" "${PREREG_YEAR}"; do
+  put_doc "camps/${year}" "$(camp_year_doc "${year}")"
+  echo "  ✔ Created camps/${year}"
 done
+
+# One sample registration-close bypass entry (private per-email document) so
+# the gate's bypass path can be exercised locally.
+BYPASS_EMAIL="latecomer@example.com"
+put_doc "camps/${CURRENT_YEAR}/private/bypass/emails/${BYPASS_EMAIL}" "{
+  \"fields\": {
+    \"email\": $(str "${BYPASS_EMAIL}"),
+    \"addedBy\": $(str "seed-script")
+  }
+}"
+echo "  ✔ Created camps/${CURRENT_YEAR}/private/bypass/emails/${BYPASS_EMAIL}"
 
 put_doc "config/site" "{
   \"fields\": {

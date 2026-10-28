@@ -8,16 +8,35 @@
  * the dashboard is not an option (e.g. seeding a brand-new test database).
  *
  * Usage:
- *   CAMP_YEAR=2027 CAMP_YEAR_JSON=./camp-years/2027.json ./run.sh -n resetCampYearInfo
+ *   CAMP_YEAR=2027 CAMP_YEAR_JSON=/path/to/2027.json ./run.sh -n resetCampYearInfo
  *
  * The JSON file holds the CampYear configuration fields (see
- * CAMP_YEAR_CONFIG_KEYS in the schemas package). Date fields are ISO-8601
- * strings with an offset, e.g. "2027-01-31T12:00:00-08:00". Keys starting
- * with "_" are notes and are ignored. remainingSpots is not read from the
- * file — it is reset to campSizeCaps. registrationBypassEmails is not stored
- * on the camp document: it replaces the private per-email documents under
- * camps/{year}/private/bypass/emails/. scripts/camp-years/ holds one file per
- * year reconstructed from the v1 repository's history.
+ * CAMP_YEAR_CONFIG_KEYS in the schemas package), for example:
+ *
+ *   {
+ *     "name": "LYF Camp 2027",
+ *     "campsite": "...", "campsiteAddress": "...",
+ *     "preRegistrationOpenDate": "2026-07-18T00:00:00-07:00",
+ *     "preRegistrationCloseDate": "2026-10-15T00:00:00-07:00",
+ *     "earlyRegOpenDate": "2027-01-30T12:00:00-08:00",
+ *     "earlyRegEndDate": "2027-02-14T12:00:00-08:00",
+ *     "registrationOpenDate": "2027-02-14T12:00:00-08:00",
+ *     "registrationLateDate": "2027-03-31T12:00:00-07:00",
+ *     "registrationCloseDate": "2027-04-20T00:00:00-07:00",
+ *     "infoSessionDate": "2027-02-03T19:00:00-08:00",
+ *     "campStartDate": "2027-06-20T15:00:00-07:00",
+ *     "campEndDate": "2027-06-26T15:00:00-07:00",
+ *     "preRegistrationFee": 500, "registrationFee": 1325, "registrationLateFee": 1525,
+ *     "shirtPrice": 0, "siblingDiscount": 0,
+ *     "campTotalSizeCap": 185, "campSizeCaps": { "Younger": 85, "Older": 85 },
+ *     "registrationBypassEmails": []
+ *   }
+ *
+ * Date fields are ISO-8601 strings with an offset. Keys starting with "_"
+ * are notes and are ignored. remainingSpots is not read from the file — it
+ * is reset to campSizeCaps. registrationBypassEmails is not stored on the
+ * camp document: it replaces the private per-email documents under
+ * camps/{year}/private/bypass/emails/.
  */
 import {readFileSync} from "fs"
 import {resolve} from "path"

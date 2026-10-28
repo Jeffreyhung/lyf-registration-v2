@@ -406,9 +406,9 @@ Example: camp 2026 is the current year and camp 2027 is next.
 
 Flip the dashboard's test-data toggle to make the same changes in the test
 database. Scripts remain for bootstrapping: `scripts/src/resetCampYearInfo.ts`
-writes a `camps/{year}` document in the test database from a JSON file
-(`scripts/camp-years/{year}.json`), and `scripts/seed-emulator.sh` seeds
-`config/site` plus every year in `scripts/camp-years/` into the emulator.
+writes a `camps/{year}` document in the test database from a JSON file (the
+expected shape is in its header comment), and `scripts/seed-emulator.sh`
+seeds `config/site` plus two sample camp years into the emulator.
 
 ### One-time rollout order
 
@@ -422,13 +422,11 @@ be ordered so no page sees a half-migrated state:
    `config/site` with `currentCampYear: 2026` and `preRegistrationCampYear:
    2027`; add the new fields to `camps/2026` (`preRegistrationOpenDate`,
    `preRegistrationCloseDate`, `infoSessionDate`, `registrationBypassEmails`)
-   and create/complete `camps/2027` with the same set. `scripts/camp-years/`
-   has one JSON file per year (2024–2027) reconstructed from the v1 repo's
-   history; each file's `_todo` lists the values git could not supply (fees
-   and caps for 2026 and earlier, the 2027 registration schedule), so check
-   those against the existing Firestore documents first. Until the callable
-   is deployed, write them with `resetCampYearInfo` (Admin SDK) or the
-   Firebase console; afterwards the Camp Year tab is the only path needed.
+   and create/complete `camps/2027` with the same set, using the dates
+   that were hardcoded in the previous release as the source of truth.
+   Until the callable is deployed, write them with `resetCampYearInfo`
+   (Admin SDK) or the Firebase console; afterwards the Camp Year tab is the
+   only path needed.
 3. **Functions** — `yarn deploy:functions` deploys `manageCampYearV2`.
 4. **Website** — deploy the site. With the data in place the pages resolve
    their schedule; if `config/site` or a camp document is missing they fail
