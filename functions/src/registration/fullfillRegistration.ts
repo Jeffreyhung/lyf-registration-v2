@@ -35,6 +35,7 @@ import {addParentsToMailchimpList} from "../utils/mailchimp";
 import {RegistrationType} from "../utils";
 import {getRegistrationAndCamperInfo} from "../registrationUtils/getRegistrationAndCamperInfo";
 import {sendRegistrationEmail} from "../registrationUtils/sendRegistrationEmail";
+import {isRegistrationLineItem} from "../stripe/lineItems";
 
 /**
  * Small helper to calculate the discounts used while early-returning if we don't need to get the firestore object
@@ -245,12 +246,12 @@ export async function fulfillRegistration(
     return;
   }
 
-  const donation = lineItems.data.find((item) =>
-    item.description.includes("Donation")
+  // Classified by the metadata we stamped on each product, not by the product
+  // name: the name carries the camper's name, which the parent controls.
+  const registrationLineItems = lineItems.data.filter(isRegistrationLineItem);
+  const donation = lineItems.data.find(
+    (item) => !isRegistrationLineItem(item)
   )?.amount_total;
-  const registrationLineItems = lineItems.data.filter((item) =>
-    item.description.includes("Registration")
-  );
   const paymentIntent = checkoutSession.payment_intent as Stripe.PaymentIntent;
   const paymentMethod = (paymentIntent.payment_method as Stripe.PaymentMethod)
     .type;

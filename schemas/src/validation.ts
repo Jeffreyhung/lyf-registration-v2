@@ -920,6 +920,21 @@ const documentPathSchema = z.string().refine((path) => {
   )
 }, "must be a Firestore document path (collection/doc[/collection/doc...])")
 
+/**
+ * A camper document path, `families/{familyId}/campers/{camperId}`. The
+ * pre-registration callable stamps this path into Stripe metadata and the
+ * webhook later writes to it (and to its parent family), so the shape is
+ * pinned here rather than accepting any document path.
+ */
+const camperDocumentPathSchema = documentPathSchema.refine((path) => {
+  const segments = path.split("/")
+  return (
+    segments.length === 4 &&
+    segments[0] === "families" &&
+    segments[2] === "campers"
+  )
+}, "must be a camper document path (families/{familyId}/campers/{camperId})")
+
 const buildRegistrationPayload = (u: UnknownKeys) => {
   const embedded = embeddedMode(u)
   const camperPayload = obj(embedded, {
@@ -977,7 +992,7 @@ const buildPreRegistrationPayload = (u: UnknownKeys) =>
       .array(z.string().min(1))
       .max(MAX_CAMPERS_PER_REGISTRATION),
     camperRefsToPreRegister: z
-      .array(documentPathSchema)
+      .array(camperDocumentPathSchema)
       .max(MAX_CAMPERS_PER_REGISTRATION),
     // The website derives a camper's current grade from this year's active
     // registration and sends `false` (not null) for a camper who did not

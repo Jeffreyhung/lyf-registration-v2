@@ -19,6 +19,7 @@ import {
 } from "../slack/slackChannelWebhooks";
 import {addParentsToMailchimpList} from "../utils/mailchimp";
 import {RegistrationType} from "../utils";
+import {isPreRegistrationLineItem} from "../stripe/lineItems";
 
 /**
  * Complete the Stripe webhook event that let us know a pre-registration succeeded.
@@ -48,12 +49,14 @@ export async function fulfillPreRegistrations(
     );
   }
 
-  const donation = lineItems.data.find((item) =>
-    item.description.includes("Donation")
-  )?.amount_total;
+  // Classified by the metadata we stamped on each product, not by the product
+  // name: the name carries the camper's name, which the parent controls.
   const lineItemsWithoutDonation = lineItems.data.filter(
-    (item) => !item.description.includes("Donation")
+    isPreRegistrationLineItem
   );
+  const donation = lineItems.data.find(
+    (item) => !isPreRegistrationLineItem(item)
+  )?.amount_total;
 
   // Add a payment to our Stripe database
   const paymentIntent = checkoutSession.payment_intent as Stripe.PaymentIntent;
