@@ -13,7 +13,12 @@
 import * as admin from "firebase-admin"
 import {getFirestore} from "firebase-admin/firestore"
 
-const VALID_ROLES = ["full_admin", "program_admin", "program_staff", "health_staff"]
+const VALID_ROLES = [
+  "full_admin",
+  "program_admin",
+  "program_staff",
+  "health_staff",
+]
 
 const app = admin.initializeApp()
 // v2 data lives in a named database; "(default)" belongs to v1
@@ -52,7 +57,9 @@ async function main() {
     at: admin.firestore.FieldValue.serverTimestamp(),
   })
 
-  console.log(`${existing.exists ? "Updated" : "Created"} admins/${email} with role ${role}`)
+  console.log(
+    `${existing.exists ? "Updated" : "Created"} admins/${email} with role ${role}`
+  )
   process.exit(0)
 }
 

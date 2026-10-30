@@ -16,36 +16,36 @@ facts change.
 
 ## 1. What the app is today
 
-| Dimension | Observed |
-| --- | --- |
-| Scale | One camp per year, two tracks capped at 85 campers each (`scripts/src/resetCampYearInfo.ts`). Low hundreds of registrations per year, low thousands of documents total across all years. |
-| Traffic shape | Near zero most of the year, a sharp spike when registration opens, admin dashboard use through spring and camp week. |
-| Website | Gatsby static site on GitHub Pages. **There is no application server.** The browser talks to Firestore and Firebase Auth directly. |
-| Backend | Nine Cloud Functions v2: five callables (registration, pre-registration, waitlist, refund, admin roster), two Stripe webhook endpoints, two Firestore triggers. |
-| Authorization | `firestore.rules` (3 roles, field-level `onlyUpdates` guards) plus `assertAdmin` in callables. Covered by 25 emulator rules tests. |
-| Databases | Two named Firestore databases (`lyf-v2`, `lyf-v2-test`) sharing one project with v1's `(default)` database. |
-| Integrations | Stripe Checkout, Slack webhooks, Mailchimp, Gmail OAuth for email, Sentry. |
-| Team | Volunteer-run nonprofit tech. History shows two prior database migrations already (legacy Postgres to Firestore in 2023 via `migration/`, v1 to v2 Firestore in 2026 via `scripts/src/migrateV1ToV2Database.ts`). |
+| Dimension     | Observed                                                                                                                                                                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scale         | One camp per year, two tracks capped at 85 campers each (`scripts/src/resetCampYearInfo.ts`). Low hundreds of registrations per year, low thousands of documents total across all years.                          |
+| Traffic shape | Near zero most of the year, a sharp spike when registration opens, admin dashboard use through spring and camp week.                                                                                              |
+| Website       | Gatsby static site on GitHub Pages. **There is no application server.** The browser talks to Firestore and Firebase Auth directly.                                                                                |
+| Backend       | Nine Cloud Functions v2: five callables (registration, pre-registration, waitlist, refund, admin roster), two Stripe webhook endpoints, two Firestore triggers.                                                   |
+| Authorization | `firestore.rules` (3 roles, field-level `onlyUpdates` guards) plus `assertAdmin` in callables. Covered by 25 emulator rules tests.                                                                                |
+| Databases     | Two named Firestore databases (`lyf-v2`, `lyf-v2-test`) sharing one project with v1's `(default)` database.                                                                                                       |
+| Integrations  | Stripe Checkout, Slack webhooks, Mailchimp, Gmail OAuth for email, Sentry.                                                                                                                                        |
+| Team          | Volunteer-run nonprofit tech. History shows two prior database migrations already (legacy Postgres to Firestore in 2023 via `migration/`, v1 to v2 Firestore in 2026 via `scripts/src/migrateV1ToV2Database.ts`). |
 
 ### Firestore features actually in use
 
 Counted across `website/src`, `functions/src`, `scripts/src`:
 
-| Feature | Uses | Where it matters |
-| --- | --- | --- |
-| Realtime listeners (`onSnapshot`, `useCollection`, `useDocumentData`) | 3 direct + hooks | Admin dashboards update live when the Stripe webhook flips a registration to Active; parent profile reflects edits without refresh. |
-| `where` filters | 22 | Family lookup by email (`array-contains`), waitlist ordering, status filters. |
-| `FieldValue.arrayUnion` / `arrayRemove` | 15 | Bidirectional reference arrays: `camper.registrations`, `registration.payments`, `payment.registrations`, `family.emails`. |
-| `FieldValue.increment` | 6 | Camp credit balance, remaining spots. |
-| `serverTimestamp` | 35 | Everywhere. |
-| `writeBatch` / `batch` | 5 | Small group save, test data creation, familyEmails sync. |
-| `runTransaction` | 3 | Remaining-spots decrement, admin roster changes. |
-| `collectionGroup` | 4 | Scripts querying campers across families. |
-| `getCountFromServer` | 1 | Waitlist position. |
-| Composite indexes | 5 + 2 field overrides | `firestore.indexes.json`. |
-| TTL policy | 1 | `_processedEvents` webhook idempotency. |
-| Document-create-as-lock | 1 | `eventRef.create()` for idempotent Stripe webhook claims. |
-| Firestore triggers | 2 | `syncFamilyEmails` keeps a denormalized field in sync. |
+| Feature                                                               | Uses                  | Where it matters                                                                                                                    |
+| --------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Realtime listeners (`onSnapshot`, `useCollection`, `useDocumentData`) | 3 direct + hooks      | Admin dashboards update live when the Stripe webhook flips a registration to Active; parent profile reflects edits without refresh. |
+| `where` filters                                                       | 22                    | Family lookup by email (`array-contains`), waitlist ordering, status filters.                                                       |
+| `FieldValue.arrayUnion` / `arrayRemove`                               | 15                    | Bidirectional reference arrays: `camper.registrations`, `registration.payments`, `payment.registrations`, `family.emails`.          |
+| `FieldValue.increment`                                                | 6                     | Camp credit balance, remaining spots.                                                                                               |
+| `serverTimestamp`                                                     | 35                    | Everywhere.                                                                                                                         |
+| `writeBatch` / `batch`                                                | 5                     | Small group save, test data creation, familyEmails sync.                                                                            |
+| `runTransaction`                                                      | 3                     | Remaining-spots decrement, admin roster changes.                                                                                    |
+| `collectionGroup`                                                     | 4                     | Scripts querying campers across families.                                                                                           |
+| `getCountFromServer`                                                  | 1                     | Waitlist position.                                                                                                                  |
+| Composite indexes                                                     | 5 + 2 field overrides | `firestore.indexes.json`.                                                                                                           |
+| TTL policy                                                            | 1                     | `_processedEvents` webhook idempotency.                                                                                             |
+| Document-create-as-lock                                               | 1                     | `eventRef.create()` for idempotent Stripe webhook claims.                                                                           |
+| Firestore triggers                                                    | 2                     | `syncFamilyEmails` keeps a denormalized field in sync.                                                                              |
 
 ### Direct browser writes that security rules currently authorize
 
@@ -104,10 +104,10 @@ plus a new deployable, not a port.
 
 Options for that API tier:
 
-| Option | Fit | Notes |
-| --- | --- | --- |
-| Cloud Run service (Node, Postgres driver, Firebase Auth token verification) | Good | Scale-to-zero compute, but needs the Cloud SQL connector, connection pooling, cold starts during the registration spike. New deploy pipeline. |
-| More Cloud Functions, one per read/write | Poor | Dozens of functions; connection management per instance is awkward; the current nine functions already carry an `isolate` build step. |
+| Option                                                                                                          | Fit                         | Notes                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cloud Run service (Node, Postgres driver, Firebase Auth token verification)                                     | Good                        | Scale-to-zero compute, but needs the Cloud SQL connector, connection pooling, cold starts during the registration spike. New deploy pipeline.                             |
+| More Cloud Functions, one per read/write                                                                        | Poor                        | Dozens of functions; connection management per instance is awkward; the current nine functions already carry an `isolate` build step.                                     |
 | Firebase Data Connect (GraphQL over Cloud SQL Postgres, Firebase Auth `@auth` directives, generated typed SDKs) | Best fit if SQL is the goal | Keeps the "no server" model the site depends on. GA since April 2025. Adds a GraphQL schema layer the team must learn. Realtime is not equivalent to Firestore listeners. |
 
 ### 3.2 Realtime
@@ -122,13 +122,13 @@ Realtime (new vendor). This is a feature regression to plan for, not a blocker.
 Firestore today is serverless and almost certainly inside or near the free tier for this volume.
 Cloud SQL has no scale-to-zero and no free tier beyond a trial.
 
-| Item | Firestore (Standard) | Cloud SQL for PostgreSQL |
-| --- | --- | --- |
-| Free allowance | 50k reads, 20k writes, 20k deletes per day, 1 GiB storage. Applies to one database per project, so check whether the named `lyf-v2` databases are billed today. | 3-month trial on default config via Data Connect only. |
-| Smallest instance | n/a | `db-f1-micro` (shared core, no SLA): roughly $8–10/month compute, storage and backups extra. |
-| Realistic small production instance | n/a | Dedicated 1 vCPU: roughly $30–60/month plus storage; HA about doubles it. |
-| Idle cost | $0 | Full instance price year-round for a one-month spike. |
-| Maintenance | None | Maintenance windows, version upgrades, backup/PITR configuration, connection limits, connector or Auth Proxy setup for Cloud Run and Functions. |
+| Item                                | Firestore (Standard)                                                                                                                                            | Cloud SQL for PostgreSQL                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Free allowance                      | 50k reads, 20k writes, 20k deletes per day, 1 GiB storage. Applies to one database per project, so check whether the named `lyf-v2` databases are billed today. | 3-month trial on default config via Data Connect only.                                                                                          |
+| Smallest instance                   | n/a                                                                                                                                                             | `db-f1-micro` (shared core, no SLA): roughly $8–10/month compute, storage and backups extra.                                                    |
+| Realistic small production instance | n/a                                                                                                                                                             | Dedicated 1 vCPU: roughly $30–60/month plus storage; HA about doubles it.                                                                       |
+| Idle cost                           | $0                                                                                                                                                              | Full instance price year-round for a one-month spike.                                                                                           |
+| Maintenance                         | None                                                                                                                                                            | Maintenance windows, version upgrades, backup/PITR configuration, connection limits, connector or Auth Proxy setup for Cloud Run and Functions. |
 
 Pricing figures are from third-party trackers and Google docs as of this writing; verify on
 the Google Cloud pricing pages before budgeting.
@@ -148,15 +148,15 @@ the Google Cloud pricing pages before budgeting.
 Ranges assume one engineer familiar with the codebase. They are estimates for sizing the
 decision, not a plan.
 
-| Work | Range |
-| --- | --- |
-| Relational schema, migrations, seed data | 1–2 weeks |
-| API tier with RBAC and tests (Cloud Run) or Data Connect schema with `@auth` | 3–5 weeks |
-| Website: replace hooks and all direct Firestore calls in Admin, Profile, Registration, CamperCheckoutFlow, SmallGroup components | 3–5 weeks |
-| Cloud Functions rewrite (registration, fulfillment, waitlist, refund, admin roster) | 1–2 weeks |
-| ETL, shadow period, cutover, rollback plan | 2–3 weeks |
-| Dev environment, CI, deploy pipeline | 1–2 weeks |
-| **Total** | **roughly 11–19 engineer-weeks** |
+| Work                                                                                                                             | Range                            |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| Relational schema, migrations, seed data                                                                                         | 1–2 weeks                        |
+| API tier with RBAC and tests (Cloud Run) or Data Connect schema with `@auth`                                                     | 3–5 weeks                        |
+| Website: replace hooks and all direct Firestore calls in Admin, Profile, Registration, CamperCheckoutFlow, SmallGroup components | 3–5 weeks                        |
+| Cloud Functions rewrite (registration, fulfillment, waitlist, refund, admin roster)                                              | 1–2 weeks                        |
+| ETL, shadow period, cutover, rollback plan                                                                                       | 2–3 weeks                        |
+| Dev environment, CI, deploy pipeline                                                                                             | 1–2 weeks                        |
+| **Total**                                                                                                                        | **roughly 11–19 engineer-weeks** |
 
 For a volunteer team working part-time that is most of a year, and it has to land in a fixed
 off-season window.

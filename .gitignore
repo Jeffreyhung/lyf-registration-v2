@@ -145,5 +145,16 @@ vite.config.ts.timestamp-*
 # mac
 .DS_Store
 
-# 
+# Per-workspace build outputs and generated files
 functions/lib/
+functions/isolate/
+scripts/lib/
+scripts/output/
+website/.cache/
+website/public/
+website/src/gatsby-types.d.ts
+*/dist/
+
+# Admin SDK key files must never be committed; use gcloud ADC instead
+# (docs/local-development.md).
+*firebase-admin*private-key*.json

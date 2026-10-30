@@ -1,0 +1,6 @@
+# Runs on staged files only (config: "lint-staged" in the root package.json).
+#   functions/**            -> eslint via `yarn --cwd functions eslint`
+#                              (eslint-config-google style, never prettier)
+#   everything else         -> `prettier --check`, honouring .prettierignore,
+#                              which still lists the areas not formatted yet
+yarn lint-staged

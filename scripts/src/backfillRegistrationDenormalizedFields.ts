@@ -28,9 +28,11 @@
  */
 import * as admin from "firebase-admin"
 import {
+  DocumentData,
   DocumentReference,
   DocumentSnapshot,
   getFirestore,
+  UpdateData,
   WriteBatch,
 } from "firebase-admin/firestore"
 import {
@@ -145,7 +147,7 @@ class BatchWriter {
     if (!this.batch) {
       this.batch = db.batch()
     }
-    this.batch.update(ref, data)
+    this.batch.update(ref, data as UpdateData<DocumentData>)
     this.pendingWrites++
     if (this.pendingWrites >= MAX_BATCH_WRITES) {
       await this.flush()

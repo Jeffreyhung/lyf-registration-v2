@@ -64,14 +64,19 @@ const db = getFirestore(
 function readConfig(): {year: number; config: Record<string, unknown>} {
   const year = Number(process.env.CAMP_YEAR)
   if (!Number.isInteger(year) || year < 2017) {
-    throw new Error("Set CAMP_YEAR to the camp year to write, e.g. CAMP_YEAR=2027")
+    throw new Error(
+      "Set CAMP_YEAR to the camp year to write, e.g. CAMP_YEAR=2027"
+    )
   }
   const file = process.env.CAMP_YEAR_JSON
   if (!file) {
     throw new Error("Set CAMP_YEAR_JSON to the path of the camp year JSON file")
   }
 
-  const raw = JSON.parse(readFileSync(resolve(file), "utf8")) as Record<string, unknown>
+  const raw = JSON.parse(readFileSync(resolve(file), "utf8")) as Record<
+    string,
+    unknown
+  >
   const allowed = new Set<string>(CAMP_YEAR_CONFIG_KEYS)
   const dateKeys = new Set<string>(CAMP_YEAR_DATE_KEYS)
 
@@ -99,17 +104,24 @@ async function main() {
   const {registrationBypassEmails, ...campFields} = config
   const campSizeCaps = (campFields.campSizeCaps ?? {}) as Record<string, number>
 
-  await db.collection("camps").doc(String(year)).set({
-    ...campFields,
-    name: campFields.name ?? `LYF Camp ${year}`,
-    // Fresh year, fresh spots.
-    remainingSpots: {...campSizeCaps},
-  })
-  console.log(`Wrote camps/${year} with ${Object.keys(campFields).length} fields`)
+  await db
+    .collection("camps")
+    .doc(String(year))
+    .set({
+      ...campFields,
+      name: campFields.name ?? `LYF Camp ${year}`,
+      // Fresh year, fresh spots.
+      remainingSpots: {...campSizeCaps},
+    })
+  console.log(
+    `Wrote camps/${year} with ${Object.keys(campFields).length} fields`
+  )
 
   // Replace the private bypass entries with the file's list (possibly empty).
   const bypassRef = db.collection(registrationBypassCollectionPath(year))
-  const desired = normalizeEmails((registrationBypassEmails as string[] | undefined) ?? [])
+  const desired = normalizeEmails(
+    (registrationBypassEmails as string[] | undefined) ?? []
+  )
   const batch = db.batch()
   for (const existing of await bypassRef.listDocuments()) batch.delete(existing)
   for (const email of desired) {

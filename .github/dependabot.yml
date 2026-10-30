@@ -1,18 +1,40 @@
-# Keeps the SHA-pinned actions in .github/workflows current. Dependabot reads
-# the "# vX.Y.Z" comment after each pin, bumps the SHA and rewrites the comment.
-# Only the actions ecosystem is covered here; npm/yarn dependencies are left to
-# the existing manual process.
+# Dependabot configuration. Every PR it opens still has to pass CI and be
+# merged by a person; nothing here deploys anything.
 version: 2
 updates:
+  # Keeps the SHA-pinned actions in .github/workflows current. Dependabot reads
+  # the "# vX.Y.Z" comment after each pin, bumps the SHA and rewrites the
+  # comment. One PR per week bumping every action at once.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
-    # One PR per week bumping every action at once instead of one PR per action.
     groups:
       github-actions:
         patterns:
           - "*"
     commit-message:
       prefix: "ci"
+
+  # npm/yarn dependencies. The yarn 1 workspaces share the single root
+  # yarn.lock, so one entry at / covers every workspace's package.json
+  # (website, functions, schemas, small-group-pairing, scripts,
+  # firestore-rules-tests). Minor and patch bumps arrive together in one
+  # weekly PR; every major gets a PR of its own so it can be reviewed and
+  # tried against the emulators separately.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps(dev)"
