@@ -19,6 +19,7 @@ import {
   getStripe,
 } from "../utils";
 import {fulfillRegistration} from "../registration/fullfillRegistration";
+import {releaseRegistrationHolds} from "../registration/releaseRegistrationHolds";
 import {fulfillPreRegistrations} from "../preRegistration/fulfillPreRegistrations";
 import {
   sendMessageToRegistrationErrorMessages,
@@ -155,6 +156,35 @@ function handleStripeWebhookHelper(
               sendMessageToRegistrationErrorMessages(
                 `Invalid event type: ${sessionWithLineItems.metadata?.eventType}`
               );
+          }
+          break;
+        }
+        case "checkout.session.expired": {
+          // Registration sessions hold camp spots (see createOrUpdateRegistration);
+          // when the session lapses unpaid, hand them back.
+          logger.info("Handling an expired checkout session");
+          const session = event.data.object as Stripe.Checkout.Session;
+          const sessionWithLineItems = await stripe.checkout.sessions.retrieve(
+            session.id,
+            {expand: ["line_items.data.price.product"]}
+          );
+
+          if (sessionWithLineItems.metadata?.app !== STRIPE_APP_TAG) {
+            logger.info(
+              `Ignoring expired session ${session.id}: not created by this app ` +
+                `(app=${sessionWithLineItems.metadata?.app ?? "none"})`
+            );
+            break;
+          }
+
+          const eventType = sessionWithLineItems.metadata?.eventType ?? "-1";
+          if (parseInt(eventType) === StripeWebhookEventType.Registration) {
+            await releaseRegistrationHolds(db, sessionWithLineItems);
+          } else {
+            // Donation and pre-registration sessions hold nothing.
+            logger.info(
+              `Expired session ${session.id} (eventType=${eventType}) holds no spots`
+            );
           }
           break;
         }

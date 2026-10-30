@@ -15,6 +15,7 @@ import {
   Registration,
   isEstablishedFamilyMember,
   normalizeEmail,
+  validateRegistrationWrite,
 } from "lyf-registration-schemas";
 
 export type RefAndExisting<T> = {
@@ -109,7 +110,11 @@ export async function findOrCreateParent(
     logger.warn(`No email found with parent: ${parentName}`);
   }
 
-  const parentId = parent.email?.toLowerCase() ?? parent.phoneNumber;
+  // A blank email (allowed by the payload validator for a parent reached by
+  // phone) counts as no email, so the phone number keys the document.
+  const parentId = parent.email ?
+    normalizeEmail(parent.email) :
+    parent.phoneNumber;
 
   if (!parentId) {
     const errMsg = `No email or phone number found on the parent ${parentName}`;
@@ -147,42 +152,78 @@ export async function findOrCreateCamper(
     : campersInFamilyRef.doc();
 }
 
+// gRPC status code returned by DocumentReference.create() when the doc exists
+const GRPC_ALREADY_EXISTS = 6;
+
 /**
- * Find or create a new registration for the camper and camp year
+ * Find or create the registration for the camper and camp year.
+ *
+ * Registrations are keyed by the camper id (camps/{year}/registrations/{camperId},
+ * schemaVersion 3) so a camper can never end up with two registrations for
+ * one camp, however many times the form is submitted concurrently. Resolution
+ * order:
+ *   1. a ref already in the camper's `registrations` array for this camp
+ *      (pre-schemaVersion-3 registrations have random ids and must keep working),
+ *   2. the deterministic document, if it exists,
+ *   3. otherwise create the deterministic document with create(), which fails
+ *      if it already exists; a concurrent duplicate request that loses that
+ *      race simply picks up the document the winner created.
  * @param camperRef The camper this registration is associated with
- * @param campRef The document referencing the curren't camp year
+ * @param campRef The document referencing the current camp year
  * @returns The registration document reference
  */
 export async function findOrCreateRegistration(
   camperRef: DocumentReference<Camper>,
   campRef: DocumentReference<CampYear>
 ): Promise<RefAndExisting<Registration>> {
-  const camperData = (await camperRef.get()).data() as Camper;
+  const camperData = (await camperRef.get()).data() as Camper | undefined;
 
   // Each registration's parent is a collection and the collection's parent is a document whose ID is the camp year
-  const regRef = camperData?.registrations?.find(
+  const legacyRef = camperData?.registrations?.find(
     (regRef) => regRef.parent.parent?.id === campRef.id
   ) as DocumentReference<Registration> | undefined;
 
-  if (regRef) {
+  if (legacyRef) {
+    return {
+      ref: legacyRef,
+      didExist: true,
+    };
+  }
+
+  const regRef = campRef
+    .collection("registrations")
+    .doc(camperRef.id) as DocumentReference<Registration>;
+
+  if ((await regRef.get()).exists) {
     return {
       ref: regRef,
       didExist: true,
     };
   }
 
-  const newRegRef = campRef
-    .collection("registrations")
-    .doc() as DocumentReference<Registration>;
-
-  await newRegRef.set({
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    isTestData: camperData.isTestData ?? false,
-  });
+  try {
+    await regRef.create(
+      validateRegistrationWrite({
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        isTestData: camperData?.isTestData ?? false,
+      })
+    );
+  } catch (err) {
+    if ((err as {code?: number}).code === GRPC_ALREADY_EXISTS) {
+      logger.info(
+        `Registration ${regRef.path} was created concurrently; reusing it`
+      );
+      return {
+        ref: regRef,
+        didExist: true,
+      };
+    }
+    throw err;
+  }
 
   return {
-    ref: newRegRef,
+    ref: regRef,
     didExist: false,
   };
 }

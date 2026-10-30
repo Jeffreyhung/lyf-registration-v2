@@ -39,6 +39,12 @@ import {
   syncFamilyEmailsOnUpdateTest,
 } from "./families/syncFamilyEmails";
 
+// Import our triggers that keep the camper profile fields denormalized on registrations in sync
+import {
+  syncCamperProfileOnUpdate,
+  syncCamperProfileOnUpdateTest,
+} from "./families/syncCamperProfile";
+
 // Deployed names carry a V2 suffix: v1's functions of the same base names still
 // run in this project and region, and Cloud Functions names are unique per
 // region. The website resolves these through FUNCTION_NAMES in the schemas
@@ -55,4 +61,6 @@ export {
   replicateAdminsToTest as replicateAdminsToTestV2,
   syncFamilyEmailsOnUpdate as syncFamilyEmailsOnUpdateV2,
   syncFamilyEmailsOnUpdateTest as syncFamilyEmailsOnUpdateTestV2,
+  syncCamperProfileOnUpdate as syncCamperProfileOnUpdateV2,
+  syncCamperProfileOnUpdateTest as syncCamperProfileOnUpdateTestV2,
 };

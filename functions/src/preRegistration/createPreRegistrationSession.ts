@@ -17,11 +17,13 @@ import {
   validateRedirectUrl,
 } from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
+import {parseCallablePayload} from "../utils/validate";
 
 // Import schema
 import {
   CampYear,
   PreRegistrationInputPayload,
+  validatePreRegistrationPayload,
 } from "lyf-registration-schemas";
 
 export interface PreRegistrationLineItemMetadata extends Stripe.Metadata {
@@ -48,7 +50,7 @@ export const createPreRegistrationSession = onCall<PreRegistrationInputPayload>(
       successUrl,
       cancelUrl,
       isTestData: requestedTestData = false,
-    } = request.data;
+    } = parseCallablePayload(validatePreRegistrationPayload, request.data);
 
     const authEmail = request.auth.token.email;
     if (!authEmail || authEmail.toLowerCase() !== email.toLowerCase()) {

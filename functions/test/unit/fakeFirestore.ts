@@ -7,6 +7,10 @@
  *
  * Collections are addressed by their full path ("families/f1/campers"), so a
  * sub-collection is just a collection whose name contains slashes.
+ *
+ * runTransaction() runs the callback once against the store directly (no
+ * isolation, no retries); it exists so code that reads-then-writes inside a
+ * transaction can be exercised, not to test concurrency.
  */
 import type {
   CollectionReference,
@@ -70,6 +74,18 @@ export class FakeDocRef {
       throw new Error(`No document to update: ${this.path}`);
     }
     this.db.write(this.collectionName, this.id, {...existing, ...data});
+  }
+
+  /** Like the SDK, fails with gRPC ALREADY_EXISTS (6) when the doc exists. */
+  async create(data: DocData) {
+    if (this.db.read(this.collectionName, this.id) !== undefined) {
+      const err = new Error(`Document already exists: ${this.path}`) as Error & {
+        code: number;
+      };
+      err.code = 6;
+      throw err;
+    }
+    this.db.write(this.collectionName, this.id, {...data});
   }
 
   /** Typed view for passing into code under test. */
@@ -157,9 +173,40 @@ export class FakeCollection extends FakeQuery {
   }
 }
 
+/** The subset of Transaction the registration code uses. */
+export class FakeTransaction {
+  constructor(private readonly db: FakeFirestore) {}
+
+  get(ref: FakeDocRef) {
+    return ref.get();
+  }
+
+  getAll(...refs: FakeDocRef[]) {
+    return this.db.getAll(...refs);
+  }
+
+  set(ref: FakeDocRef, data: DocData, options?: {merge?: boolean}): this {
+    void ref.set(data, options);
+    return this;
+  }
+
+  update(ref: FakeDocRef, data: DocData): this {
+    void ref.update(data);
+    return this;
+  }
+}
+
 export class FakeFirestore {
   private readonly store = new Map<string, Map<string, DocData>>();
   private counter = 0;
+
+  async getAll(...refs: FakeDocRef[]) {
+    return Promise.all(refs.map((ref) => ref.get()));
+  }
+
+  async runTransaction<T>(fn: (t: FakeTransaction) => Promise<T>): Promise<T> {
+    return fn(new FakeTransaction(this));
+  }
 
   /** Puts a document in place, replacing anything already there. */
   seed(collectionName: string, id: string, data: DocData): this {

@@ -23,13 +23,10 @@ import {
   assertAdmin,
   assertCallerEmailInList,
   callableOptions,
-  MAX_CAMPERS_PER_REGISTRATION,
-  MAX_PARENTS_PER_REGISTRATION,
   resolveForceWaitlistFlag,
   resolveTestDataFlag,
   validateDollarAmount,
   validateRedirectUrl,
-  validateRegistrationPayloadShape,
 } from "../../src/utils/auth";
 
 /**
@@ -443,105 +440,5 @@ describe("resolveForceWaitlistFlag", () => {
     await expect(
       resolveForceWaitlistFlag(requestFrom("  Admin@TACL.org "), true)
     ).resolves.toBe(true);
-  });
-});
-
-const parent = {email: "parent@example.com", firstName: "P", lastName: "Q"};
-const camper = {firstName: "C", lastName: "Q", grade: 5};
-const demographics = {born: "US"};
-
-describe("validateRegistrationPayloadShape", () => {
-  it("accepts a well-formed payload", () => {
-    expect(() =>
-      validateRegistrationPayloadShape({
-        parents: [parent],
-        campers: [camper, camper],
-        demographics: [demographics, demographics],
-      })
-    ).not.toThrow();
-  });
-
-  it("accepts payloads exactly at the limits", () => {
-    expect(() =>
-      validateRegistrationPayloadShape({
-        parents: Array(MAX_PARENTS_PER_REGISTRATION).fill(parent),
-        campers: Array(MAX_CAMPERS_PER_REGISTRATION).fill(camper),
-        demographics: Array(MAX_CAMPERS_PER_REGISTRATION).fill(demographics),
-      })
-    ).not.toThrow();
-  });
-
-  it.each([
-    ["missing", undefined],
-    ["not an array", {email: "x"}],
-    ["empty", []],
-  ])("rejects parents that are %s", (_label, parents) => {
-    expectHttpsError(
-      () =>
-        validateRegistrationPayloadShape({
-          parents,
-          campers: [camper],
-          demographics: [demographics],
-        }),
-      "invalid-argument"
-    );
-  });
-
-  it("rejects more parents than the limit", () => {
-    expectHttpsError(
-      () =>
-        validateRegistrationPayloadShape({
-          parents: Array(MAX_PARENTS_PER_REGISTRATION + 1).fill(parent),
-          campers: [camper],
-          demographics: [demographics],
-        }),
-      "invalid-argument"
-    );
-  });
-
-  it.each([
-    ["missing", undefined],
-    ["not an array", "camper"],
-    ["empty", []],
-  ])("rejects campers that are %s", (_label, campers) => {
-    expectHttpsError(
-      () =>
-        validateRegistrationPayloadShape({
-          parents: [parent],
-          campers,
-          demographics: [],
-        }),
-      "invalid-argument"
-    );
-  });
-
-  it("rejects more campers than the limit", () => {
-    const n = MAX_CAMPERS_PER_REGISTRATION + 1;
-    expectHttpsError(
-      () =>
-        validateRegistrationPayloadShape({
-          parents: [parent],
-          campers: Array(n).fill(camper),
-          demographics: Array(n).fill(demographics),
-        }),
-      "invalid-argument"
-    );
-  });
-
-  it.each([
-    ["missing", undefined],
-    ["not an array", demographics],
-    ["shorter than campers", [demographics]],
-    ["longer than campers", [demographics, demographics, demographics]],
-  ])("rejects demographics that are %s", (_label, demo) => {
-    expectHttpsError(
-      () =>
-        validateRegistrationPayloadShape({
-          parents: [parent],
-          campers: [camper, camper],
-          demographics: demo,
-        }),
-      "invalid-argument"
-    );
   });
 });

@@ -7,6 +7,26 @@ export type LineItem<T extends Stripe.Metadata> = {
   metadata?: T;
 };
 
+// Stripe rejects expires_at outside [30 minutes, 24 hours] from creation.
+export const MIN_CHECKOUT_EXPIRY_MINUTES = 30;
+export const MAX_CHECKOUT_EXPIRY_MINUTES = 24 * 60;
+
+/**
+ * Unix timestamp (seconds) for a checkout session's `expires_at`, clamped to
+ * Stripe's allowed window, or undefined to keep Stripe's 24-hour default.
+ */
+export function checkoutExpiresAt(
+  expiresAfterMinutes: number | undefined,
+  nowInMs: number = Date.now()
+): number | undefined {
+  if (expiresAfterMinutes === undefined) return undefined;
+  const minutes = Math.min(
+    MAX_CHECKOUT_EXPIRY_MINUTES,
+    Math.max(MIN_CHECKOUT_EXPIRY_MINUTES, expiresAfterMinutes)
+  );
+  return Math.floor(nowInMs / 1000) + minutes * 60;
+}
+
 /**
  * Create a Stripe checkout session.
  * @param items The individual line items in the order
@@ -15,8 +35,13 @@ export type LineItem<T extends Stripe.Metadata> = {
  * @param customerId The customer ID to attach the session to
  * @param eventType The type of event this checkout is for and will subsequently trigger in the webhook
  * @param description The description of the order
- * @param discount Any applicable discounts
  * @param isTestData Whether this request is for test data
+ * @param discount Any applicable discounts
+ * @param options.expiresAfterMinutes How long the session stays payable. Stripe
+ *   defaults to 24 hours and allows 30 minutes to 24 hours. Registration
+ *   sessions hold camp spots, so they pass a short window and release the
+ *   spots on `checkout.session.expired`; donation and pre-registration
+ *   sessions hold nothing and keep Stripe's default.
  * @returns
  */
 export async function createStripeCheckoutSession<T extends Stripe.Metadata>(
@@ -30,10 +55,12 @@ export async function createStripeCheckoutSession<T extends Stripe.Metadata>(
   discount?: {
     amount: number;
     name: string;
-  } | null
+  } | null,
+  options?: {expiresAfterMinutes?: number}
 ): Promise<Stripe.Checkout.Session> {
   const discounts: Stripe.Checkout.SessionCreateParams.Discount[] = [];
   const stripe = getStripe(!isTestData);
+  const expiresAt = checkoutExpiresAt(options?.expiresAfterMinutes);
 
   if (discount) {
     const coupon = await stripe.coupons.create({
@@ -74,5 +101,6 @@ export async function createStripeCheckoutSession<T extends Stripe.Metadata>(
       description: description,
     },
     discounts: discounts,
+    ...(expiresAt ? {expires_at: expiresAt} : {}),
   });
 }
