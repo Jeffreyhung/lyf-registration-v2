@@ -21,7 +21,6 @@ import {
 
 // Utils
 import getPageTitle from "@utils/getPageTitle"
-import AuthContext from "@components/Auth/AuthContext"
 
 // Components
 import { MainHeaderCardWithShadow } from "@components/Card"
@@ -40,7 +39,6 @@ const FALLBACK_CAMPSITE = "Alliance Redwoods Conference Grounds"
 const FALLBACK_CAMPSITE_ADDRESS = "6250 Bohemian Hwy, Occidental, CA 95465"
 
 const IndexPage: React.FC<PageProps> = () => {
-  const { isSignedIn, isAdmin } = React.useContext(AuthContext)
 
   // The home page points at whichever flow is open right now: registration
   // for the current camp year, or pre-registration for the next one once

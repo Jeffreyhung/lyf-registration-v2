@@ -2,7 +2,7 @@
  * Code from Josh W Comeau
  * https://joshwcomeau.com/snippets/react-hooks/use-prefers-reduced-motion
  */
-import React, { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 
 const QUERY = "(prefers-reduced-motion: no-preference)"
 const isRenderingOnServer = typeof window === "undefined"

@@ -13,7 +13,8 @@ export default function useRandomInterval(
     savedCallback.current = callback
   }, [callback])
   useEffect(() => {
-    let isEnabled = typeof minDelay === "number" && typeof maxDelay === "number"
+    const isEnabled =
+      typeof minDelay === "number" && typeof maxDelay === "number"
     if (isEnabled) {
       const handleTick = () => {
         const nextTickAt = random(minDelay as number, maxDelay as number)

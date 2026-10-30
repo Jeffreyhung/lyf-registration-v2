@@ -220,16 +220,20 @@ export default function RefundDialog({
     payment: Payment,
     value: number
   ) => {
-    value
-      ? changesRef.current.refunds.set(regKey, { amount: value, payment })
-      : changesRef.current.refunds.delete(regKey)
+    if (value) {
+      changesRef.current.refunds.set(regKey, { amount: value, payment })
+    } else {
+      changesRef.current.refunds.delete(regKey)
+    }
     updateChangeCount(value !== null)
   }
 
   const handleCancelChange = (reg: RegistrationData, cancelled: boolean) => {
-    cancelled
-      ? changesRef.current.cancellations.add(reg)
-      : changesRef.current.cancellations.delete(reg)
+    if (cancelled) {
+      changesRef.current.cancellations.add(reg)
+    } else {
+      changesRef.current.cancellations.delete(reg)
+    }
     updateChangeCount(cancelled)
   }
 
@@ -297,7 +301,7 @@ export default function RefundDialog({
         <AnimatedButtonWithLoading
           asyncOnClick={handleRefunds}
           onMouseDown={(e) => {
-            e.preventDefault
+            e.preventDefault()
           }}
           variant="outlined"
           boopProps={{}}

@@ -4,10 +4,7 @@ import {
   Grid,
   ListItem,
   ListItemIcon,
-  TableCell,
-  TableRow,
   Typography,
-  useTheme,
 } from "@mui/material"
 import { DragIndicator } from "@mui/icons-material"
 import { useDrag, useDrop } from "react-dnd"
@@ -29,14 +26,11 @@ export default function AssignmentsCamper({
   camper,
   columns,
 }: AssignmentsCamperProps) {
-  const { id, name, metadata } = camper
-  const theme = useTheme()
-
   // Mouse Events
   const [isMouseOver, setIsMouseOver] = React.useState(false)
 
   // Drag and Drop Hooks
-  const [canDrag, setCanDrag] = React.useState(true)
+  const [canDrag] = React.useState(true)
   const [{ isDragging }, drag] = useDrag({
     type: "camper",
     item: camper,
@@ -69,7 +63,7 @@ export default function AssignmentsCamper({
         onMouseEnter={() => setIsMouseOver(true)}
         onMouseLeave={() => setIsMouseOver(false)}
       >
-        {/* @ts-ignore Node not given a type since ListItemIcon doesn't define one */}
+        {/* @ts-expect-error Node not given a type since ListItemIcon doesn't define one */}
         <ListItemIcon ref={(node) => drag(drop(node))}>
           <AnimatedDragIndicator style={dragIconStyle} />
         </ListItemIcon>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Firestore } from "firebase/firestore"
 import { prodFirestore, testFirestore } from "@utils/firebaseApp"
 import { GetStripePromise, getStripeProd, getStripeTest } from "@utils/stripe"

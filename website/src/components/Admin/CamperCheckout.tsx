@@ -89,7 +89,7 @@ const columns: GridColDef[] = [
     headerName: "Checked Out At",
     type: "dateTime",
     width: 175,
-    // @ts-ignore I'm not sure what's the right type for GridColDef that includes nullable yet
+    // @ts-expect-error I'm not sure what's the right type for GridColDef that includes nullable yet
     nullable: true,
     ...DataGridColumnAlign,
   },

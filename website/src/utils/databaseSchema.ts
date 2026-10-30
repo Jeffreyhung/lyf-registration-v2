@@ -57,9 +57,7 @@ export type Registration = DocumentId &
     shirtSize: string
     status: string
 
-    demographics: {
-      // To Fill Out
-    }
+    demographics: Record<string, unknown>
 
     isPreRegistered: boolean
 
@@ -73,7 +71,7 @@ export type Registration = DocumentId &
     internalNotes: string
   }>
 
-export type CampCredit = DocumentId & Partial<{}>
+export type CampCredit = DocumentId
 
 export type Payment = DocumentId & Partial<{
   createdAt: Timestamp,

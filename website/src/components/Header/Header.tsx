@@ -3,7 +3,7 @@ import { AppBar, Stack, Toolbar } from "@mui/material"
 
 import SignInMenu from "@components/Auth/SignInMenu"
 import { LinkButton } from "@components/Button"
-import { ProdContext, ToggleProdContext } from "@components/ProdContext"
+import { ToggleProdContext } from "@components/ProdContext"
 import AuthContext from "@components/Auth/AuthContext"
 
 /**

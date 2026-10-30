@@ -19,9 +19,8 @@ import { GradientTypography } from "@components/Typography"
 import Sparkles from "@components/Sparkles"
 
 // Utils
-import CheckoutFlowContext from "@components/CheckoutFlow/CheckoutFlowContext"
 import { CamperWithRegistration } from "./CamperCheckoutFlow"
-import { AnimatedButton, AnimatedLinkButton } from "@components/Button"
+import { AnimatedLinkButton } from "@components/Button"
 
 type ConfirmationScreenProps = {
   campers: CamperWithRegistration[]
@@ -32,7 +31,6 @@ export default function ConfirmationScreen({
   campers,
   hideCamperCheckout = false,
 }: ConfirmationScreenProps) {
-  const { setActiveStep } = React.useContext(CheckoutFlowContext)
   const campersPreRegisteredOrActive = campers.filter(
     (camper) => camper.isPreRegisteredForNextYear || camper.isActiveThisYear
   )
@@ -71,13 +69,12 @@ export default function ConfirmationScreen({
               {camper.isPreRegisteredForNextYear ? (
                 <Tooltip title="Pre-Registered">
                   <ListItemIcon>
-                    {/* @ts-ignore Color type wasn't augmented for this */}
+                    {/* @ts-expect-error Color type wasn't augmented for this */}
                     <StarIcon color="tertiary" />
                   </ListItemIcon>
                 </Tooltip>
               ) : (
                 <ListItemIcon>
-                  {/* @ts-ignore Color type wasn't augmented for this */}
                   <CheckIcon color="primary" />
                 </ListItemIcon>
               )}

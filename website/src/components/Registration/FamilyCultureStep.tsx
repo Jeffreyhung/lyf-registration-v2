@@ -2,20 +2,17 @@ import React from "react"
 import {
   Grid,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material"
 
 import RegistrationStep  from "./RegistrationStep"
 import {
-  FormCheckboxGroup,
   FormRadioGroup,
   TextFieldWithFormValidation,
 } from "@components/Inputs"
 
 // Registration Data Context
 import {
-  RegistrationDataContext,
   RegistrationDispatchContext,
   RegistrationData,
   RegistrationActionType,
@@ -72,7 +69,6 @@ type ParentCultureStepProps = {
 
 export default function FamilyCultureStep(
   {household}: ParentCultureStepProps) {
-    const registrationState = React.useContext(RegistrationDataContext)
     const dispatch = React.useContext(RegistrationDispatchContext)
 
     const editHouseholdHandler = 
@@ -83,15 +79,6 @@ export default function FamilyCultureStep(
         keyToChange: keyToChange,
         newValue: event.target.value,
       })
-
-  const familyHouseholdMessageLabel = (
-    // TODO: Improve phrasing
-    <>
-      What would you like for your campers to understand about why you want them
-      to participate in LYF camp?
-      <br />
-    </>
-  )
 
   const disclaimer = (
     <Stack spacing={1} sx={{ paddingTop: 1 }}>

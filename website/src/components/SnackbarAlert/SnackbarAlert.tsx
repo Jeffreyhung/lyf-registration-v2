@@ -3,9 +3,7 @@ import { Alert, Snackbar } from "@mui/material"
 
 import SnackbarContext from "./SnackbarAlertContext"
 
-type SnackbarAlertProps = {}
-
-export default function SnackbarAlert({}: SnackbarAlertProps) {
+export default function SnackbarAlert() {
   const {snackbar, setSnackbar} = React.useContext(SnackbarContext)
 
   const handleClose = () => setSnackbar(null)

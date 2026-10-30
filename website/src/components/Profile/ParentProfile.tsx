@@ -7,7 +7,7 @@ type ParentProfileProps = {
   parent: Parent
 }
 
-export default function ParentProfile({parent}: ParentProfileProps) {
+export default function ParentProfile(_props: ParentProfileProps) {
   return (
     <Card>
 
