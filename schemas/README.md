@@ -42,7 +42,7 @@ flavour:
 | Sentinels | `FieldValue.serverTimestamp()` on timestamps, `arrayUnion`/`arrayRemove` on arrays (their elements are validated too), `increment` on numbers, `delete()` anywhere | rejected |
 | Timestamps / refs | real SDK objects (either SDK) | real SDK objects (either SDK) |
 | Emails | identity keys (`Family.emails`, `confirmedEmails`, `createdBy`, `Registration.familyEmails`, `Admin.addedBy`, audit `actor`/`target`) must be `normalizeEmail`-normalized; contact emails may be `""` | any string (legacy documents predate normalization) |
-| Numbers | money and counts finite and >= 0, `schemaVersion` an integer in `1..CURRENT_SCHEMA_VERSION`, `grade` an integer in `MIN_GRADE..MAX_GRADE`, `remainingSpots`/`campSizeCaps` a map keyed by `CampTrack` (any subset of tracks) | finite numbers; `remainingSpots`/`campSizeCaps` must list every track |
+| Numbers | money and caps finite and >= 0 (`remainingSpots` may go negative: over-cap admissions), `schemaVersion` an integer in `1..CURRENT_SCHEMA_VERSION`, `grade` an integer in `MIN_GRADE..MAX_GRADE`, `remainingSpots`/`campSizeCaps` a map keyed by `CampTrack` (any subset of tracks) | finite numbers; `remainingSpots`/`campSizeCaps` must list every track |
 | Returns | `XWrite` (e.g. `RegistrationWrite`), assignable to what both SDKs' `set`/`update` accept | `X` |
 
 Unknown keys are rejected by default so typos are caught. Pass

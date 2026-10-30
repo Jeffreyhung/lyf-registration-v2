@@ -226,6 +226,8 @@ async function backfillYear(
         camperName: `${asString(camper.firstName)} ${asString(
           camper.lastName
         )}`.trim(),
+        firstName: asString(camper.firstName),
+        lastName: asString(camper.lastName),
         preferredName: camper.preferredName ?? null,
         pronouns: camper.pronouns ?? null,
         parentContacts,

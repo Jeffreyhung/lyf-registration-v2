@@ -320,6 +320,8 @@ export async function createOrUpdateRegistration(
           // normalization as the camper doc / syncCamperProfile: nullable
           // text → null, birthDate → "", gender → []. Health and
           // demographics are deliberately NOT copied here (private/, role-gated).
+          firstName: camperAndRegInfo.firstName ?? "",
+          lastName: camperAndRegInfo.lastName ?? "",
           preferredName: camperAndRegInfo.preferredName ?? null,
           birthDate: camperAndRegInfo.birthDate ?? "",
           gender: camperAndRegInfo.gender ?? [],

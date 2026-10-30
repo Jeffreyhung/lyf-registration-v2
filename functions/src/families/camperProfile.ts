@@ -29,7 +29,13 @@ export type CamperProfileFields = Pick<
 export type CamperProfilePatch = Required<
   Pick<
     Registration,
-    "camperName" | "preferredName" | "birthDate" | "gender" | "pronouns"
+    | "camperName"
+    | "firstName"
+    | "lastName"
+    | "preferredName"
+    | "birthDate"
+    | "gender"
+    | "pronouns"
   >
 >;
 
@@ -62,6 +68,8 @@ export function buildCamperProfilePatch(
 ): CamperProfilePatch {
   return {
     camperName: `${camper.firstName ?? ""} ${camper.lastName ?? ""}`.trim(),
+    firstName: camper.firstName ?? "",
+    lastName: camper.lastName ?? "",
     preferredName: camper.preferredName ?? null,
     birthDate: camper.birthDate ?? "",
     gender: camper.gender ?? [],

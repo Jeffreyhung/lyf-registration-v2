@@ -79,6 +79,8 @@ describe("buildCamperProfilePatch", () => {
   it("builds camperName from first and last name and copies the profile fields", () => {
     expect(buildCamperProfilePatch(base)).toEqual({
       camperName: "Ada Lovelace",
+      firstName: "Ada",
+      lastName: "Lovelace",
       preferredName: "Addie",
       birthDate: "2014-12-10",
       gender: ["Female"],
@@ -89,6 +91,8 @@ describe("buildCamperProfilePatch", () => {
   it("normalizes missing values the way createOrUpdateRegistration writes them", () => {
     expect(buildCamperProfilePatch({firstName: "Ada"})).toEqual({
       camperName: "Ada",
+      firstName: "Ada",
+      lastName: "",
       preferredName: null,
       birthDate: "",
       gender: [],
@@ -105,7 +109,15 @@ describe("buildCamperProfilePatch", () => {
     } as Camper);
 
     expect(Object.keys(patch).sort()).toEqual(
-      ["birthDate", "camperName", "gender", "preferredName", "pronouns"].sort()
+      [
+        "birthDate",
+        "camperName",
+        "firstName",
+        "lastName",
+        "gender",
+        "preferredName",
+        "pronouns",
+      ].sort()
     );
   });
 });
@@ -121,6 +133,8 @@ describe("buildCamperProfileUpdate", () => {
       buildCamperProfileUpdate(base, {...base, firstName: "Augusta", pronouns: null})
     ).toEqual({
       camperName: "Augusta Lovelace",
+      firstName: "Augusta",
+      lastName: "Lovelace",
       preferredName: "Addie",
       birthDate: "2014-12-10",
       gender: ["Female"],

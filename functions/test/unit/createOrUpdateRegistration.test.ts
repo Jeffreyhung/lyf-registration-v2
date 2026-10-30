@@ -138,6 +138,8 @@ describe("createOrUpdateRegistration", () => {
       cabinPreference: "",
       additionalNotes: null,
       waiverFullName: "Pat Lin",
+      firstName: "Mei",
+      lastName: "Lin",
       preferredName: null,
       birthDate: "2014-05-06",
       gender: ["Female"],

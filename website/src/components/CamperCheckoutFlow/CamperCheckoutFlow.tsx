@@ -113,8 +113,11 @@ export default function CamperCheckoutFlow({
         isCheckedOut:
           !!activeReg && !!registrations.get(activeReg.path)?.isCheckedOut,
         isPreRegisteredForNextYear: !!nextYearPreReg,
-        currentGrade:
-          (!!activeReg && registrations.get(activeReg.path).grade) ?? null,
+        // null, never false: the pre-registration callable validates this as
+        // an integer grade or null.
+        currentGrade: activeReg
+          ? registrations.get(activeReg.path)?.grade ?? null
+          : null,
         nextYearPreRegStatus: nextYearPreRegStatus,
       }
     }

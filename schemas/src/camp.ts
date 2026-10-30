@@ -156,6 +156,10 @@ export type Registration = Partial<{
   // those live under private/ precisely so rules can gate them by role.
   // Kept in sync by the registration function on write and by the
   // syncCamperProfile trigger when a parent edits the camper from the profile.
+  // firstName/lastName are kept alongside camperName so exports and name
+  // matching never have to split the joined name.
+  firstName: string
+  lastName: string
   preferredName: string | null
   birthDate: string
   gender: string[]

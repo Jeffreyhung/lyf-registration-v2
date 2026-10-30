@@ -17,7 +17,7 @@
  *     for the field (`serverTimestamp()` on timestamps, `arrayUnion()` /
  *     `arrayRemove()` on arrays, `increment()` on numbers, `delete()` on
  *     anything). Emails must already be normalized (see normalizeEmail) and
- *     money / counts must be finite and >= 0. Returns the input typed as
+ *     money / caps must be finite and >= 0 (`remainingSpots` may be negative). Returns the input typed as
  *     `XWrite`, which is assignable to what both SDKs' `set()` / `update()`
  *     accept.
  *   - `validateXRead`: data read back from Firestore. Same keys, no
@@ -310,9 +310,19 @@ function amount(flavour: Flavour): z.ZodType<number> {
   return flavour === "write" ? z.number().min(0) : z.number()
 }
 
-/** Capacity counts: non-negative integers when written. */
+/** Capacity caps: non-negative integers when written. */
 function count(flavour: Flavour): z.ZodType<number> {
   return flavour === "write" ? z.int().min(0) : z.number()
+}
+
+/**
+ * Remaining-spot counts: any integer when written. Admitting campers over the
+ * cap (bypass emails, admins moving a waitlist) is a normal operational state
+ * and drives the count negative; production camp years already hold negative
+ * values, and a write that only touches one track spreads the others back.
+ */
+function spotCount(flavour: Flavour): z.ZodType<number> {
+  return flavour === "write" ? z.int() : z.number()
 }
 
 function schemaVersion(flavour: Flavour): z.ZodType<number> {
@@ -351,11 +361,14 @@ type TrackMap<F extends Flavour> = F extends "write"
   : z.ZodType<Record<CampTrack, number>>
 
 /** Per-track capacity maps: every track on read, any subset on (merge) write. */
-function trackMap<F extends Flavour>(flavour: F): TrackMap<F> {
+function trackMap<F extends Flavour>(
+  flavour: F,
+  value: z.ZodType<number> = count(flavour)
+): TrackMap<F> {
   const map =
     flavour === "write"
-      ? z.partialRecord(campTrackSchema, count(flavour))
-      : z.record(campTrackSchema, count(flavour))
+      ? z.partialRecord(campTrackSchema, value)
+      : z.record(campTrackSchema, value)
   return map as unknown as TrackMap<F>
 }
 
@@ -475,6 +488,8 @@ const registrationShape = <F extends Flavour>(f: F, mode: ObjectMode) => ({
 
   isTestData: field(f, z.boolean()),
 
+  firstName: field(f, z.string()),
+  lastName: field(f, z.string()),
   preferredName: field(f, nullableString),
   birthDate: field(f, z.string()),
   gender: arrayField(f, z.string()),
@@ -557,7 +572,8 @@ const campYearShape = <F extends Flavour>(f: F) => ({
   shirtPrice: field(f, amount(f), NUMBER_KINDS),
   siblingDiscount: field(f, amount(f), NUMBER_KINDS),
 
-  remainingSpots: field(f, trackMap(f)),
+  // May be negative: see spotCount.
+  remainingSpots: field(f, trackMap(f, spotCount(f))),
 })
 
 const adminShape = <F extends Flavour>(f: F) => ({
@@ -963,7 +979,18 @@ const buildPreRegistrationPayload = (u: UnknownKeys) =>
     camperRefsToPreRegister: z
       .array(documentPathSchema)
       .max(MAX_CAMPERS_PER_REGISTRATION),
-    camperCurrentGrades: z.array(gradeSchema.nullable()).optional(),
+    // The website derives a camper's current grade from this year's active
+    // registration and sends `false` (not null) for a camper who did not
+    // attend this year; an undefined slot is the same "no grade" case. Both
+    // normalize to null so the pre-registration fulfils with no grade.
+    camperCurrentGrades: z
+      .array(
+        z.preprocess(
+          (grade) => (grade === false || grade === undefined ? null : grade),
+          gradeSchema.nullable()
+        )
+      )
+      .optional(),
     campYear: campYearNumber,
     donationAmount: z.number().min(0),
     email: emailSchema,

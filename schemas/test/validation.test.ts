@@ -850,16 +850,27 @@ describe("validateCampYearWrite / Read", () => {
     ).toBeDefined()
   })
 
-  it("rejects unknown tracks, negative and fractional counts", () => {
+  it("accepts negative remainingSpots (over-cap admissions) but not negative caps", () => {
+    const overCap = {
+      remainingSpots: { [CampTrack.YOUNGER]: -33, [CampTrack.OLDER]: -36 },
+    }
+    expect(validateCampYearWrite(overCap)).toEqual(overCap)
+    expectIssue(
+      () =>
+        validateCampYearWrite({ campSizeCaps: { [CampTrack.YOUNGER]: -1 } }),
+      "campSizeCaps.Younger"
+    )
+    expectIssue(
+      () => validateCampYearWrite({ campTotalSizeCap: -1 }),
+      "campTotalSizeCap"
+    )
+  })
+
+  it("rejects unknown tracks and fractional counts", () => {
     expectIssue(
       () => validateCampYearWrite({ remainingSpots: { Middle: 3 } }),
       "remainingSpots",
       /Middle/
-    )
-    expectIssue(
-      () =>
-        validateCampYearWrite({ remainingSpots: { [CampTrack.YOUNGER]: -1 } }),
-      "remainingSpots.Younger"
     )
     expectIssue(
       () =>
@@ -1325,6 +1336,17 @@ describe("validatePreRegistrationPayload", () => {
     expect(validatePreRegistrationPayload(payload)).toEqual(payload)
     const { camperCurrentGrades, isTestData, ...minimal } = payload
     expect(validatePreRegistrationPayload(minimal)).toEqual(minimal)
+  })
+
+  it("normalizes `false` and missing current grades to null", () => {
+    // The website sends `false` for a camper with no active registration this
+    // year (see CamperCheckoutFlow); it must not block pre-registration.
+    expect(
+      validatePreRegistrationPayload({
+        ...payload,
+        camperCurrentGrades: [false, undefined],
+      })
+    ).toEqual({ ...payload, camperCurrentGrades: [null, null] })
   })
 
   it("requires refs (and grades, when present) to line up with campers", () => {
