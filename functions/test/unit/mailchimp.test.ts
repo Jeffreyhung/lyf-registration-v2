@@ -1,4 +1,4 @@
-import md5 from "md5";
+import {createHash} from "crypto";
 
 // Only names prefixed with "mock" may be referenced from a hoisted jest.mock factory.
 const mockLists = {
@@ -34,6 +34,7 @@ import {
   getMailchimpTag,
   getMailchimpTagForCampTrack,
   MailchimpList,
+  mailchimpSubscriberHash,
   removeMailchimpTagForCampYear,
   removeMailchimpTags,
   subscribeEmailToGeneralMailingList,
@@ -41,7 +42,19 @@ import {
 import {FakeFirestore} from "./fakeFirestore";
 
 const EMAIL = "Ada@Example.com";
+// Computed independently of the module under test.
+const md5 = (s: string) => createHash("md5").update(s).digest("hex");
 const HASH = md5("ada@example.com");
+
+describe("mailchimpSubscriberHash", () => {
+  it("is the MD5 hex digest of the lowercased email (Mailchimp's subscriber hash)", () => {
+    expect(mailchimpSubscriberHash(EMAIL)).toBe(HASH);
+    // Known vector from Mailchimp's documentation for the hash format.
+    expect(mailchimpSubscriberHash("Urist.McVankab@freddiesjokes.com")).toBe(
+      "62eeb292278cc15f5817cb78f7790b08"
+    );
+  });
+});
 
 beforeEach(() => {
   for (const fn of Object.values(mockLists)) fn.mockReset();

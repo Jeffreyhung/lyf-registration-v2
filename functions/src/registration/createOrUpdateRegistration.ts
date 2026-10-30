@@ -122,20 +122,22 @@ async function updateAndGetParents(
   familyRef: DocumentReference<Family>,
   parentsPayload: Parent[]
 ): Promise<DocumentReference<Parent>[]> {
-  const parentRefs: DocumentReference<Parent>[] = [];
-  await Promise.all(
+  // Promise.all keeps the payload order, so parentRefs[0] is always the
+  // signed-in parent (createRegistrationSession attaches the Stripe customer
+  // to it). Pushing onto an array from inside the callbacks ordered the refs
+  // by write completion instead, which could hand a co-parent's document to
+  // getStripeCustomerId.
+  return Promise.all(
     parentsPayload.map(async (parent) => {
       const parentRef = await findOrCreateParent(familyRef, parent);
-      parentRefs.push(parentRef);
       // parentDocumentFields drops undefined keys (the SDK rejects them);
       // the validator then checks what is actually written.
       await parentRef.set(validateParentWrite(parentDocumentFields(parent)), {
         merge: true,
       });
+      return parentRef;
     })
   );
-
-  return parentRefs;
 }
 
 /**

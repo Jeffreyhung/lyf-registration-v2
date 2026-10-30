@@ -1,8 +1,10 @@
 import Stripe from "stripe";
-import {config} from "dotenv";
 import {getFirestore} from "firebase-admin/firestore";
 import {createTransport} from "nodemailer";
-config();
+
+// Configuration is read from process.env. The values come from functions/.env,
+// which the Firebase CLI applies to the deployed functions' environment and to
+// the emulator, so nothing needs to be loaded at runtime.
 
 // Database IDs are configuration, not code: v2 runs in the same Firebase
 // project as v1, whose data lives in "(default)" and "internal-test".
