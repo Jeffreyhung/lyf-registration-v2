@@ -3,8 +3,8 @@
 Everything deploys from GitHub Actions on merge to `main`. Pull requests only run
 CI (`ci.yml`, `test-firestore-rules.yml`); nothing is deployed from a PR.
 
-| Workflow                                                     | Deploys                                                    | Triggered by                                                                         |
-| ------------------------------------------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Workflow                                                        | Deploys                                                    | Triggered by                                                                         |
+| --------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | [deploy-website.yml](../.github/workflows/deploy-website.yml)   | Gatsby site → GitHub Pages                                 | every push to `main`                                                                 |
 | [deploy-firebase.yml](../.github/workflows/deploy-firebase.yml) | Cloud Functions (`v2` codebase), Firestore rules + indexes | pushes to `main` that touch `functions/`, `schemas/`, `firestore.*`, `firebase.json` |
 
