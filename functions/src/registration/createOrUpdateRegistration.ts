@@ -27,6 +27,7 @@ import {
   findOrCreateRegistration,
 } from "../registrationUtils";
 import {assertCallerEmailInList} from "../utils/auth";
+import {parentDocumentFields} from "./parentDocumentFields";
 
 type CamperAndStatus = {
   camperName: string;
@@ -110,19 +111,9 @@ async function updateAndGetParents(
     parentsPayload.map(async (parent) => {
       const parentRef = await findOrCreateParent(familyRef, parent);
       parentRefs.push(parentRef);
-      await parentRef.set(
-        {
-          email: parent.email ? normalizeEmail(parent.email) : parent.email,
-          firstName: parent.firstName,
-          lastName: parent.lastName,
-          phoneNumber: parent.phoneNumber,
-          lineId: parent.lineId,
-          subscribeToMailingList: parent.subscribeToMailingList,
-        },
-        {
-          merge: true,
-        }
-      );
+      await parentRef.set(parentDocumentFields(parent), {
+        merge: true,
+      });
     })
   );
 
