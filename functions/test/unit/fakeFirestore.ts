@@ -8,10 +8,15 @@
  * Collections are addressed by their full path ("families/f1/campers"), so a
  * sub-collection is just a collection whose name contains slashes.
  *
+ * Top-level FieldValue sentinels (serverTimestamp, arrayUnion, arrayRemove,
+ * increment, delete) are applied on write the way the server would, so a
+ * test can assert on the resulting document instead of on sentinel objects.
+ *
  * runTransaction() runs the callback once against the store directly (no
  * isolation, no retries); it exists so code that reads-then-writes inside a
  * transaction can be exercised, not to test concurrency.
  */
+import {Timestamp} from "firebase-admin/firestore";
 import type {
   CollectionReference,
   DocumentReference,
@@ -27,6 +32,73 @@ function splitPath(path: string): {parent: string | null; last: string} {
   return i === -1 ?
     {parent: null, last: path} :
     {parent: path.slice(0, i), last: path.slice(i + 1)};
+}
+
+// Admin SDK sentinels are `*Transform` subclasses of FieldValue exposing a
+// `methodName` getter ("FieldValue.arrayUnion", ...); array transforms carry
+// `elements` and the increment transform carries `operand`.
+type Sentinel = {
+  methodName?: string;
+  elements?: unknown[];
+  operand?: number;
+};
+
+function sentinelKind(value: unknown): string | null {
+  if (value === null || typeof value !== "object") return null;
+  const name = (value as Sentinel).methodName;
+  return typeof name === "string" && name.startsWith("FieldValue.") ?
+    name.slice("FieldValue.".length) :
+    null;
+}
+
+/** DocumentReferences compare by path; everything else by identity/value. */
+function sameElement(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  const pathA = (a as {path?: unknown})?.path;
+  const pathB = (b as {path?: unknown})?.path;
+  return typeof pathA === "string" && pathA === pathB;
+}
+
+/** Apply `data` on top of `existing`, resolving top-level sentinels. */
+function applyWrite(existing: DocData, data: DocData): DocData {
+  const out: DocData = {...existing};
+  for (const [key, value] of Object.entries(data)) {
+    const kind = sentinelKind(value);
+    const current = out[key];
+    switch (kind) {
+      case null:
+        out[key] = value;
+        break;
+      case "serverTimestamp":
+        out[key] = Timestamp.now();
+        break;
+      case "delete":
+        delete out[key];
+        break;
+      case "increment":
+        out[key] =
+          (typeof current === "number" ? current : 0) +
+          ((value as Sentinel).operand ?? 0);
+        break;
+      case "arrayUnion": {
+        const arr = Array.isArray(current) ? [...current] : [];
+        for (const el of (value as Sentinel).elements ?? []) {
+          if (!arr.some((x) => sameElement(x, el))) arr.push(el);
+        }
+        out[key] = arr;
+        break;
+      }
+      case "arrayRemove": {
+        const arr = Array.isArray(current) ? current : [];
+        const remove = (value as Sentinel).elements ?? [];
+        out[key] = arr.filter((x) => !remove.some((el) => sameElement(x, el)));
+        break;
+      }
+      default:
+        throw new Error(`FakeFirestore does not support FieldValue.${kind}`);
+    }
+  }
+  return out;
 }
 
 export class FakeDocRef {
@@ -64,7 +136,7 @@ export class FakeDocRef {
     this.db.write(
       this.collectionName,
       this.id,
-      options?.merge ? {...existing, ...data} : {...data}
+      applyWrite(options?.merge ? existing : {}, data)
     );
   }
 
@@ -73,7 +145,7 @@ export class FakeDocRef {
     if (existing === undefined) {
       throw new Error(`No document to update: ${this.path}`);
     }
-    this.db.write(this.collectionName, this.id, {...existing, ...data});
+    this.db.write(this.collectionName, this.id, applyWrite(existing, data));
   }
 
   /** Like the SDK, fails with gRPC ALREADY_EXISTS (6) when the doc exists. */
@@ -85,7 +157,11 @@ export class FakeDocRef {
       err.code = 6;
       throw err;
     }
-    this.db.write(this.collectionName, this.id, {...data});
+    this.db.write(this.collectionName, this.id, applyWrite({}, data));
+  }
+
+  async delete() {
+    this.db.remove(this.collectionName, this.id);
   }
 
   /** Typed view for passing into code under test. */
@@ -173,12 +249,15 @@ export class FakeCollection extends FakeQuery {
   }
 }
 
+/** Anything with a get(): a document ref or a (collection) query. */
+type Gettable = {get: () => Promise<unknown>};
+
 /** The subset of Transaction the registration code uses. */
 export class FakeTransaction {
   constructor(private readonly db: FakeFirestore) {}
 
-  get(ref: FakeDocRef) {
-    return ref.get();
+  get<T extends Gettable>(refOrQuery: T): ReturnType<T["get"]> {
+    return refOrQuery.get() as ReturnType<T["get"]>;
   }
 
   getAll(...refs: FakeDocRef[]) {
@@ -192,6 +271,11 @@ export class FakeTransaction {
 
   update(ref: FakeDocRef, data: DocData): this {
     void ref.update(data);
+    return this;
+  }
+
+  delete(ref: FakeDocRef): this {
+    void ref.delete();
     return this;
   }
 }
@@ -243,8 +327,17 @@ export class FakeFirestore {
     this.store.get(collectionName)!.set(id, data);
   }
 
+  remove(collectionName: string, id: string): void {
+    this.store.get(collectionName)?.delete(id);
+  }
+
   entries(collectionName: string): Iterable<[string, DocData]> {
     return this.store.get(collectionName)?.entries() ?? [];
+  }
+
+  /** Every document in a collection, as {id, data} in insertion order. */
+  all(collectionName: string): {id: string; data: DocData}[] {
+    return [...this.entries(collectionName)].map(([id, data]) => ({id, data}));
   }
 
   /** Typed view for passing into code under test. */
