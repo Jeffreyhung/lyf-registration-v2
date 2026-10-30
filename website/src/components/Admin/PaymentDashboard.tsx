@@ -72,22 +72,27 @@ export default function PaymentDashboard({}: PaymentDashboardProps) {
   const { firestore } = React.useContext(ProdContext)
   const [data, loading, error] = usePayments({ isAdmin, adminRole, firestore })
 
-  // We want most recent payments first
-  const sortedData = data.sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+  // We want most recent payments first. Sorted on a copy (the hook's array is
+  // memoised and shared) and only when a new snapshot arrives.
+  const rows = React.useMemo(
+    () =>
+      [...data]
+        .sort(
+          (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+        )
+        .map((payment, index) => ({
+          id: index.toString(),
+          customerName: payment.customerName ?? "",
+          customerEmail: payment.customerEmail ?? "",
+          customerId: payment.customerId ?? "",
+          donation: payment.donation ?? 0,
+          total: payment.total ?? 0,
+          stripeId: payment.stripeId ?? "",
+
+          createdAt: payment.createdAt?.toDate() ?? new Date(0),
+        })),
+    [data]
   )
-
-  const rows = sortedData.map((payment, index) => ({
-    id: index.toString(),
-    customerName: payment.customerName ?? "",
-    customerEmail: payment.customerEmail ?? "",
-    customerId: payment.customerId ?? "",
-    donation: payment.donation ?? 0,
-    total: payment.total ?? 0,
-    stripeId: payment.stripeId ?? "",
-
-    createdAt: payment.createdAt?.toDate() ?? new Date(0),
-  }))
 
   // Eventually want to make this a dashboard that contains charts for payments and donations.
   return (

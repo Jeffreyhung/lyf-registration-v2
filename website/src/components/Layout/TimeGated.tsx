@@ -1,9 +1,9 @@
 import React from "react"
 import dayjs, { Dayjs } from "dayjs"
-import { getServerDate } from "@nodeguy/server-date"
 import { Grid, CircularProgress } from "@mui/material"
 
 import AuthContext from "@components/Auth/AuthContext"
+import { getServerNow } from "@utils/serverTime"
 
 type TimeGatedProps = React.PropsWithChildren<{
   hideAfterDateTime: Dayjs
@@ -39,7 +39,9 @@ export default function TimeGated({
   const [isLoading, setIsLoading] = React.useState(true)
   React.useEffect(() => {
     const checkTime = async () => {
-      const { date } = await getServerDate()
+      // Shared, sampled once per session; the local clock is the fallback
+      // (which is also what getServerDate() returned when every sample failed).
+      const date = await getServerNow().catch(() => new Date())
 
       if (!forceHide && typeof window !== "undefined") {
         setIsHidden(

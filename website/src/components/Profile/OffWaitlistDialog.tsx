@@ -9,11 +9,13 @@ import {
   DialogTitle,
   Stack,
 } from "@mui/material"
-import ConfettiExplosion from "react-confetti-explosion"
-
 import { LinkButton } from "@components/Button"
 import Sparkles from "@components/Sparkles"
 import usePrefersReducedMotion from "@hooks/usePrefersReducedMotion"
+
+// react-confetti-explosion brings react-jss along (~45 KB minified); it is
+// only needed the moment the dialog opens, so it loads on demand.
+const ConfettiExplosion = React.lazy(() => import("react-confetti-explosion"))
 
 type OffWaitlistDialogProps = {
   shouldShowDialog: boolean
@@ -45,12 +47,14 @@ export default function OffWaitlistDialog({
         {/* Send a flurry of confetti out from the center of the dialog */}
         <Stack direction="row" justifyContent="center">
           {!prefersReducedMotion && (
-            <ConfettiExplosion
-              force={0.8}
-              duration={2500}
-              particleCount={200}
-              width={2000}
-            />
+            <React.Suspense fallback={null}>
+              <ConfettiExplosion
+                force={0.8}
+                duration={2500}
+                particleCount={200}
+                width={2000}
+              />
+            </React.Suspense>
           )}
         </Stack>
 
@@ -63,7 +67,8 @@ export default function OffWaitlistDialog({
 
         <DialogContent>
           <DialogContentText textAlign="center">
-            Please complete registration and payment to confirm your spot at TACL-LYF Camp
+            Please complete registration and payment to confirm your spot at
+            TACL-LYF Camp
           </DialogContentText>
         </DialogContent>
 

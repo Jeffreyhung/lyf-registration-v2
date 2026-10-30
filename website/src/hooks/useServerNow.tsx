@@ -1,6 +1,6 @@
 import React from "react"
 import dayjs, { Dayjs } from "dayjs"
-import { getServerDate } from "@nodeguy/server-date"
+import { getServerNow } from "@utils/serverTime"
 
 /**
  * The current time according to the server, fetched once on mount. Null
@@ -11,8 +11,8 @@ export default function useServerNow(): Dayjs | null {
   const [now, setNow] = React.useState<Dayjs | null>(null)
   React.useEffect(() => {
     let cancelled = false
-    getServerDate()
-      .then(({ date }) => {
+    getServerNow()
+      .then((date) => {
         if (!cancelled) setNow(dayjs(date))
       })
       .catch(() => {

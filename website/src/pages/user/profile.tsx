@@ -193,6 +193,9 @@ const editableColumns: GridColDef[] = [
   },
 ]
 
+// Previous-year grid: read-only, so its columns never change.
+const previousColumns: GridColDef[] = columns.concat(editableColumns)
+
 const ProfilePage: React.FC<PageProps> = () => {
   const { isSignedIn, user } = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
@@ -211,48 +214,66 @@ const ProfilePage: React.FC<PageProps> = () => {
     includeWaitlistPosition:
       useCampSchedule(currentYear).campInfo?.showWaitlistPosition === true, // camps/{year}.showWaitlistPosition (Camp Year tab); off since 2026
   })
-  const campers = new Map(familyData.campers.map((c) => [c.ref.path, c]))
+  // Rows are rebuilt only when the family data changes; the grids below
+  // otherwise re-render (edit mode, column menus) with the same inputs.
+  const campers = React.useMemo(
+    () => new Map(familyData.campers.map((c) => [c.ref.path, c])),
+    [familyData.campers]
+  )
   const theme = useTheme()
   const [shouldShowOffWaitlistDialog, setShouldShowOffWaitlistDialog] =
     React.useState(false)
 
-  const getRowsForYear = (lowerBound: number, upperBound: number) => {
-    const rows: ParentDashboardRow[] = Array.from(familyData.registrations)
-      .filter(([, reg]) => {
-        const year = parseInt(reg.campYear)
-        return year >= lowerBound && year <= upperBound
-      })
-      .map(([, reg], index) => {
-        const camper = campers.get(reg.camper.path)
-        return {
-          id: index.toString(),
-          registrationId: reg.ref.path,
-          camperId: camper.ref.path,
-          year: reg.campYear,
-          firstName: camper.firstName ?? "",
-          name: `${camper.firstName} ${camper.lastName}`,
-          gender: camper.gender?.join(", ") || "",
-          birthday: camper.birthDate,
-          grade: reg.grade,
-          shirtSize: reg.shirtSize || "",
-          dietAndFoodAllergies: camper.health?.dietAndFoodAllergies || "",
-          medicalConditions: camper.health?.medicalConditions || "",
-          createdAt: reg.createdAt?.toDate() || "",
-          campTrack: reg.campTrack || "N/A",
-          status: [reg.status, reg.waitlistPosition, reg.campTrack],
-          isPreRegistered: reg.isPreRegistered ?? false,
-        }
-      })
-    return rows
-  }
+  const getRowsForYear = React.useCallback(
+    (lowerBound: number, upperBound: number) => {
+      const rows: ParentDashboardRow[] = Array.from(familyData.registrations)
+        .filter(([, reg]) => {
+          const year = parseInt(reg.campYear)
+          return year >= lowerBound && year <= upperBound
+        })
+        .map(([, reg], index) => {
+          const camper = campers.get(reg.camper.path)
+          return {
+            id: index.toString(),
+            registrationId: reg.ref.path,
+            camperId: camper.ref.path,
+            year: reg.campYear,
+            firstName: camper.firstName ?? "",
+            name: `${camper.firstName} ${camper.lastName}`,
+            gender: camper.gender?.join(", ") || "",
+            birthday: camper.birthDate,
+            grade: reg.grade,
+            shirtSize: reg.shirtSize || "",
+            dietAndFoodAllergies: camper.health?.dietAndFoodAllergies || "",
+            medicalConditions: camper.health?.medicalConditions || "",
+            createdAt: reg.createdAt?.toDate() || "",
+            campTrack: reg.campTrack || "N/A",
+            status: [reg.status, reg.waitlistPosition, reg.campTrack],
+            isPreRegistered: reg.isPreRegistered ?? false,
+          }
+        })
+      return rows
+    },
+    [familyData.registrations, campers]
+  )
 
-  const curRows = getRowsForYear(currentYear, currentYear)
-  const prevRows = getRowsForYear(dayjs(0).year(), currentYear - 1)
+  const curRows = React.useMemo(
+    () => getRowsForYear(currentYear, currentYear),
+    [getRowsForYear, currentYear]
+  )
+  const prevRows = React.useMemo(
+    () => getRowsForYear(dayjs(0).year(), currentYear - 1),
+    [getRowsForYear, currentYear]
+  )
 
   // Keep track of all the campers from this year who have been moved off the waitlist
   // and Pending Payment.
-  const pendingPaymentRows = curRows.filter(
-    (reg) => reg.status[0] === RegistrationStatus.PENDING_PAYMENT
+  const pendingPaymentRows = React.useMemo(
+    () =>
+      curRows.filter(
+        (reg) => reg.status[0] === RegistrationStatus.PENDING_PAYMENT
+      ),
+    [curRows]
   )
 
   React.useEffect(() => {
@@ -327,55 +348,64 @@ const ProfilePage: React.FC<PageProps> = () => {
     return newRow
   }
 
-  const handleEditClick = (id: GridRowId) => () => {
-    setEditing(true)
-    setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })
-  }
-  const handleCancelClick = (id: GridRowId) => () => {
-    setEditing(false)
-    setRowModesModel({
-      ...rowModesModel,
-      [id]: { mode: GridRowModes.View, ignoreModifications: true },
-    })
-  }
-  const handleConfirmClick = (id: GridRowId) => () => {
-    setEditing(false)
-    setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
-  }
+  // The actions column closes over the row-mode model, so the column list
+  // for the current-year grid changes only when a row enters or leaves edit
+  // mode rather than on every render.
+  const currentColumns: GridColDef[] = React.useMemo(() => {
+    const handleEditClick = (id: GridRowId) => () => {
+      setEditing(true)
+      setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })
+    }
+    const handleCancelClick = (id: GridRowId) => () => {
+      setEditing(false)
+      setRowModesModel({
+        ...rowModesModel,
+        [id]: { mode: GridRowModes.View, ignoreModifications: true },
+      })
+    }
+    const handleConfirmClick = (id: GridRowId) => () => {
+      setEditing(false)
+      setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
+    }
 
-  const actions: GridColDef = {
-    field: "actions",
-    headerName: "Actions",
-    type: "actions",
-    width: 85,
-    getActions: ({ id }) =>
-      rowModesModel[id]?.mode === GridRowModes.Edit
-        ? [
-            <Tooltip title="Save" disableInteractive>
-              <GridActionsCellItem
-                icon={<SaveIcon />}
-                label="Save"
-                onClick={handleConfirmClick(id)}
-              />
-            </Tooltip>,
-            <Tooltip title="Restore" disableInteractive>
-              <GridActionsCellItem
-                icon={<RestoreIcon />}
-                label="Restore"
-                onClick={handleCancelClick(id)}
-              />
-            </Tooltip>,
-          ]
-        : [
-            <Tooltip title="Edit" disableInteractive>
-              <GridActionsCellItem
-                icon={<EditIcon />}
-                label="Edit"
-                onClick={handleEditClick(id)}
-              />
-            </Tooltip>,
-          ],
-  }
+    const actions: GridColDef = {
+      field: "actions",
+      headerName: "Actions",
+      type: "actions",
+      width: 85,
+      getActions: ({ id }) =>
+        rowModesModel[id]?.mode === GridRowModes.Edit
+          ? [
+              <Tooltip title="Save" disableInteractive>
+                <GridActionsCellItem
+                  icon={<SaveIcon />}
+                  label="Save"
+                  onClick={handleConfirmClick(id)}
+                />
+              </Tooltip>,
+              <Tooltip title="Restore" disableInteractive>
+                <GridActionsCellItem
+                  icon={<RestoreIcon />}
+                  label="Restore"
+                  onClick={handleCancelClick(id)}
+                />
+              </Tooltip>,
+            ]
+          : [
+              <Tooltip title="Edit" disableInteractive>
+                <GridActionsCellItem
+                  icon={<EditIcon />}
+                  label="Edit"
+                  onClick={handleEditClick(id)}
+                />
+              </Tooltip>,
+            ],
+    }
+
+    return columns
+      .concat(actions)
+      .concat(editableColumns.map((c) => ({ ...c, editable: true })))
+  }, [rowModesModel])
 
   // Query
 
@@ -409,9 +439,7 @@ const ProfilePage: React.FC<PageProps> = () => {
           >
             <DataGrid
               rows={curRows}
-              columns={columns
-                .concat(actions)
-                .concat(editableColumns.map((c) => ({ ...c, editable: true })))}
+              columns={currentColumns}
               loading={configLoading || loading || saving}
               editMode="row"
               rowModesModel={rowModesModel}
@@ -451,7 +479,7 @@ const ProfilePage: React.FC<PageProps> = () => {
           <Box>
             <DataGrid
               rows={prevRows}
-              columns={columns.concat(editableColumns)}
+              columns={previousColumns}
               loading={configLoading || loading || saving}
               initialState={{
                 pagination: {
