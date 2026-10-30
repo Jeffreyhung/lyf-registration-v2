@@ -37,6 +37,10 @@ type useRegistrationsProps = {
 type FamilyData = {
   parents: Parent[]
   familyId: string
+  // The family document (address, household culture, account emails) behind
+  // the dashboard's family columns and the exports. Loaded in the second
+  // pass, one read per family, so it arrives after first paint.
+  familyData?: Family
 }
 
 export type RegistrationData = Registration &
@@ -153,6 +157,12 @@ export default function useRegistrations({
   const privateDataMap = React.useRef<Map<string, PrivateData>>(undefined)
   // @ts-ignore Same as above
   const privateInFlight = React.useRef<Set<string>>(undefined)
+  // Family documents by family id (address / household for the grid columns),
+  // plus the ids whose reads are still in flight.
+  // @ts-ignore Same as above
+  const familyDocMap = React.useRef<Map<string, Family>>(undefined)
+  // @ts-ignore Same as above
+  const familyInFlight = React.useRef<Set<string>>(undefined)
   // Bumped whenever the caches are reset. Async continuations compare the
   // generation they started under with the current one and drop their results
   // if the role, year or Firestore instance changed underneath them.
@@ -164,6 +174,8 @@ export default function useRegistrations({
     familyDataMap.current = new Map()
     privateDataMap.current = new Map()
     privateInFlight.current = new Set()
+    familyDocMap.current = new Map()
+    familyInFlight.current = new Set()
     generation.current += 1
   }
 
@@ -237,6 +249,9 @@ export default function useRegistrations({
         ...data,
         parents: (data.parentContacts ?? []).map(parentContactToParent),
         familyId: familyRef?.id ?? "",
+        familyData: familyRef
+          ? familyDocMap.current.get(familyRef.id)
+          : undefined,
       }
     }
 
@@ -278,9 +293,13 @@ export default function useRegistrations({
           )
         }
 
-        familyData = { parents: parentsData, familyId }
+        const familyDoc = fam.exists() ? (fam.data() as Family) : undefined
+        familyData = { parents: parentsData, familyId, familyData: familyDoc }
         if (isCurrent()) {
           familyDataMap.current.set(familyId, familyData)
+          if (familyDoc) {
+            familyDocMap.current.set(familyId, familyDoc)
+          }
         }
       }
 
@@ -390,6 +409,71 @@ export default function useRegistrations({
       publish()
     }
 
+    // Second pass (every admin role): the family document behind each
+    // registration, for the address / household / family-emails columns and
+    // the exports. One read per family, cached, merged into every row of that
+    // family. Claimed synchronously like the private reads.
+    const claimFamilyRefsNeedingLoad = (
+      regs: QueryDocumentSnapshot<Registration>[]
+    ): DocumentReference<Family>[] => {
+      const refs = new Map<string, DocumentReference<Family>>()
+      regs.forEach((reg) => {
+        const familyRef = reg.data().camper?.parent?.parent as
+          | DocumentReference<Family>
+          | undefined
+        if (
+          familyRef &&
+          !familyDocMap.current.has(familyRef.id) &&
+          !familyInFlight.current.has(familyRef.id)
+        ) {
+          refs.set(familyRef.id, familyRef)
+          familyInFlight.current.add(familyRef.id)
+        }
+      })
+      return Array.from(refs.values())
+    }
+
+    const applyFamily = (familyId: string, family: Family) => {
+      if (!isCurrent()) {
+        return
+      }
+      familyDocMap.current.set(familyId, family)
+      regDataMap.current.forEach((row, id) => {
+        if (row.familyId === familyId) {
+          regDataMap.current.set(id, { ...row, familyData: family })
+        }
+      })
+    }
+
+    const loadFamilyData = async (
+      regs: QueryDocumentSnapshot<Registration>[]
+    ) => {
+      const refs = claimFamilyRefsNeedingLoad(regs)
+      if (refs.length === 0) {
+        return
+      }
+      let sinceLastPublish = 0
+      await mapWithConcurrency(refs, PRIVATE_READ_CONCURRENCY, async (ref) => {
+        try {
+          const fam = await getDoc<Family, DocumentData>(ref)
+          if (fam.exists()) {
+            applyFamily(ref.id, fam.data())
+          }
+        } catch (err) {
+          recordError(`failed to load family ${ref.id}`, err)
+        } finally {
+          if (isCurrent()) {
+            familyInFlight.current.delete(ref.id)
+          }
+        }
+        if (++sinceLastPublish >= PRIVATE_READ_CONCURRENCY) {
+          sinceLastPublish = 0
+          publish()
+        }
+      })
+      publish()
+    }
+
     async function combineData() {
       if (!values) {
         return
@@ -460,9 +544,10 @@ export default function useRegistrations({
         publish()
       }
 
-      // Pass 2: health / demographics for the roles allowed to see them.
+      // Pass 2: the family document for every row, plus health /
+      // demographics for the roles allowed to see them.
       if (isCurrent()) {
-        await loadPrivateData(changed)
+        await Promise.all([loadFamilyData(changed), loadPrivateData(changed)])
       }
 
       if (firstError && isCurrent()) {

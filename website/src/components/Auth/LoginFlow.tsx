@@ -78,8 +78,27 @@ export default function LoginFlow({}: LoginFlowProps) {
 
   /*** Google Sign-In ***/
   const googleProvider = new GoogleAuthProvider()
-  const handleGoogleSignIn = () => {
-    signInWithPopup(firebaseAuth, googleProvider)
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithPopup(firebaseAuth, googleProvider)
+    } catch (error) {
+      const code = (error as FirebaseError).code
+      // The user closed the popup, or clicked the button again before the
+      // first popup finished. Neither is a failure worth reporting.
+      if (
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request"
+      ) {
+        return
+      }
+      setSnackbar({
+        children:
+          code === "auth/popup-blocked"
+            ? "Your browser blocked the sign-in popup. Allow popups for this site and try again, or sign in with an email link instead."
+            : "Failed to sign in with Google. Please try again or sign in with an email link instead.",
+        severity: "error",
+      })
+    }
   }
 
   /*** Submitted and Sign In Flow ***/
