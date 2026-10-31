@@ -241,7 +241,7 @@ Each workspace has its own conventions; match the file you are in.
   reviewer must do (e.g. run `yarn install` and commit the lockfile, deploy
   order for data + code changes, admin roles to grant).
 - Data-plus-code changes need a rollout order (rules → data → functions →
-  website); write it down as the "One-time rollout order" in
+  website); write it down as the rollout appendix at the end of
   `docs/admin-runbook.md` does.
 - This repo is commonly worked on from a fork with `origin` = the fork and
   `upstream` = `TACL-LYF/lyf-registration-v2`. `gh` defaults to `upstream`,
