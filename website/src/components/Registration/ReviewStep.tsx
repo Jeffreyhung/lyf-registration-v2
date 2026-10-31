@@ -28,6 +28,7 @@ import {
   RegistrationData,
   RegistrationDataContext,
   RegistrationDispatchContext,
+  clearSavedRegistration,
 } from "./RegistrationDataContext"
 import ReviewStepOrderSummaryItems from "./ReviewStepOrderSummaryItems"
 
@@ -175,7 +176,7 @@ export default function ReviewStep({
     if (!sessionId && (success || isWaitlist)) {
       setIsWaitlistConfirmed(isWaitlist)
       setActiveStep(1000)
-      window.localStorage.removeItem("registration")
+      clearSavedRegistration()
       return
     }
 

@@ -11,6 +11,7 @@ import { Avatar, IconButton, Menu, MenuItem } from "@mui/material"
 import AuthContext from "./AuthContext"
 import useAnchorElement from "@hooks/useAnchorElement"
 import { firebaseAuth } from "@utils/firebaseApp"
+import { clearSavedRegistration } from "@components/Registration/RegistrationDataContext"
 
 export default function SignInMenu() {
   const { isSignedIn, user, isAdmin } = React.useContext(AuthContext)
@@ -47,7 +48,7 @@ export default function SignInMenu() {
         )}
         {isSignedIn && (
           <MenuItem onClick={() => {
-            window.localStorage.removeItem("registration")
+            clearSavedRegistration()
             window.localStorage.removeItem("emailForSignIn")
             window.localStorage.removeItem("user_id")
             window.localStorage.removeItem("campYear")
