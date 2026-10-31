@@ -16,12 +16,11 @@ directly, and Cloud Functions handle money, email, Slack and privileged writes.
 v2 shares the Firebase project `lyf-registration` with the still-running v1
 site. v1 owns the `(default)` and `internal-test` Firestore databases and the
 unsuffixed function names; v2 owns the named databases `lyf-v2` (prod) and
-`lyf-v2-test` (test) and deploys every function with a `V2` suffix. As of
-late October 2026, `https://lyf-registration.tacl.org` is still v1 (Netlify,
-repo `TACL-LYF/lyf-registration`); v2 is served from GitHub Pages at
-`tacl-lyf.github.io/lyf-registration-v2` until cutover. If a Sentry issue's
-document URI is the tacl.org host, look in the v1 repo first — both sites
-report to the same Sentry project.
+`lyf-v2-test` (test) and deploys every function with a `V2` suffix. Until
+cutover, `https://lyf-registration.tacl.org` is still v1 (Netlify, repo
+`TACL-LYF/lyf-registration`) and v2 is served from GitHub Pages at the URL set
+in `website/gatsby-config.ts`. If a Sentry issue's document URI is the tacl.org
+host, look in the v1 repo first — both sites report to the same Sentry project.
 
 ## Workspace map
 
@@ -36,7 +35,7 @@ may be newer because `.yarnrc` sets `--ignore-engines`.
 | `firestore-rules-tests/` | `firestore-rules-tests` | Role × collection matrix for `firestore.rules`, run against the Firestore emulator. |
 | `small-group-pairing/` | `small-group-pairing` | Pure TS pairing algorithm used by the admin dashboard. |
 | `scripts/` | `lyf-registration-scripts` | One-off Admin SDK migrations, seeding and stats (`scripts/src/*.ts`). Exports moved to the dashboard; see `scripts/run.sh`. |
-| `migration/` | — | 2023 Python migration from legacy Postgres. Historical; do not touch. |
+| `migration/` | — | 2023 Python import of the legacy camp data. Historical; do not touch. |
 | `docs/` | — | Design notes and assessments (e.g. Firestore → Cloud SQL assessment). |
 
 Root files that matter: `firestore.rules` and `firestore.indexes.json` (deployed
@@ -46,8 +45,8 @@ predeploy hooks: build schemas, lint, build, isolate, copy `.env`), `.github/wor
 ## Setup and everyday commands
 
 ```bash
-yarn install                                   # root, once; husky installs the pre-commit hook
-cp functions/.env.example functions/.env       # values from the Bitwarden item "lyf-registration env var"
+yarn install                                   # root, once
+cp functions/.env.example functions/.env       # values: see functions/README.md
 cp website/.env.example website/.env
 ```
 
@@ -66,6 +65,10 @@ anything that imports them type-checks.
 | Website production build | `yarn workspace lyf-registration-website build` |
 | Emulators (functions + firestore + auth) | `yarn emulators` (root; runs `functions:isolate` first), then `scripts/seed-emulator.sh` to seed `config/site`, sample camp years and admin docs |
 | Admin SDK script | `cd scripts && yarn build && node lib/<name>.js` with Application Default Credentials for a `tacl.org` account that has access to the project (the service-account key `scripts/run.sh` references is not checked in) |
+
+There is **no pre-commit hook** in this repository (the root `package.json`
+carries a lint-staged config, but no `.husky/pre-commit` is committed), so run
+the lint, format and type checks yourself before pushing.
 
 Deploys are **not** run by hand from a checkout. Merge to `main` and GitHub
 Actions deploys (see "CI and deployment").
@@ -116,9 +119,9 @@ Change one, change the other in the same PR.
   check that trigger is deployed and the two rosters match before debugging
   rules.
 - **`remainingSpots` goes negative in production.** Over-cap admissions are
-  normal: as of 2026-10-29 `camps/2026` and `camps/2025` carry negative
-  per-track counts, and `camps/2024.remainingSpots` is a bare number rather
-  than a `{Younger, Older}` map. Validators and rewrites must accept negative
+  normal: live `camps/{year}` documents carry negative per-track counts, and
+  older years store `remainingSpots` as a bare number rather than a
+  `{Younger, Older}` map. Validators and rewrites must accept negative
   integers and the legacy shape; a `min(0)` check broke writes once already.
 - **`camps/{year}` and `config/site` are public-read.** Nothing personal may be
   stored there. Configuration fields are written only by `manageCampYear`;
@@ -146,16 +149,17 @@ Change one, change the other in the same PR.
 
 Each workspace has its own conventions; match the file you are in.
 
-- **`functions/`** follows `eslint-config-google` style via the flat config
-  `functions/eslint.config.mts`: semicolons, double quotes, no spaces inside
-  braces (`{db}`), trailing commas. It is **not** prettier-clean and must not
-  be prettier-formatted; the root lint-staged `prettier --check` is bypassed
-  for these files by existing practice. Run `yarn workspace functions lint`
-  instead.
+- **`functions/`** is written in `eslint-config-google` style by convention:
+  semicolons, double quotes, no spaces inside braces (`{db}`), trailing
+  commas. Note that the flat config `functions/eslint.config.mts` only enables
+  the `@eslint/js`, `typescript-eslint` and `eslint-plugin-react` recommended
+  rules, so `yarn workspace functions lint` catches correctness problems but
+  **not** style drift — copy the surrounding code. The workspace is **not**
+  prettier-clean and must never be prettier-formatted.
 - **`website/`, `schemas/`, `scripts/`, `small-group-pairing/`** have a
   `.prettierrc` (2 spaces, **no semicolons**; `scripts` and
   `small-group-pairing` also `bracketSpacing: false`). Format only the files
-  you change; the pre-commit hook runs `prettier --check` on staged JS/TS.
+  you change, with that workspace's `.prettierrc`.
 - TypeScript is strict in `functions/`; the website's tsconfig is looser but
   CI type-checks it, so keep it clean. Avoid `any` in new code.
 - Comments explain *why* (constraints, history, invariants), as the existing
@@ -171,20 +175,21 @@ Each workspace has its own conventions; match the file you are in.
   the error Slack channel as the existing handlers do. Tests live under
   `functions/test/unit/` (never under `src/`, which is the deploy bundle) and
   use `fakeFirestore.ts` instead of the emulator.
-- Email templates are MJML + Handlebars under `functions/src/emailTemplates/`;
-  the `copy-files` step copies them into `lib/`, so a new template needs no
-  build change but must keep the `.mjml` extension.
+- Email templates are MJML files under `functions/src/emailTemplates/`,
+  compiled with `mjml2html` at runtime; the `copy-files` step copies them into
+  `lib/`, so a new template needs no build change but must keep the `.mjml`
+  extension.
 
 ## Testing expectations
 
 - Unit tests are required for pricing, capacity, window, validation and
   auth logic (`functions/test/unit/`, `schemas/test/`). Dashboard UI has no
   test harness; describe manual verification in the PR instead.
-- `yarn workspace functions test` runs ts-jest **with type checking** and can
-  take 15–25 minutes cold on a slow disk; cached runs are seconds. For fast
-  iteration, point jest at a scratch config with `isolatedModules: true,
-  diagnostics: false`, then do the final run with the repo config (or
-  `tsc -p functions/tsconfig.test.json --noEmit`) before pushing.
+- `yarn workspace functions test` runs ts-jest **with type checking** and is
+  slow on a cold cache. For fast iteration, point jest at a scratch config
+  with `isolatedModules: true, diagnostics: false`, then do the final run
+  with the repo config (or `tsc -p functions/tsconfig.test.json --noEmit`)
+  before pushing.
 - Any change to `firestore.rules`, `ROLE_CAPABILITIES` or the collections
   they guard needs the rules suite run against the emulator and, usually, a
   new case in `firestore-rules-tests/rules.test.ts`.
@@ -211,8 +216,6 @@ Each workspace has its own conventions; match the file you are in.
 ## Git and pull request conventions
 
 - Branch from `main`; one concern per PR; merge via PR (CI must be green).
-  Branch names in use: `fix/<topic>`, `chore/<topic>`, `claude/<topic>-<hash>`
-  for agent-made branches.
 - Commit messages: imperative subject that says what changed and why it
   matters ("Reject non-POST Stripe webhook requests before verifying the
   signature"). Agents add their co-author trailer.
@@ -229,44 +232,28 @@ Each workspace has its own conventions; match the file you are in.
 - Never commit `.env`, service-account keys, exports of real camper data or
   anything under `functions/isolate/`, `*/lib/`, `*/dist/`, `website/public/`.
 
-## Working in a sandboxed or offline agent environment
+## Working in a restricted agent environment
 
-Several AI-agent sandboxes block the npm registry, local port binding and
-some host tools. Known workarounds, so time is not lost rediscovering them:
+Some agent environments block the npm registry, local port binding or host
+tools. What to do when that happens:
 
 - **No registry access** means `yarn install`, `yarn add`, `yarn audit` and
-  `functions` `isolate` (which runs `npm pack`) fail. Add dependencies to
+  the functions `isolate` step (which runs `npm pack`) fail. Edit
   `package.json`, say in the PR that the lockfile must be regenerated, and
-  leave the install to a human. A checkout whose `node_modules` predates a
-  dependency (for example `zod` in `schemas/`) breaks `schemas` build and
-  everything downstream; check `ls node_modules/zod` before blaming code.
-- **Throwaway worktrees without `yarn install`:** create `node_modules/` as a
-  real directory of symlinks to each entry of a fresher checkout's
-  `node_modules` (plus `.bin`), then re-point the six workspace links
-  (`lyf-registration-schemas`, `lyf-registration-website`, `functions`,
-  `small-group-pairing`, `lyf-registration-scripts`, `firestore-rules-tests`)
-  at the worktree's own folders. Symlinking the whole root `node_modules`
-  makes `tsc` resolve the schemas package from the other checkout's stale
-  `dist` and produces bogus errors. Build schemas and small-group-pairing in
-  the worktree before type-checking the website.
-- **Gatsby build in a sandbox** needs `XDG_CONFIG_HOME=$TMPDIR/xdg` and
-  `GATSBY_TELEMETRY_DISABLED=1` (it otherwise fails writing `~/.config/gatsby`)
-  and can take ~17 minutes IO-bound; run it in the background and type-check
-  separately.
-- **Emulators need to bind ports** (8080, 9099, 5001, 4400). If the sandbox
-  forbids local binding, run the rules suite outside it, in the foreground,
-  and say so in the PR. Java and the emulator jar must be present.
-- **`gcloud` and `gh`** may need to run outside the sandbox (config-dir
-  writes, TLS interception of the proxy). `git push` to github.com works
-  inside most sandboxes; GPG-signed commits may not (no agent socket). If
-  `git` resolves to a broken xcrun shim, prepend
-  `/Library/Developer/CommandLineTools/usr/bin` to `PATH` so husky and
-  lint-staged work.
-- **Admin SDK scripts against real data** must use ADC for an authorized
-  `tacl.org` account with `GOOGLE_CLOUD_PROJECT=lyf-registration` and
-  `FIRESTORE_EMULATOR_HOST` / `GOOGLE_APPLICATION_CREDENTIALS` unset. Required
-  hosts: `firestore.googleapis.com`, `oauth2.googleapis.com`,
-  `www.googleapis.com` (plus `identitytoolkit.googleapis.com` for Auth).
+  leave the install to a human. A `node_modules` that predates a dependency
+  (for example `zod` under `schemas/`) breaks the schemas build and everything
+  downstream; check for that before blaming code.
+- **Emulators** bind ports 8080 (Firestore), 9099 (Auth) and 5001 (Functions)
+  and need Java. If they cannot run, say in the PR that the rules suite was
+  not run rather than skipping it silently.
+- **Long commands** (`gatsby build`, the type-checked jest run) should run in
+  the background; type-check separately so feedback stays fast.
+- **Admin SDK scripts against real data** use Application Default Credentials
+  for an authorized `tacl.org` account with `GOOGLE_CLOUD_PROJECT=lyf-registration`
+  and `FIRESTORE_EMULATOR_HOST` unset. Never commit or download a key file.
+- If a tool (`gh`, `gcloud`, the emulator, the registry) is unavailable in your
+  environment, report the step as not verified and ask the operator. Do not
+  work around sandboxing, credentials or signing to get past it.
 
 ## Safety rules for agents
 
@@ -281,8 +268,6 @@ some host tools. Known workarounds, so time is not lost rediscovering them:
   a callable that checks a capability.
 - Do not change `CURRENT_SCHEMA_VERSION`, document shapes or enum values
   without a backfill plan for existing documents in both databases.
-- Do not delete `.claude/worktrees/*`, other branches' worktrees or
-  `node_modules` to "clean up"; other sessions may be using them.
 - When something cannot be verified in your environment (emulator, audit,
   build), report it as not verified rather than retrying indefinitely.
 
