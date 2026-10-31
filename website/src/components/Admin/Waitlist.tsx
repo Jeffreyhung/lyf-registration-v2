@@ -72,7 +72,7 @@ function useWaitlistDetails(
 
     if (missing.length === 0) {
       setDetails(new Map(cache.current))
-      return
+      return undefined
     }
 
     let cancelled = false
@@ -329,7 +329,7 @@ export default function Waitlist({ data, loading, campYear }: WaitlistProps) {
     internalNotes: reg.internalNotes,
     waitlistTime: reg.waitlistTime?.toDate() ?? new Date(),
     // waitlistTime: reg.waitlistTime
-    //   ? // @ts-ignore reg.waitlistTime is already handled
+    //   ? // @ts-expect-error reg.waitlistTime is already handled
     //     dayjs(reg.waitlistTime).toDate()
     //   : new Date(),
   }))

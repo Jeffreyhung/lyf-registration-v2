@@ -1,5 +1,5 @@
 import { useDocumentData } from "react-firebase-hooks/firestore"
-import { Firestore, FirestoreError, doc } from "firebase/firestore"
+import { Firestore, doc } from "firebase/firestore"
 
 import { CampYear } from "lyf-registration-schemas"
 

@@ -11,7 +11,6 @@ import {
 
 // Registration Data Context
 import {
-  RegistrationDataContext,
   RegistrationDispatchContext,
   RegistrationData,
   RegistrationActionType,
@@ -61,7 +60,6 @@ export default function DemographicsStep({
   demographics,
   demographicsIndex,
 }: DemographicsStepProps) {
-  const registrationData = React.useContext(RegistrationDataContext)
   const dispatch = React.useContext(RegistrationDispatchContext)
 
   const editDemographicHandler =

@@ -6,7 +6,6 @@ import {
   ListItemText,
   ListItemTextProps,
   Stack,
-  Typography,
 } from "@mui/material"
 
 import CheckoutFlowContext from "@components/CheckoutFlow/CheckoutFlowContext"

@@ -11,11 +11,12 @@ const AnimatedLinkButton = React.forwardRef<HTMLElement, AnimatedLinkButtonProps
     <AnimatedButton
       component={to ? Link : "button"}
       to={to && to.charAt(0) != "/" ? `/${to}` : to}
-      // @ts-ignore Ref type weirdness
+      // @ts-expect-error Ref type weirdness
       ref={ref}
       {...rest}
     />
   )
 )
+AnimatedLinkButton.displayName = "AnimatedLinkButton"
 
 export default AnimatedLinkButton

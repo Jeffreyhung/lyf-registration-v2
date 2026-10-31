@@ -1,14 +1,7 @@
 import React from "react"
-import {
-  doc,
-  increment,
-  arrayUnion,
-  Firestore,
-  setDoc,
-} from "firebase/firestore"
+import { doc, increment, arrayUnion, setDoc } from "firebase/firestore"
 import {
   Card,
-  CardActionArea,
   CardActions,
   CardContent,
   CardHeader,
@@ -78,7 +71,7 @@ export default function AddCampCredit({ familyId }: AddCampCredit) {
             <NumberInput
               aria-labelledby="camp-credit-amount"
               value={amount}
-              onChange={(e, val) => setAmount(val)}
+              onChange={(_e, val) => setAmount(val)}
             />
           </Grid>
 

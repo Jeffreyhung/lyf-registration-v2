@@ -17,11 +17,9 @@ import {
   useMediaQuery,
   TextField,
   MenuItem,
-  OutlinedInput,
   CircularProgress,
 } from "@mui/material"
 import { AddCircle } from "@mui/icons-material"
-import { DateField } from "@mui/x-date-pickers"
 import { Dayjs } from "dayjs"
 
 // Utils
@@ -285,7 +283,7 @@ export default function AddCamper({
                 label="Gender"
                 error={!state.gender || state.gender.length == 0}
                 SelectProps={{
-                  // @ts-ignore This thinks it's unknown for some reason
+                  // @ts-expect-error This thinks it's unknown for some reason
                   renderValue: (selected: string[]) => selected.join(", "),
                   multiple: true,
                 }}

@@ -1,4 +1,4 @@
-import { createContext, useContext, Dispatch } from "react"
+import { createContext, Dispatch } from "react"
 
 import { Camper, Pairings, Group, GroupId } from "small-group-pairing"
 
@@ -56,7 +56,7 @@ export interface SmallGroupAddGroupAction extends SmallGroupBaseAction {
   maxSize?: number
 }
 
-export interface SmallGroupClearEditStackAction extends SmallGroupBaseAction {}
+export type SmallGroupClearEditStackAction = SmallGroupBaseAction
 
 export interface SmallGroupRunPairingAlgorithmAction
   extends SmallGroupBaseAction {
@@ -118,7 +118,7 @@ export function smallGroupReducer(
   try {
     pairings = performAction(action, pairings)
   } catch (e) {
-    errorMsg = e.message
+    errorMsg = e instanceof Error ? e.message : String(e)
   }
 
   // Following is just for undo/redo logic
@@ -179,8 +179,7 @@ function performAction(
       return loadFromRegistrations(registrations)
     }
     case SmallGroupActionType.SetGroup: {
-      const { camper, groupId, prevGroupId } =
-        action as SmallGroupSetGroupAction
+      const { camper, groupId } = action as SmallGroupSetGroupAction
       pairings.assignCamperToGroupId(camper, groupId)
       return pairings
     }

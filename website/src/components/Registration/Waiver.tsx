@@ -57,7 +57,8 @@ export default function Waiver({
           </Grid>
           <Grid size={12}>
             <Typography variant="h6" textAlign="center">
-              Liability Release Waiver for Taiwanese American Citizen League 
+              Liability Release Waiver for Taiwanese American Citizen
+              League&nbsp;
             </Typography>
           </Grid>
 

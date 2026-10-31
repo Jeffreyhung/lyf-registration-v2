@@ -85,7 +85,7 @@ export default function AdminManagement() {
       }))
       entries.sort((a, b) => a.email.localeCompare(b.email))
       setAdmins(entries)
-    } catch (err) {
+    } catch {
       setSnackbar({ children: "Failed to load admins", severity: "error" })
     } finally {
       setLoading(false)

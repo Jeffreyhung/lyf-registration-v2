@@ -1,5 +1,5 @@
 import React from "react"
-import { Button, Grid, Stack, TextField, Typography } from "@mui/material"
+import { Grid, Stack, TextField, Typography } from "@mui/material"
 import { httpsCallable } from "firebase/functions"
 import { FUNCTION_NAMES } from "lyf-registration-schemas"
 
@@ -8,7 +8,6 @@ import {
   CampTrackInfo,
   CampYear,
   RegistrationPayload,
-  RegistrationStatus,
   getClientRequiredCamperFields,
   getClientRequiredRegistrationFields,
 } from "lyf-registration-schemas"
@@ -95,7 +94,7 @@ async function createCheckoutSession(
           ? null
           : `Unable to create a Stripe checkout session. Please try again later or contact us at lyf@tacl.org`,
     }
-  } catch (error) {
+  } catch {
     return {
       success: false,
       sessionId: null,

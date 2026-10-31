@@ -1,0 +1,14 @@
+{
+  // Used only by ts-jest. `typecheck` (tsc --noEmit -p tsconfig.json) does not
+  // see the tests; they are type-checked when jest compiles them.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["jest", "node", "react", "react-dom", "country-list"]
+  },
+  "include": ["./src/**/*", "./test/unit/**/*"]
+}

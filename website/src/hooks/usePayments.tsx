@@ -25,7 +25,7 @@ export default function usePayments({
   const [values, loading, error] = useCollection<Payment>(
     canReadPayments
       ? query<Payment, DocumentData>(
-          // @ts-ignore
+          // @ts-expect-error collection() is untyped; query<Payment> narrows it
           collection(firestore, "payments")
         )
       : null

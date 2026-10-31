@@ -36,7 +36,7 @@ export default function useRegistrationBypass(
   React.useEffect(() => {
     if (typeof year !== "number" || !email || !firestore) {
       setState({ canBypass: false, loading: false })
-      return
+      return undefined
     }
     let cancelled = false
     setState({ canBypass: false, loading: true })

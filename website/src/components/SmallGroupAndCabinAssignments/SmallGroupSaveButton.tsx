@@ -57,7 +57,7 @@ export default function SmallGroupSaveButton({
     } catch (e) {
       setAlertProps({
         severity: "error",
-        children: e.message,
+        children: e instanceof Error ? e.message : String(e),
       })
     }
     setLoading(false)

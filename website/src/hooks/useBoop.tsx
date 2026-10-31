@@ -24,7 +24,9 @@ export default function useBoop({
     friction: 10,
   },
   disabled = false,
-}: BoopProps): [{}, () => void] {
+}: // The spring style object; typed loosely so it fits any animated element.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+BoopProps): [{}, () => void] {
   const [isBooped, setIsBooped] = React.useState(false)
   const style = useSpring({
     transform: isBooped
@@ -39,7 +41,7 @@ export default function useBoop({
   })
   React.useEffect(() => {
     if (!isBooped) {
-      return
+      return undefined
     }
     const timeoutId = window.setTimeout(() => {
       setIsBooped(false)
@@ -47,7 +49,7 @@ export default function useBoop({
     return () => {
       window.clearTimeout(timeoutId)
     }
-  }, [isBooped])
+  }, [isBooped, timing])
   const trigger = React.useCallback(() => {
     setIsBooped(true)
   }, [])

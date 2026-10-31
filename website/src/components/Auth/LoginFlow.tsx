@@ -24,10 +24,8 @@ import { FirebaseError } from "firebase/app"
 import { GradientTypography } from "@components/Typography"
 import { GoogleLogo } from "@components/Logo"
 
-type LoginFlowProps = {}
-
 /*** React Effect that listens for the auth event on redirects occurs in the useAuth hook  ***/
-export default function LoginFlow({}: LoginFlowProps) {
+export default function LoginFlow() {
   const redirectUrl =
     typeof window !== `undefined`
       ? `${window.location.origin}${window.location.pathname}`

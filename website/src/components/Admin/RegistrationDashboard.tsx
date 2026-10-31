@@ -434,7 +434,7 @@ export default function RegistrationDashboard({
     Map<RegistrationData, Payment[]>
   >(new Map())
   const [cancelPromiseContext, setCancelPromiseContext] =
-    React.useState<CancelStatusPromise | null>(null)
+    React.useState<CancelStatusPromise<RegDashboardRow> | null>(null)
   const [namedExportOpen, setNamedExportOpen] = React.useState(false)
 
   const rows: RegDashboardRow[] = registrationData.map((reg, index) => ({
@@ -606,7 +606,8 @@ export default function RegistrationDashboard({
               const paymentMap: [RegistrationData, Payment[]][] =
                 await Promise.all(
                   rowSelection.map(async (rowId) => {
-                    const registration = registrationData[rows[rowId].index - 1]
+                    const registration =
+                      registrationData[rows[Number(rowId)].index - 1]
                     const payments = await Promise.all(
                       !registration.payments
                         ? []
