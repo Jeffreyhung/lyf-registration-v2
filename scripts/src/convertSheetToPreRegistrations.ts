@@ -6,7 +6,7 @@ import {
   FieldValue,
 } from "firebase-admin/firestore"
 import * as mailchimp from "@mailchimp/mailchimp_marketing"
-import * as md5 from "md5"
+import {createHash} from "crypto"
 
 import {
   Camper,
@@ -148,7 +148,11 @@ function addParentAndEmailToMap(
 async function addParentsToMailchimp(parentMap: Map<string, MailchimpUser>) {
   await Promise.all(
     Array.from(parentMap.entries()).map(async ([email, parent], i) => {
-      const hashedEmail = md5(email)
+      // Mailchimp subscriber hash: MD5 of the lowercased address (see
+      // functions/src/utils/mailchimp.ts mailchimpSubscriberHash).
+      const hashedEmail = createHash("md5")
+        .update(email.toLowerCase())
+        .digest("hex")
       await setTimeout(async () => {
       // Create the user if it doesn't exist
       debugLog(`Adding email ${email}`)

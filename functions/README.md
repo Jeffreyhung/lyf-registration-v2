@@ -47,7 +47,7 @@ Firebase docs on local Cloud Function emulation: https://firebase.google.com/doc
 
 - All imports must be local for isolate package to work
 - We use isolate to make sure that our monorepo workspaces are found when deploying functions.
-- Our [firebase.json](./firebase.json) has a set of pre-deploy commands which will lint, build, and isolate our functions before publishing from the ./isolate directory.
+- Our [firebase.json](../firebase.json) has a set of pre-deploy commands which will lint, build, and isolate our functions before publishing from the ./isolate directory.
 
 # Email templates (MJML + Mustache)
 

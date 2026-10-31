@@ -14,7 +14,7 @@ import {logger} from "firebase-functions";
 async function postToSlackWebhook(envVar: string, text: string): Promise<void> {
   const url = process.env[envVar];
   if (!url) {
-    logger.warn(`${envVar} is not set; dropping Slack message: ${text}`);
+    logger.warn(`${envVar} is not set; dropping a Slack message`);
     return;
   }
 

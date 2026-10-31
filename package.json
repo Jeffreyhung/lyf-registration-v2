@@ -31,8 +31,5 @@
     "*.{js,jsx,ts,tsx}": [
       "prettier --check --ignore-unknown"
     ]
-  },
-  "resolutions": {
-    "@types/mjml-core": "^4.15.2"
   }
 }

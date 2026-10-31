@@ -19,7 +19,7 @@ The sandboxed review session that wrote this could not download packages, so
 nothing below has been compiled against the new versions. Where a type is
 expected to change the plan says "verify with tsc".
 
-## 0. Already done (PR "functions runtime: dependency cleanup")
+## 0. Already done (PR "Trim the functions runtime bundle and add the framework/Stripe upgrade plan")
 
 - `firebase-tools` and `mjml` moved to `devDependencies`; `@slack/client`,
   `dotenv`, `global`, `md5`, `really-relaxed-json`, `@types/md5`, `@types/mjml*`
@@ -31,8 +31,10 @@ expected to change the plan says "verify with tsc".
 - `engines.node` is `"22"`, matching `runtime: nodejs22` in `firebase.json` and
   the new root `.nvmrc`.
 - **Still to do by hand:** run `yarn install` at the repo root and commit the
-  updated `yarn.lock` (the sandbox could not reach the registry). CI runs
-  `yarn install --frozen-lockfile`, so the cleanup PR stays red until then.
+  updated `yarn.lock` (the sandbox could not reach the registry). CI stays
+  green meanwhile, because yarn 1's `--frozen-lockfile` ignores entries that
+  are merely no longer needed, but the lockfile keeps the removed packages
+  until it is regenerated.
 
 ## 1. Version table
 
@@ -134,7 +136,7 @@ compile-time exposure is the express types.
 | `new Stripe(key, {apiVersion})` | `utils.ts` | `apiVersion` must be the SDK's own version string (typed as `LatestApiVersion`) |
 | `stripe.webhooks.constructEvent(rawBody, sig, secret)` | `handleStripeWebhook.ts` | unchanged (snapshot events). 21.x throws if a thin-event parser is used on a snapshot payload, which we never do |
 | `event.id`, `event.type`, `event.data.object` | `handleStripeWebhook.ts` | unchanged |
-| events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired` | `handleStripeWebhook.ts` | unchanged; `checkout.session.async_payment_failed` is still unhandled (see security review) |
+| events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired` | `handleStripeWebhook.ts` | unchanged; `checkout.session.async_payment_failed` is still unhandled (a follow-up, not part of the upgrade) |
 | `checkout.sessions.retrieve(id, {expand: ["line_items.data.price.product", "payment_intent.payment_method"]})` | `handleStripeWebhook.ts`, `issueStripeRefund.ts` | unchanged |
 | `checkout.sessions.create({line_items[].price_data{currency, product_data{name, metadata}, unit_amount}, mode, metadata, success_url, cancel_url, customer, payment_intent_data.description, discounts[{coupon}], expires_at})` | `createStripeCheckoutSession.ts` | unchanged. `payment_method_types` was removed from this call in endive; it only appears here as a comment, delete the comment |
 | `Session.id/metadata/amount_total/customer_email/customer_details.{email,name}/payment_status/payment_intent/customer/line_items/total_details.amount_discount` | `fullfillRegistration.ts`, `fulfillPreRegistrations.ts`, `releaseRegistrationHolds.ts`, `handleStripeWebhook.ts` | unchanged types (`metadata: Metadata \| null`, `customer_details.email: string \| null`, ...), all already read with `?.`/`??` |
@@ -260,7 +262,7 @@ memory headroom is better, but two changes are still worth a decision:
 
 ## 5. Dependencies to leave alone (checked)
 
-- `date-fns` / `date-fns-tz`: used for `formatInTimeZone(..., "EEEE MMM do, Y")`
+- `date-fns` / `date-fns-tz`: used for `formatInTimeZone(..., "EEEE MMM do, y")`
   (ordinal day, which `Intl` cannot format directly) and for the DST-correct
   year shift in `campYearConfig.ts`. Both load in about a millisecond; an
   `Intl` rewrite would be more code for no runtime gain.
