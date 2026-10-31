@@ -3,9 +3,8 @@
  * callablePayloads.test.ts: the lockout and self-edit guards, each action's
  * writes, and the audit log.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // Only names prefixed with "mock" may be referenced from a hoisted jest.mock factory.
@@ -25,25 +24,9 @@ const SECOND = "second@example.com";
 const STAFF = "staff@example.com";
 const PROGRAM_ADMIN = "program@example.com";
 
-function request(data: unknown, email: string | null = ROOT): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
-
-async function expectHttpsError(promise: Promise<unknown>, code: string, message?: RegExp) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = ROOT) =>
+  callableRequest(data, email);
 
 const auditLog = () => mockState.db.all("adminAuditLog").map(({data}) => data);
 

@@ -2,9 +2,8 @@
  * The issueStripeRefund admin callable, driven through onCall's `run` with
  * the admin roster in the fake Firestore and Stripe mocked per environment.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // Only names prefixed with "mock" may be referenced from a hoisted jest.mock factory.
@@ -30,25 +29,9 @@ import {issueStripeRefund} from "../../src/stripe/issueStripeRefund";
 const ADMIN = "root@example.com";
 const STAFF = "staff@example.com";
 
-function request(data: unknown, email: string | null = ADMIN): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
-
-async function expectHttpsError(promise: Promise<unknown>, code: string, message?: RegExp) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = ADMIN) =>
+  callableRequest(data, email);
 
 const refund = (overrides: Record<string, unknown> = {}) => ({
   stripeId: "pi_123",
@@ -150,13 +133,18 @@ describe("refunding", () => {
     expect(mockProdStripe.refunds.create).toHaveBeenCalledWith({amount: 1234, payment_intent: "pi_expanded"});
   });
 
-  it("uses the test Stripe account for test data and the live one otherwise", async () => {
+  it("uses the test Stripe account for test data", async () => {
     await issueStripeRefund.run(request(refund({isTestData: true})));
+
     expect(mockTestStripe.refunds.create).toHaveBeenCalledTimes(1);
     expect(mockProdStripe.refunds.create).not.toHaveBeenCalled();
+  });
 
+  it("uses the live Stripe account otherwise", async () => {
     await issueStripeRefund.run(request(refund({isTestData: false})));
+
     expect(mockProdStripe.refunds.create).toHaveBeenCalledTimes(1);
+    expect(mockTestStripe.refunds.create).not.toHaveBeenCalled();
   });
 
   it("returns a 402 result and reports to Slack when Stripe refuses the refund", async () => {

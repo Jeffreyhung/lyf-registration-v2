@@ -3,10 +3,9 @@
  * callablePayloads.test.ts: capacity bookkeeping, failure paths and the
  * email that goes out.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 import {RegistrationStatus} from "lyf-registration-schemas";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // Only names prefixed with "mock" may be referenced from a hoisted jest.mock factory.
@@ -20,6 +19,9 @@ jest.mock("../../src/utils", () => ({
   getFirestoreDb: mockGetFirestoreDb,
   REGISTRATION_EMAIL: "lyf@example.com",
   emailTransport: {sendMail: mockSendMail},
+  // Copies of the pure helpers: the real module cannot be required here
+  // because it opens Firestore and Stripe on import. The real ones are
+  // covered by utils.test.ts; these tests check that the callable uses them.
   getFirstName: (name: string) => name.split(" ")[0],
   combineNames: (names: string[]) =>
     names.length <= 2 ?
@@ -39,25 +41,9 @@ const ADMIN = "root@example.com";
 const PARENT = "pat@example.com";
 const REGISTRATIONS = "camps/2026/registrations";
 
-function request(data: unknown, email: string | null = ADMIN): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
-
-async function expectHttpsError(promise: Promise<unknown>, code: string, message?: RegExp) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = ADMIN) =>
+  callableRequest(data, email);
 
 const move = (overrides: Record<string, unknown> = {}) => ({
   parentNames: ["Pat Lin", "Sam Lin"],

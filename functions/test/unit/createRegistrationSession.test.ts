@@ -4,11 +4,10 @@
  * and Mailchimp mocked. The payload validation cases live in
  * callablePayloads.test.ts; these cover the decisions after validation.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 import {Timestamp} from "firebase-admin/firestore";
 import {CampTrack, RegistrationStatus, type Registration} from "lyf-registration-schemas";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // Only names prefixed with "mock" may be referenced from a hoisted jest.mock factory.
@@ -45,22 +44,7 @@ const mockSendRegistrationEmail = jest.fn();
 jest.mock("../../src/registrationUtils/sendRegistrationEmail", () => ({
   sendRegistrationEmail: mockSendRegistrationEmail,
 }));
-jest.mock("@sentry/node", () => {
-  const scope = {
-    setTag: jest.fn(),
-    setTransactionName: jest.fn(),
-    setSDKProcessingMetadata: jest.fn(),
-    setUser: jest.fn(),
-    setContext: jest.fn(),
-  };
-  return {
-    captureException: jest.fn(),
-    addBreadcrumb: jest.fn(),
-    withIsolationScope: (fn: (s: typeof scope) => unknown) => fn(scope),
-    startSpan: (_opts: unknown, fn: () => unknown) => fn(),
-    flush: async () => true,
-  };
-});
+jest.mock("@sentry/node", () => jest.requireActual("./sentryStub").sentryStub());
 
 import {
   createRegistrationSession,
@@ -75,25 +59,9 @@ const CANCEL = `${SITE}?success=0`;
 const FAMILY = "families/fam";
 const REGISTRATIONS = "camps/2026/registrations";
 
-function request(data: unknown, email: string | null = PARENT): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
-
-async function expectHttpsError(promise: Promise<unknown>, code: string, message?: RegExp) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = PARENT) =>
+  callableRequest(data, email);
 
 const camper = (id: string, firstName: string, grade: number) => ({
   id,

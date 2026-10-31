@@ -4,10 +4,9 @@
  * have their own tests in campYearConfig.test.ts; these cover how the
  * callable uses them and what it writes.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 import {Timestamp} from "firebase-admin/firestore";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // Only names prefixed with "mock" may be referenced from a hoisted jest.mock factory.
@@ -27,25 +26,9 @@ const PROGRAM_ADMIN = "program@example.com";
 const STAFF = "staff@example.com";
 const BYPASS_2026 = "camps/2026/private/bypass/emails";
 
-function request(data: unknown, email: string | null = ROOT): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
-
-async function expectHttpsError(promise: Promise<unknown>, code: string, message?: RegExp) {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = ROOT) =>
+  callableRequest(data, email);
 
 const ts = (iso: string) => Timestamp.fromDate(new Date(iso));
 const iso = (value: unknown) => (value as Timestamp).toDate().toISOString();
@@ -81,16 +64,18 @@ beforeEach(() => {
 });
 
 describe("access", () => {
-  it("rejects program staff and allows program admins", async () => {
-    const update = {action: "updateYear", year: 2026, fields: {campsite: "Camp Wawona"}};
+  const update = {action: "updateYear", year: 2026, fields: {campsite: "Camp Wawona"}};
 
+  it("rejects program staff and writes nothing", async () => {
     await expectHttpsError(
       manageCampYear.run(request(update, STAFF)),
       "permission-denied",
       /requires one of: full_admin, program_admin/
     );
     expect(mockState.prodDb.read("camps", "2026")?.campsite).toBeUndefined();
+  });
 
+  it("allows program admins", async () => {
     await expect(manageCampYear.run(request(update, PROGRAM_ADMIN))).resolves.toEqual({
       status: "success",
       action: "updateYear",
@@ -137,12 +122,15 @@ describe("updateYear", () => {
     expect(auditLog(mockState.prodDb)).toEqual([]);
   });
 
-  it("refuses an empty update and a missing year", async () => {
+  it("refuses an empty update", async () => {
     await expectHttpsError(
       manageCampYear.run(request({action: "updateYear", year: 2026, fields: {}})),
       "invalid-argument",
       /No fields to update/
     );
+  });
+
+  it("refuses a year that does not exist", async () => {
     await expectHttpsError(
       manageCampYear.run(request({action: "updateYear", year: 2031, fields: {campsite: "x"}})),
       "not-found",
@@ -239,17 +227,24 @@ describe("createYear", () => {
     });
   });
 
-  it("refuses a source year that is not earlier, an existing target and a missing source", async () => {
+  it("refuses a source year that is not earlier than the new one", async () => {
     await expectHttpsError(
       manageCampYear.run(request({action: "createYear", year: 2026, sourceYear: 2026})),
       "invalid-argument",
       /sourceYear must be earlier/
     );
+  });
+
+  it("refuses to overwrite a year that already exists", async () => {
     mockState.prodDb.seed("camps", "2027", {name: "exists"});
     await expectHttpsError(
       manageCampYear.run(request({action: "createYear", year: 2027, sourceYear: 2026})),
       "already-exists"
     );
+    expect(mockState.prodDb.read("camps", "2027")).toEqual({name: "exists"});
+  });
+
+  it("refuses a source year that does not exist and writes nothing", async () => {
     await expectHttpsError(
       manageCampYear.run(request({action: "createYear", year: 2028, sourceYear: 2025})),
       "not-found",
@@ -357,7 +352,11 @@ describe("copying from production", () => {
       "failed-precondition",
       /copy it from production first/
     );
+    expect(mockState.testDb.read("config", "site")).toBeUndefined();
+  });
 
+  it("copySiteConfigFromProd mirrors the pointers once the years exist in the test database", async () => {
+    mockState.prodDb.seed("config", "site", {currentCampYear: 2026});
     mockState.testDb.seed("camps", "2026", {name: "LYF Camp 2026"});
     await manageCampYear.run(request({action: "copySiteConfigFromProd", isTestData: true}));
     expect(mockState.testDb.read("config", "site")).toMatchObject({currentCampYear: 2026, updatedBy: ROOT});

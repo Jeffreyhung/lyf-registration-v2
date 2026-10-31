@@ -16,7 +16,7 @@
  * isolation, no retries); it exists so code that reads-then-writes inside a
  * transaction can be exercised, not to test concurrency.
  */
-import {Timestamp} from "firebase-admin/firestore";
+import {FieldValue, Timestamp} from "firebase-admin/firestore";
 import type {
   CollectionReference,
   DocumentReference,
@@ -64,6 +64,13 @@ function applyWrite(existing: DocData, data: DocData): DocData {
   const out: DocData = {...existing};
   for (const [key, value] of Object.entries(data)) {
     const kind = sentinelKind(value);
+    if (kind === null && value instanceof FieldValue) {
+      // sentinelKind reads private SDK fields; fail loudly if the SDK's
+      // transform shape changes instead of storing the sentinel object raw.
+      throw new Error(
+        `FakeFirestore cannot interpret the FieldValue written to "${key}"`
+      );
+    }
     const current = out[key];
     switch (kind) {
       case null:

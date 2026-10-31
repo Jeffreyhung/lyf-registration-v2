@@ -4,10 +4,9 @@
  * Firestore with a malformed body and expect `invalid-argument`, and with a
  * well-formed body check that the handler got past validation.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 import {CampTrack, RegistrationStatus} from "lyf-registration-schemas";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // ../utils opens Firestore, Stripe and the mail transport at import time.
@@ -49,32 +48,9 @@ const ADMIN = "root@example.com";
 const PARENT = "pat@example.com";
 const SITE = "https://lyf-registration.tacl.org/registration";
 
-// Typed as CallableRequest<never> so a deliberately malformed body can be
-// handed to any of the callables without a cast at each call site.
-function request(data: unknown, email: string | null = PARENT): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
-
-async function expectHttpsError(
-  promise: Promise<unknown>,
-  code: string,
-  message?: RegExp
-): Promise<HttpsError> {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-  return caught as HttpsError;
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = PARENT) =>
+  callableRequest(data, email);
 
 beforeEach(() => {
   mockState.db = new FakeFirestore();

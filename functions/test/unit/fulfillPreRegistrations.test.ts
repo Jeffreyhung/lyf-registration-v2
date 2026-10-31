@@ -176,22 +176,19 @@ describe("a paid pre-registration", () => {
     });
   });
 
-  it("takes the customer id from an expanded customer object and falls back to empty", async () => {
-    const expanded = setup();
-    await fulfillPreRegistrations(
-      expanded.as(),
-      session([preRegItem("c1", "Mei Lin", "6")], {customer: {id: "cus_obj"}}),
-      false
-    );
-    expect(expanded.read("payments", "pi_pre_1")?.customerId).toBe("cus_obj");
+  it.each([
+    ["an expanded customer object", {id: "cus_obj"}, "cus_obj"],
+    ["no customer", null, ""],
+  ])("records the customer id from %s", async (_label, customer, expected) => {
+    const db = setup();
 
-    const none = setup();
     await fulfillPreRegistrations(
-      none.as(),
-      session([preRegItem("c1", "Mei Lin", "6")], {customer: null}),
+      db.as(),
+      session([preRegItem("c1", "Mei Lin", "6")], {customer}),
       false
     );
-    expect(none.read("payments", "pi_pre_1")?.customerId).toBe("");
+
+    expect(db.read("payments", "pi_pre_1")?.customerId).toBe(expected);
   });
 });
 

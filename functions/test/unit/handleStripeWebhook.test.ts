@@ -64,28 +64,16 @@ jest.mock("../../src/slack/slackChannelWebhooks", () => ({
   sendMessageToRegistrationForCampChannel: mockSlackCamp,
   sendMessageToRegistrationErrorMessages: mockSlackError,
 }));
-const mockCaptureException = jest.fn();
-jest.mock("@sentry/node", () => {
-  const scope = {
-    setTag: jest.fn(),
-    setTransactionName: jest.fn(),
-    setSDKProcessingMetadata: jest.fn(),
-    setUser: jest.fn(),
-    setContext: jest.fn(),
-  };
-  return {
-    captureException: mockCaptureException,
-    addBreadcrumb: jest.fn(),
-    withIsolationScope: (fn: (s: typeof scope) => unknown) => fn(scope),
-    startSpan: (_opts: unknown, fn: () => unknown) => fn(),
-    flush: async () => true,
-  };
-});
+jest.mock("@sentry/node", () => jest.requireActual("./sentryStub").sentryStub());
 
+import * as Sentry from "@sentry/node";
 import {
   handleStripeWebhook,
   handleTestStripeWebhook,
 } from "../../src/stripe/handleStripeWebhook";
+
+// The stub's recorder, so tests can assert on what was reported.
+const mockCaptureException = Sentry.captureException as jest.Mock;
 
 const PROCESSED = "_processedEvents";
 const PROD_SIG = "sig:whsec_prod";
@@ -469,7 +457,20 @@ describe("dispatch", () => {
     expect(mockReleaseHolds).not.toHaveBeenCalled();
   });
 
-  it.each(["payment_intent.succeeded", "charge.refunded", "checkout.session.async_payment_failed"])(
+  it("acknowledges checkout.session.async_payment_failed without releasing the hold", async () => {
+    // Known gap, not a design choice: a failed ACH payment leaves the
+    // registration PENDING_PAYMENT with spotReserved, and nothing expires the
+    // completed session, so the spot stays held until an admin steps in.
+    // Handling this event is the fix; update this test when it lands.
+    const res = await post(handleStripeWebhook, PROD_SIG, event("checkout.session.async_payment_failed", "evt_ach_fail"));
+
+    expect(res.statusCode).toBe(200);
+    expect(mockProdStripe.checkout.sessions.retrieve).not.toHaveBeenCalled();
+    expect(mockReleaseHolds).not.toHaveBeenCalled();
+    expect(mockState.prodDb.read(PROCESSED, "evt_ach_fail")?.processedAt).toBeDefined();
+  });
+
+  it.each(["payment_intent.succeeded", "charge.refunded"])(
     "acknowledges an unhandled event type (%s) with 200, no Stripe or fulfilment calls, and a processed claim",
     async (type) => {
       const res = await post(handleStripeWebhook, PROD_SIG, event(type, "evt_other"));
@@ -522,16 +523,20 @@ describe("failures during fulfilment", () => {
       .mockRejectedValue(new Error("UNAVAILABLE"));
     mockState.prodDb = broken;
 
-    const res = makeResponse();
-    await expect(
-      handleStripeWebhook(
-        makeRequest({signature: PROD_SIG, event: event("checkout.session.completed", "evt_claim")}),
-        res
-      )
-    ).rejects.toThrow("UNAVAILABLE");
+    try {
+      const res = makeResponse();
+      await expect(
+        handleStripeWebhook(
+          makeRequest({signature: PROD_SIG, event: event("checkout.session.completed", "evt_claim")}),
+          res
+        )
+      ).rejects.toThrow("UNAVAILABLE");
 
-    expect(res.statusCode).toBe(500);
-    expect(mockFulfillRegistration).not.toHaveBeenCalled();
-    create.mockRestore();
+      expect(res.statusCode).toBe(500);
+      expect(mockFulfillRegistration).not.toHaveBeenCalled();
+    } finally {
+      // The spy is on the shared prototype; never leave it behind for later tests.
+      create.mockRestore();
+    }
   });
 });
