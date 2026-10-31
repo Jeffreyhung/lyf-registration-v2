@@ -150,6 +150,11 @@ export const manageCampYear = onCall<
           const shifted = shiftTimestamps(source, year - sourceYear);
           // Never copy a legacy bypass field onto the public document.
           delete shifted.registrationBypassEmails;
+          // Each camp year has its own Mailchimp audience; copying last
+          // year's id would quietly file the new year's parents there.
+          // Left unset, registrations use the general list and remind the
+          // directors to configure it.
+          delete shifted.mailchimpListId;
           const {registrationBypassEmails: bypass, ...overrides} =
             parseConfigInput(data.overrides ?? {});
           const after: CampYearDoc = {

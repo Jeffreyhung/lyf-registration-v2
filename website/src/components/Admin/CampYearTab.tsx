@@ -39,6 +39,7 @@ import {
   CampYearTextKey,
   FUNCTION_NAMES,
   isAllowedImageUrl,
+  isMailchimpListId,
   ManageCampYearRequest,
   ManageCampYearResponse,
   MAX_IMAGE_URL_LENGTH,
@@ -90,7 +91,24 @@ const TEXT_LABELS: Record<CampYearTextKey, string> = {
   campsiteAddress: "Campsite address",
   infoSessionImageUrl: "Info session banner URL",
   emailHeaderImageUrl: "Email header image URL",
+  mailchimpListId: "Mailchimp audience ID",
 }
+
+// Helper text for the Details fields that need it.
+const TEXT_HELP: Partial<Record<CampYearTextKey, string>> = {
+  mailchimpListId:
+    "Audience that this year's registered and pre-registered parents are added to (Mailchimp → Audience → Settings → Audience name and defaults → Audience ID). Leave empty to use the general list.",
+}
+
+// Mirrors the callable's check so the admin sees the problem before saving.
+const MAILCHIMP_LIST_ID_ERROR =
+  "Must be a Mailchimp audience ID: lowercase letters and digits, e.g. 2bd94e4a2c"
+const textFieldError = (key: CampYearTextKey, value: string) =>
+  key === "mailchimpListId" &&
+  value.trim() !== "" &&
+  !isMailchimpListId(value.trim())
+    ? MAILCHIMP_LIST_ID_ERROR
+    : undefined
 
 // Image URLs are text keys with their own section (preview + stricter
 // validation in the function); the plain Details section skips them.
@@ -588,22 +606,27 @@ export default function CampYearTab() {
             <Stack spacing={3}>
               <Divider textAlign="left">Details</Divider>
               <Grid container spacing={2}>
-                {DETAIL_TEXT_KEYS.map((key) => (
-                  <Grid key={key} size={{ xs: 12, md: key === "name" ? 12 : 6 }}>
-                    <TextField
-                      label={TEXT_LABELS[key]}
-                      value={form.texts[key]}
-                      onChange={(e) =>
-                        update((prev) => ({
-                          ...prev,
-                          texts: { ...prev.texts, [key]: e.target.value },
-                        }))
-                      }
-                      fullWidth
-                      size="small"
-                    />
-                  </Grid>
-                ))}
+                {DETAIL_TEXT_KEYS.map((key) => {
+                  const error = textFieldError(key, form.texts[key])
+                  return (
+                    <Grid key={key} size={{ xs: 12, md: key === "name" ? 12 : 6 }}>
+                      <TextField
+                        label={TEXT_LABELS[key]}
+                        value={form.texts[key]}
+                        onChange={(e) =>
+                          update((prev) => ({
+                            ...prev,
+                            texts: { ...prev.texts, [key]: e.target.value },
+                          }))
+                        }
+                        error={error !== undefined}
+                        helperText={error ?? TEXT_HELP[key]}
+                        fullWidth
+                        size="small"
+                      />
+                    </Grid>
+                  )
+                })}
               </Grid>
 
               <Divider textAlign="left">Images</Divider>

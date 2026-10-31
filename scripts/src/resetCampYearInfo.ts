@@ -18,6 +18,7 @@
  *     "campsite": "...", "campsiteAddress": "...",
  *     "infoSessionImageUrl": "https://.../vis_2027.jpg",
  *     "emailHeaderImageUrl": "https://.../email_header_2027.jpg",
+ *     "mailchimpListId": "be387aca9f",
  *     "showWaitlistHeaderBar": false, "showRemainingSpots": false,
  *     "showWaitlistPosition": false,
  *     "preRegistrationOpenDate": "2026-07-18T00:00:00-07:00",

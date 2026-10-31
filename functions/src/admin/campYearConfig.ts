@@ -13,6 +13,7 @@ import {
   CampTrack,
   CampYearConfigInput,
   isAllowedImageUrl,
+  isMailchimpListId,
   MAX_IMAGE_URL_LENGTH,
   normalizeEmails,
 } from "lyf-registration-schemas";
@@ -97,6 +98,28 @@ export function parseImageUrl(value: unknown, field: string): string {
 }
 
 /**
+ * The Mailchimp audience id ends up in Mailchimp API URLs, so only the id
+ * shape is stored (isMailchimpListId is shared with the website). Empty
+ * clears the field, after which registrations fall back to the general list.
+ */
+export function parseMailchimpListId(value: unknown, field: string): string {
+  if (typeof value !== "string") {
+    throw new HttpsError("invalid-argument", `${field} must be a string`);
+  }
+  const id = value.trim();
+  if (id === "") return id;
+  if (!isMailchimpListId(id)) {
+    throw new HttpsError(
+      "invalid-argument",
+      `${field} must be a Mailchimp audience id (lowercase letters and ` +
+        "digits, e.g. 2bd94e4a2c; find it under Audience → Settings → " +
+        "Audience name and defaults)"
+    );
+  }
+  return id;
+}
+
+/**
  * Turns the JSON payload into Firestore field values, rejecting any key
  * outside CAMP_YEAR_CONFIG_KEYS (so remainingSpots can never arrive here) and
  * any value of the wrong shape.
@@ -129,6 +152,8 @@ export function parseConfigInput(input: unknown): CampYearDoc {
       out[key] = parseAmount(value, key, false);
     } else if (imageUrlKeys.has(key)) {
       out[key] = parseImageUrl(value, key);
+    } else if (key === "mailchimpListId") {
+      out[key] = parseMailchimpListId(value, key);
     } else if (textKeys.has(key)) {
       if (typeof value !== "string") {
         throw new HttpsError("invalid-argument", `${key} must be a string`);

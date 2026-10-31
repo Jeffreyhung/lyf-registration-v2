@@ -247,11 +247,14 @@ describe("a paid session", () => {
     await fulfillRegistration(db.as(), session([registrationItem(mei), registrationItem(kai)]), false);
 
     expect(mockAddParentsToMailchimp).toHaveBeenCalledTimes(1);
-    const [regType, parents, campYear, tracks] = mockAddParentsToMailchimp.mock.calls[0];
+    const [mailchimpDb, regType, parents, campYear, tracks, isTestData] =
+      mockAddParentsToMailchimp.mock.calls[0];
+    expect(mailchimpDb).toBe(db.as());
     expect(regType).toBe("Reg");
     expect(parents.path).toBe(`${FAMILY}/parents`);
     expect(campYear).toBe("2026");
     expect(tracks).toEqual([CampTrack.YOUNGER, CampTrack.OLDER]);
+    expect(isTestData).toBe(false);
   });
 
   it("is safe to re-run for the same session: status, payment link and spots are unchanged", async () => {

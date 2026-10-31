@@ -6,6 +6,7 @@ import {
   assertDateOrder,
   parseConfigInput,
   parseImageUrl,
+  parseMailchimpListId,
 } from "../../src/admin/campYearConfig";
 
 function expectInvalid(fn: () => unknown, message: RegExp) {
@@ -73,6 +74,38 @@ describe("parseConfigInput image URLs", () => {
   it("rejects non-string values", () => {
     expectInvalid(() => parseConfigInput({infoSessionImageUrl: 42}), /must be a string/);
     expectInvalid(() => parseConfigInput({emailHeaderImageUrl: {url: GOOD_URL}}), /must be a string/);
+  });
+});
+
+describe("parseConfigInput Mailchimp audience id", () => {
+  it("stores a trimmed audience id", () => {
+    expect(parseConfigInput({mailchimpListId: " be387aca9f "})).toEqual({
+      mailchimpListId: "be387aca9f",
+    });
+  });
+
+  it("stores empty string so registrations fall back to the general list", () => {
+    expect(parseConfigInput({mailchimpListId: "  "})).toEqual({mailchimpListId: ""});
+  });
+
+  it.each([
+    ["an audience URL", "https://us7.admin.mailchimp.com/lists/members/?id=12345"],
+    ["uppercase", "BE387ACA9F"],
+    ["a path", "be387aca9f/members"],
+    ["too short", "abc"],
+  ])("rejects %s", (_label, value) => {
+    expectInvalid(
+      () => parseMailchimpListId(value, "mailchimpListId"),
+      /mailchimpListId must be a Mailchimp audience id/
+    );
+    expectInvalid(
+      () => parseConfigInput({mailchimpListId: value}),
+      /mailchimpListId must be a Mailchimp audience id/
+    );
+  });
+
+  it("rejects non-string values", () => {
+    expectInvalid(() => parseConfigInput({mailchimpListId: 42}), /must be a string/);
   });
 });
 
