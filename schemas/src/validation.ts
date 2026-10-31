@@ -339,6 +339,17 @@ const campYearNumber = z.int().min(MIN_CAMP_YEAR).max(MAX_CAMP_YEAR)
 
 const nullableString = z.string().nullable()
 
+/**
+ * A boolean that also accepts the strings "true" / "false". The website's
+ * radio buttons used to dispatch the radio's string value, and registration
+ * state saved in localStorage plus documents written before that was fixed
+ * still carry the strings. Payloads only; document validators stay strict.
+ */
+const legacyBoolean = z.preprocess(
+  (v) => (v === "true" ? true : v === "false" ? false : v),
+  z.boolean()
+)
+
 const timestamp = z.custom<Timestamp>(isTimestampLike, {
   message: "expected a Firestore Timestamp",
 })
@@ -393,7 +404,7 @@ const familyShape = <F extends Flavour>(f: F, mode: ObjectMode) => ({
   country: field(f, z.string()),
   state: field(f, z.string()),
   street: field(f, z.string()),
-  suite: field(f, z.string()),
+  suite: field(f, nullableString),
   zip: field(f, z.string()),
   household: field(f, obj(mode, householdCultureShape(f))),
   isTestData: field(f, z.boolean()),
@@ -407,7 +418,7 @@ const parentShape = <F extends Flavour>(f: F) => ({
   // Legacy parent documents store null here; the website spreads the
   // stored document straight into the registration payload.
   lineId: field(f, nullableString),
-  phoneNumber: field(f, z.string()),
+  phoneNumber: field(f, nullableString),
   subscribeToMailingList: field(f, z.boolean()),
   stripeCustomerId: field(f, z.string()),
 })
@@ -437,8 +448,8 @@ const demographicsShape = <F extends Flavour>(f: F) => ({
   hakkaLanguage: field(f, z.string()),
   hokkienLanguage: field(f, z.string()),
   mandarinLanguage: field(f, z.string()),
-  otherBackground: field(f, z.string()),
-  otherLanguage: field(f, z.string()),
+  otherBackground: field(f, nullableString),
+  otherLanguage: field(f, nullableString),
   immediateFamily: field(f, z.string()),
 })
 
@@ -458,7 +469,7 @@ const registrationShape = <F extends Flavour>(f: F, mode: ObjectMode) => ({
   isPreRegistered: field(f, z.boolean()),
   amountPaid: field(f, amount(f), NUMBER_KINDS),
   status: field(f, registrationStatusSchema),
-  shirtSize: field(f, z.string()),
+  shirtSize: field(f, nullableString),
   isReturning: field(f, z.boolean()),
   smallGroup: field(f, z.string()),
   cabinPreference: field(f, z.string()),
@@ -479,7 +490,7 @@ const registrationShape = <F extends Flavour>(f: F, mode: ObjectMode) => ({
   nameOfParentCheckedOut: field(f, z.string()),
 
   waiverFullName: field(f, z.string()),
-  waiverSignature: field(f, z.string()),
+  waiverSignature: field(f, nullableString),
   waiverSignDate: field(f, z.string()),
 
   // Deprecated (schemaVersion 2) but still part of the type for old documents.
@@ -944,20 +955,12 @@ const buildRegistrationPayload = (u: UnknownKeys) => {
     ...camperHealthShape("read"),
     ...registrationShape("read", embedded),
     grade: gradeSchema.optional(),
-    // The website's "attended camp before?" radio used to send the radio's
-    // string value. Registration state saved in localStorage and pending
-    // payment registrations written before the fix still carry "true" /
-    // "false", so normalize those two strings to the boolean they meant.
-    isReturning: z
-      .preprocess(
-        (v) => (v === "true" ? true : v === "false" ? false : v),
-        z.boolean()
-      )
-      .optional(),
+    isReturning: legacyBoolean.optional(),
   })
   const parentPayload = obj(embedded, {
     ...parentShape("read"),
     email: emptyOr(emailSchema).optional(),
+    subscribeToMailingList: legacyBoolean.optional(),
   })
 
   return obj(payloadMode(u), {

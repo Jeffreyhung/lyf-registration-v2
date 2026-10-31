@@ -246,6 +246,12 @@ describe("validateRegistrationWrite", () => {
     )
   })
 
+  it("accepts the null text fields found on v1-era registrations", () => {
+    const legacy = { waiverSignature: null, shirtSize: null }
+    expect(validateRegistrationWrite(legacy)).toEqual(legacy)
+    expect(validateRegistrationRead(legacy)).toEqual(legacy)
+  })
+
   it("accepts the Stripe fulfilment update", () => {
     const update = {
       payments: arrayUnion(paymentRef),
@@ -538,6 +544,8 @@ describe("validateFamilyWrite", () => {
 
   it("accepts the registration function's family write", () => {
     expect(validateFamilyWrite(write)).toEqual(write)
+    // Most v1-era family documents store suite as null.
+    expect(validateFamilyWrite({ suite: null })).toEqual({ suite: null })
     expect(
       validateFamilyWrite({
         ...write,
@@ -623,6 +631,9 @@ describe("validateParentWrite", () => {
     expect(validateParentWrite(write)).toEqual(write)
     expect(validateParentWrite({ email: "" })).toEqual({ email: "" })
     expect(validateParentWrite({ lineId: null })).toEqual({ lineId: null })
+    expect(validateParentWrite({ phoneNumber: null })).toEqual({
+      phoneNumber: null,
+    })
     expect(validateParentWrite({ stripeCustomerId: "cus_123" })).toBeDefined()
   })
   it("rejects un-normalized or malformed emails", () => {
@@ -1076,7 +1087,7 @@ const registrationPayload = {
       firstName: "Sam",
       lastName: "Lin",
       email: "",
-      phoneNumber: "555-0101",
+      phoneNumber: null,
       lineId: null,
     },
   ],
@@ -1126,6 +1137,27 @@ describe("validateRegistrationPayload", () => {
     // Legacy parent documents store lineId as null (LYF-REGISTRATION webhook
     // error "parents[0].lineId: expected string, received null").
     expect(result.parents[1].lineId).toBeNull()
+    expect(result.parents[1].phoneNumber).toBeNull()
+  })
+
+  it("accepts the null family suite most v1-era families carry", () => {
+    const result = validateRegistrationPayload({
+      ...registrationPayload,
+      family: { ...registrationPayload.family, suite: null },
+    })
+    expect(result.family.suite).toBeNull()
+  })
+
+  it("normalizes a legacy string subscribeToMailingList on a parent", () => {
+    const withFlag = (subscribeToMailingList: unknown) =>
+      validateRegistrationPayload({
+        ...registrationPayload,
+        parents: [{ ...registrationPayload.parents[0], subscribeToMailingList }],
+      }).parents[0].subscribeToMailingList
+    expect(withFlag("true")).toBe(true)
+    expect(withFlag("false")).toBe(false)
+    expect(withFlag(false)).toBe(false)
+    expectIssue(() => withFlag("yes"), "parents[0].subscribeToMailingList")
   })
 
   it("normalizes the legacy string isReturning the website radio used to send", () => {

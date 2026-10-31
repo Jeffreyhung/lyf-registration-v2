@@ -111,7 +111,7 @@ export type Registration = Partial<{
   // fulfillPreRegistrations when the pre-registration deposit lands.
   amountPaid: number
   status: RegistrationStatus
-  shirtSize: string
+  shirtSize: string | null
   isReturning: boolean
   smallGroup: string
   cabinPreference: string
@@ -138,7 +138,7 @@ export type Registration = Partial<{
 
   // Waiver Signature
   waiverFullName: string
-  waiverSignature: string
+  waiverSignature: string | null
   waiverSignDate: string
 
   // DEPRECATED in schemaVersion 2: demographics now live at

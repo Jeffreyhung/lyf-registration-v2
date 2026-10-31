@@ -23,7 +23,7 @@ export type Family = Partial<{
   country: string
   state: string
   street: string
-  suite: string
+  suite: string | null
   zip: string
   // Culture within each household
   household: HouseholdCulture
@@ -40,7 +40,7 @@ export type Parent = Partial<{
   firstName: string
   lastName: string
   lineId: string | null
-  phoneNumber: string
+  phoneNumber: string | null
   subscribeToMailingList: boolean
   stripeCustomerId: string
 }>
@@ -92,8 +92,8 @@ export type Demographics = Partial<{
   hakkaLanguage: string
   hokkienLanguage: string
   mandarinLanguage: string
-  otherBackground: string
-  otherLanguage: string
+  otherBackground: string | null
+  otherLanguage: string | null
   immediateFamily: string
 }>
 

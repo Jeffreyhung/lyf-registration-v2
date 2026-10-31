@@ -16,7 +16,7 @@ export type Family = DocumentId &
   Partial<{
     city: string
     state: string
-    suite: string
+    suite: string | null
     zip: string
     emails: string[]
   }>
@@ -27,7 +27,7 @@ export type Parent = DocumentId &
     firstName: string
     lastName: string
     lineId: string | null
-    phoneNumber: string
+    phoneNumber: string | null
     subscribeToMailingList: boolean
   }>
 
@@ -54,7 +54,7 @@ export type Registration = DocumentId &
     updatedAt: Timestamp
 
     grade: number
-    shirtSize: string
+    shirtSize: string | null
     status: string
 
     demographics: Record<string, unknown>

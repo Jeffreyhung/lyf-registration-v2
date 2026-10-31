@@ -135,7 +135,7 @@ function ParentGuardianForm({
           label="US Phone Number"
           fullWidth
           type="tel"
-          value={parent.phoneNumber}
+          value={parent.phoneNumber ?? ""}
           onChange={editParentHandler("phoneNumber")}
         />
       </Grid>
@@ -168,7 +168,7 @@ function ParentGuardianForm({
               id="family-suite"
               label="Suite"
               fullWidth
-              value={family.suite}
+              value={family.suite ?? ""}
               onChange={editFamilyHandler("suite")}
             />
           </Grid>
