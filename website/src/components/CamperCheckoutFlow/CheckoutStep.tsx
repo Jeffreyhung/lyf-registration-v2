@@ -111,7 +111,7 @@ export default function CheckoutStep({
       }
 
       checkoutSessionId = response.data.sessionId
-    } catch (error) {
+    } catch {
       setError("Unable to create Stripe checkout session")
     }
 

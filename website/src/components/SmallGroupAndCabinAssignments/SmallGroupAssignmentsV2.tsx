@@ -130,13 +130,34 @@ const columns: ColumnDef[] = [
   },
 ]
 
+// The monospace font for the group totals. Loaded here, when the section is
+// first opened, rather than on every page of the site.
+const PLEX_MONO_STYLESHEET =
+  "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap"
+
+function usePlexMonoFont() {
+  React.useEffect(() => {
+    if (document.querySelector(`link[href="${PLEX_MONO_STYLESHEET}"]`)) {
+      return
+    }
+    const link = document.createElement("link")
+    link.rel = "stylesheet"
+    link.href = PLEX_MONO_STYLESHEET
+    document.head.appendChild(link)
+  }, [])
+}
+
 export default function SmallGroupAssignmentsV2({
   registrations,
   campYear,
 }: SmallGroupAssignmentsV2Props) {
+  usePlexMonoFont()
+  // Lazy initialiser: building the Pairings is only needed for the first
+  // render, not on every re-render of the section.
   const [smallGroupState, dispatch] = useReducer(
     smallGroupReducer,
-    createInitialState(registrations)
+    registrations,
+    createInitialState
   )
   const { pairings, groups, editStack, redoStack } = smallGroupState
   const [alertProps, setAlertProps] = useState<AlertProps | null>(null)

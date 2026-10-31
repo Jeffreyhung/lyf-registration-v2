@@ -6,7 +6,6 @@ import {
   FormLabel,
   Grid,
   GridProps,
-  GridSize,
 } from "@mui/material"
 import FormHasValidatedContext from "./FormHasValidatedContext"
 
@@ -45,7 +44,7 @@ export default function FormCheckboxGroup({
     >
       <FormLabel id={id}>{label}</FormLabel>
       <Grid container>
-        {options.map((option, i) => (
+        {options.map((option) => (
           <Grid size={size} key={`${id}-${option}`}>
             <FormControlLabel
               control={

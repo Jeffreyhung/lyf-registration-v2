@@ -35,8 +35,5 @@
   "lint-staged": {
     "functions/**/*.{js,mjs,cjs,ts,mts,cts}": "yarn --cwd functions eslint",
     "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,md,yml,yaml,css,html}": "prettier --check --ignore-unknown"
-  },
-  "resolutions": {
-    "@types/mjml-core": "^4.15.2"
   }
 }

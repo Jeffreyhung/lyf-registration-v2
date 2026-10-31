@@ -15,7 +15,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material"
-import { TaskAlt, ErrorOutline, Info, Add } from "@mui/icons-material"
+import { TaskAlt, ErrorOutline, Add } from "@mui/icons-material"
 
 // Local Components
 import RegistrationStep from "./RegistrationStep"
@@ -33,7 +33,6 @@ import {
   RegistrationStatus,
 } from "lyf-registration-schemas"
 import {
-  RegistrationDataContext,
   RegistrationDispatchContext,
   RegistrationData,
   RegistrationActionType,
@@ -112,7 +111,6 @@ export default function CamperStep({
   registrations,
   campYear,
 }: CamperStepProps) {
-  const registrationData = React.useContext(RegistrationDataContext)
   const dispatch = React.useContext(RegistrationDispatchContext)
   const [selectedPreFillCamper, setPreFillCamper] = React.useState<string>(
     camper.id ?? ""
@@ -194,7 +192,7 @@ export default function CamperStep({
             }
           }}
         >
-          {campersInDatabase.map((c, i) => {
+          {campersInDatabase.map((c) => {
             const reg = registrations.find((r) => r.camperId === c.id)
             const alreadyRegistered = reg?.status === RegistrationStatus.ACTIVE
             return (
@@ -325,7 +323,7 @@ export default function CamperStep({
                   value={camper.grade}
                   max={12}
                   min={1}
-                  onChange={(event, val) => {
+                  onChange={(_event, val) => {
                     dispatch({
                       type: RegistrationActionType.EditCamper,
                       index: camperIndex,
@@ -355,7 +353,7 @@ export default function CamperStep({
                 {camper.campTrack && (
                   <Chip
                     label={`${camper.campTrack} Camp Track`}
-                    /* @ts-ignore Tertiary not supported */
+                    /* @ts-expect-error Tertiary not supported */
                     color={getColorFromCampTrack(camper.campTrack)}
                   />
                 )}

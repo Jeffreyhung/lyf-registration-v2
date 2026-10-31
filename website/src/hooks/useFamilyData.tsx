@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useCollectionOnce } from "react-firebase-hooks/firestore"
 import {
   collection,
@@ -108,9 +108,8 @@ export default function useFamilyData({
   // >(new Set()) // We use strings because Sets use object reference equality.
 
   // This could be multiple families but we're going to limit to 1 with maybe a log that we got 2?
-  const [familyDocs, familyDocsLoading, error] = useCollectionOnce<Family>(
+  const [familyDocs, familyDocsLoading] = useCollectionOnce<Family>(
     query(
-      // @ts-ignore Ignore collection not being able to provide a type.
       isSignedIn ? collection(firestore, "families") : null,
       isSignedIn ? where("emails", "array-contains", user?.email) : null
     )
@@ -146,7 +145,7 @@ export default function useFamilyData({
         (includeCampers || includeRegistrations) && familyDocsLoading
       )
       setParentLoading(includeParents && familyDocsLoading)
-      return
+      return undefined
     }
 
     // A user can be listed in more than one family if someone else named them
@@ -178,7 +177,7 @@ export default function useFamilyData({
     )
     const unsubscribeCampersCollectionListener = includeCampers
       ? onSnapshot(
-          // @ts-ignore Ignore collection for now
+          // @ts-expect-error Ignore collection for now
           query<Camper>(campersCollection),
           async (camperSnapshot) => {
             // First run, the entire map changes
@@ -197,7 +196,8 @@ export default function useFamilyData({
                   const healthDoc = await getDoc(
                     doc(firestore, `${camper.doc.ref.path}/private/health`)
                   )
-                  if (healthDoc.exists()) health = healthDoc.data() as CamperHealth
+                  if (healthDoc.exists())
+                    health = healthDoc.data() as CamperHealth
                 } catch {
                   // Not readable — leave empty
                 }
@@ -219,7 +219,6 @@ export default function useFamilyData({
                     camperRegistrations.map(async (reg) => {
                       if (!newRegistrations.has(reg.path)) {
                         const registrationDoc = await getDoc(
-                          // @ts-ignore Doc doesn't allow us to define a type
                           doc(firestore, reg.path)
                         )
                         newRegistrations.set(reg.path, {
@@ -257,7 +256,7 @@ export default function useFamilyData({
     )
     const unsubscribeParentsCollectionListener = includeParents
       ? onSnapshot(
-          // @ts-ignore Ignore collection for now
+          // @ts-expect-error Ignore collection for now
           query<Parent>(parentsCollection),
           async (parentSnapshot) => {
             // First run, the entire map changes
@@ -289,64 +288,88 @@ export default function useFamilyData({
 
   useEffect(() => {
     if (camperRegistrationLoading) {
-      return
+      return undefined
     }
 
-    // A camper that has never registered has no `registrations` field
+    // A camper that has never registered has no `registrations` field. Only
+    // this year's registrations can match a query on camps/{campYear}, so ids
+    // from other years are dropped before they count against the 30-value
+    // limit of an `in` filter (a family with several returning campers can
+    // exceed it across all years).
     const camperRegistrations = Array.from(campers)
       .reduce(
         (prev, [, c]) => prev.concat(c.registrations ?? []),
         new Array<DocumentReference<Registration>>()
       )
+      .filter((r) => r.parent.parent?.id === campYear)
       .map((r) => r.id)
 
     if (camperRegistrations.length <= 0 || !campYear) {
       setRegistrationLoading(false)
-      return
+      return undefined
     }
 
-    return onSnapshot(
-          // @ts-ignore Ignore collection for now
-          query<Registration>(
-            collection(firestore, `camps/${campYear}/registrations`),
-            where(documentId(), "in", camperRegistrations)
-          ),
-          async (registrationSnapshot) => {
-            const newRegistrations = new Map<
-              string,
-              RegistrationDocumentWithCamperId
-            >()
-            await Promise.all(
-              registrationSnapshot.docChanges().map(async (r) => {
-                const registrationData = r.doc.data()
-                newRegistrations.set(r.doc.ref.path, {
+    const IN_LIMIT = 30
+    const idChunks: string[][] = []
+    for (let i = 0; i < camperRegistrations.length; i += IN_LIMIT) {
+      idChunks.push(camperRegistrations.slice(i, i + IN_LIMIT))
+    }
+
+    const unsubscribes = idChunks.map((ids) =>
+      onSnapshot(
+        // @ts-expect-error Ignore collection for now
+        query<Registration>(
+          collection(firestore, `camps/${campYear}/registrations`),
+          where(documentId(), "in", ids)
+        ),
+        async (registrationSnapshot) => {
+          const newRegistrations = new Map<
+            string,
+            RegistrationDocumentWithCamperId
+          >()
+          await Promise.all(
+            registrationSnapshot.docChanges().map(async (r) => {
+              const registrationData = r.doc.data()
+              newRegistrations.set(r.doc.ref.path, {
+                ...registrationData,
+                ref: r.doc.ref,
+                id: r.doc.id,
+                camperId: registrationData.camper.id,
+                campYear: r.doc.ref.parent.parent.id,
+                waitlistPosition: await waitlistPosition({
                   ...registrationData,
                   ref: r.doc.ref,
                   id: r.doc.id,
-                  camperId: registrationData.camper.id,
-                  campYear: r.doc.ref.parent.parent.id,
-                  waitlistPosition: await waitlistPosition({
-                    ...registrationData,
-                    ref: r.doc.ref,
-                    id: r.doc.id,
-                  }),
-                })
+                }),
               })
-            )
-            setRegistrations((map) => new Map([...map, ...newRegistrations]))
-            setRegistrationLoading(false)
-          }
-        )
+            })
+          )
+          setRegistrations((map) => new Map([...map, ...newRegistrations]))
+          setRegistrationLoading(false)
+        }
+      )
+    )
+    return () => unsubscribes.forEach((unsubscribe) => unsubscribe())
   }, [campers, camperRegistrationLoading])
 
-  return [
-    {
+  // The arrays are derived from the maps only when they change, so callers
+  // can memoise their own derived rows on `familyData.campers` etc. instead
+  // of recomputing them on every render.
+  const camperList = useMemo(() => Array.from(campers.values()), [campers])
+  const parentList = useMemo(() => Array.from(parents.values()), [parents])
+  const familyData = useMemo<FamilyData>(
+    () => ({
       family: family,
-      campers: Array.from(campers.values()),
-      parents: Array.from(parents.values()),
+      campers: camperList,
+      parents: parentList,
       registrations: registrations,
       campCredit,
-    },
+    }),
+    [family, camperList, parentList, registrations, campCredit]
+  )
+
+  return [
+    familyData,
     familyLoading ||
       camperRegistrationLoading ||
       registrationLoading ||

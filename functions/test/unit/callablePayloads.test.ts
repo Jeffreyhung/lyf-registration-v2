@@ -4,10 +4,9 @@
  * Firestore with a malformed body and expect `invalid-argument`, and with a
  * well-formed body check that the handler got past validation.
  */
-import type {CallableRequest} from "firebase-functions/v2/https";
-import {HttpsError} from "firebase-functions/v2/https";
 import {CampTrack, RegistrationStatus} from "lyf-registration-schemas";
 
+import {callableRequest, expectHttpsError} from "./callableTestUtils";
 import {FakeFirestore} from "./fakeFirestore";
 
 // ../utils opens Firestore, Stripe and the mail transport at import time.
@@ -32,9 +31,6 @@ jest.mock("../../src/utils", () => ({
   combineNames: (names: string[]) => names.join(" and "),
   sanitizeForEmailHeader: (value: string) => value.replace(/[\r\n]/g, " ").trim(),
 }));
-jest.mock("@slack/client", () => ({
-  IncomingWebhook: jest.fn().mockImplementation(() => ({send: jest.fn()})),
-}));
 jest.mock("@mailchimp/mailchimp_marketing", () => ({
   __esModule: true,
   default: {setConfig: jest.fn(), lists: {}},
@@ -49,36 +45,20 @@ const ADMIN = "root@example.com";
 const PARENT = "pat@example.com";
 const SITE = "https://lyf-registration.tacl.org/registration";
 
-// Typed as CallableRequest<never> so a deliberately malformed body can be
-// handed to any of the callables without a cast at each call site.
-function request(data: unknown, email: string | null = PARENT): CallableRequest<never> {
-  return {
-    data,
-    rawRequest: {},
-    auth: email === null ? undefined : {uid: "uid", token: {email}},
-  } as unknown as CallableRequest<never>;
-}
+// Each test speaks as this caller unless it says otherwise.
+const request = (data: unknown, email: string | null = PARENT) =>
+  callableRequest(data, email);
 
-async function expectHttpsError(
-  promise: Promise<unknown>,
-  code: string,
-  message?: RegExp
-): Promise<HttpsError> {
-  let caught: unknown;
-  try {
-    await promise;
-  } catch (e) {
-    caught = e;
-  }
-  expect(caught).toBeInstanceOf(HttpsError);
-  expect((caught as HttpsError).code).toBe(code);
-  if (message) expect((caught as HttpsError).message).toMatch(message);
-  return caught as HttpsError;
-}
+// Slack notifications go out through fetch; never let a test reach the network.
+const mockFetch = jest.fn();
+beforeAll(() => {
+  global.fetch = mockFetch as unknown as typeof fetch;
+});
 
 beforeEach(() => {
   mockState.db = new FakeFirestore();
   mockSendMail.mockReset().mockResolvedValue({accepted: true});
+  mockFetch.mockReset().mockResolvedValue({ok: true, status: 200, text: async () => "ok"});
 });
 
 // Shaped like what ReviewStep sends, including the Firestore leftovers the
@@ -191,6 +171,8 @@ describe("createPreRegistrationSession", () => {
   it.each([
     ["mismatched camper lists", {...payload, camperRefsToPreRegister: []}, /camperRefsToPreRegister/],
     ["a collection path instead of a document path", {...payload, camperRefsToPreRegister: ["families/fam1/campers"]}, /camperRefsToPreRegister\[0\]/],
+    ["a document path that is not a camper", {...payload, camperRefsToPreRegister: ["admins/root@example.com"]}, /camper document path/],
+    ["a parent document path", {...payload, camperRefsToPreRegister: ["families/fam1/parents/pat@example.com"]}, /camper document path/],
     ["a grade out of range", {...payload, camperCurrentGrades: [99]}, /camperCurrentGrades\[0\]/],
     ["a malformed email", {...payload, email: "pat"}, /email/],
     ["an unknown key", {...payload, coupon: "FREE"}, /coupon/],
@@ -207,6 +189,24 @@ describe("createPreRegistrationSession", () => {
       createPreRegistrationSession.run(request(payload, "someone-else@example.com")),
       "permission-denied",
       /does not match/
+    );
+  });
+
+  it("refuses a camper in a family the caller is not listed in", async () => {
+    mockState.db.seed("families", "fam1", {emails: ["other@example.com"]});
+    await expectHttpsError(
+      createPreRegistrationSession.run(request(payload)),
+      "permission-denied",
+      /pre-register this camper/
+    );
+  });
+
+  it("refuses a camper path that does not exist, before anything reaches Stripe", async () => {
+    mockState.db.seed("families", "fam1", {emails: [PARENT]});
+    await expectHttpsError(
+      createPreRegistrationSession.run(request(payload)),
+      "not-found",
+      /camper1/
     );
   });
 });

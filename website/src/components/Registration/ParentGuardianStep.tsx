@@ -19,7 +19,6 @@ import { AnimatedIconButton } from "@components/Button"
 import { ParentRegSVG } from "@components/SVG"
 
 // Registration Data Context
-import { Parent } from "lyf-registration-schemas"
 import {
   RegistrationDataContext,
   RegistrationDispatchContext,
@@ -203,7 +202,7 @@ function ParentGuardianForm({
               autoHighlight
               fullWidth
               value={family.country ?? ""}
-              onChange={(event, newValue) =>
+              onChange={(_event, newValue) =>
                 dispatch({
                   type: RegistrationActionType.EditFamily,
                   keyToChange: "country",
@@ -233,7 +232,7 @@ function ParentGuardianForm({
                   : []
               }
               value={family.state ?? ""}
-              onChange={(event, newValue) =>
+              onChange={(_event, newValue) =>
                 dispatch({
                   type: RegistrationActionType.EditFamily,
                   keyToChange: "state",
@@ -277,9 +276,7 @@ function ParentGuardianForm({
   )
 }
 
-type ParentGuardianStepProps = {}
-
-export default function ParentGuardianStep({}: ParentGuardianStepProps) {
+export default function ParentGuardianStep() {
   const registrationState = React.useContext(RegistrationDataContext)
   const dispatch = React.useContext(RegistrationDispatchContext)
 

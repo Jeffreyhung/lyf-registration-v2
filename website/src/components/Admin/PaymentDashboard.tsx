@@ -1,10 +1,9 @@
 import React from "react"
 import { GridColDef } from "@mui/x-data-grid"
-import { Button, Card, CardHeader, Stack } from "@mui/material"
+import { Card, CardHeader } from "@mui/material"
 
 // Components
 import AuthContext from "@components/Auth/AuthContext"
-import SnackbarAlertContext from "@components/SnackbarAlert/SnackbarAlertContext"
 import Table from "@components/Table"
 
 // Hooks
@@ -13,8 +12,6 @@ import usePayments from "@hooks/usePayments"
 // Utils
 import { DataGridColumnAlign } from "@components/Table"
 import { ProdContext } from "@components/ProdContext"
-
-type PaymentDashboardProps = {}
 
 const columns: GridColDef[] = [
   {
@@ -67,27 +64,32 @@ const columns: GridColDef[] = [
   },
 ]
 
-export default function PaymentDashboard({}: PaymentDashboardProps) {
+export default function PaymentDashboard() {
   const { isAdmin, adminRole } = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
-  const [data, loading, error] = usePayments({ isAdmin, adminRole, firestore })
+  const [data, loading] = usePayments({ isAdmin, adminRole, firestore })
 
-  // We want most recent payments first
-  const sortedData = data.sort(
-    (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+  // We want most recent payments first. Sorted on a copy (the hook's array is
+  // memoised and shared) and only when a new snapshot arrives.
+  const rows = React.useMemo(
+    () =>
+      [...data]
+        .sort(
+          (a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
+        )
+        .map((payment, index) => ({
+          id: index.toString(),
+          customerName: payment.customerName ?? "",
+          customerEmail: payment.customerEmail ?? "",
+          customerId: payment.customerId ?? "",
+          donation: payment.donation ?? 0,
+          total: payment.total ?? 0,
+          stripeId: payment.stripeId ?? "",
+
+          createdAt: payment.createdAt?.toDate() ?? new Date(0),
+        })),
+    [data]
   )
-
-  const rows = sortedData.map((payment, index) => ({
-    id: index.toString(),
-    customerName: payment.customerName ?? "",
-    customerEmail: payment.customerEmail ?? "",
-    customerId: payment.customerId ?? "",
-    donation: payment.donation ?? 0,
-    total: payment.total ?? 0,
-    stripeId: payment.stripeId ?? "",
-
-    createdAt: payment.createdAt?.toDate() ?? new Date(0),
-  }))
 
   // Eventually want to make this a dashboard that contains charts for payments and donations.
   return (

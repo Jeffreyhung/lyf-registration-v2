@@ -1,12 +1,15 @@
 import "./instrument";
 
 import {initializeApp} from "firebase-admin/app";
-import {SUPPORTED_REGIONS} from "firebase-functions";
 import {setGlobalOptions} from "firebase-functions/v2/options";
 
 // Initialize our app once which allows us to perform Admin SDK operations.
 initializeApp();
-setGlobalOptions({region: SUPPORTED_REGIONS[3]});
+// Every v2 function deploys to us-west2, the region the website's
+// getFunctions() call (website/src/utils/firebaseApp.ts) and the v1 codebase
+// use. This used to be SUPPORTED_REGIONS[3], a v1-only export that
+// firebase-functions 6+ no longer exposes from the package root.
+setGlobalOptions({region: "us-west2"});
 
 // Import our function for handling paid Stripe invoices
 import {handleStripeWebhook, handleTestStripeWebhook} from "./stripe/handleStripeWebhook";

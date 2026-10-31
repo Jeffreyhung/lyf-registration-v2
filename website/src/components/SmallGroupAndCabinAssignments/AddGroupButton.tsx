@@ -15,14 +15,10 @@ import {
 } from "./SmallGroupContext"
 import { GroupId } from "small-group-pairing"
 
-type AddGroupButtonProps = {}
-
-export default function AddGroupButton({}: AddGroupButtonProps) {
+export default function AddGroupButton() {
   const dispatch = React.useContext(SmallGroupDispatchContext)
   const [isOpen, setIsOpen] = React.useState(false)
   const [groupId, setGroupId] = React.useState<GroupId>(null)
-  const [minSize, setMinSize] = React.useState(0)
-  const [maxSize, setMaxSize] = React.useState(15)
 
   const handleOpen = () => {
     setIsOpen(true)

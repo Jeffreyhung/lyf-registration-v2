@@ -2,13 +2,15 @@
     "name": "lyf-registration-schemas",
     "version": "1.0.0",
     "main": "dist/index",
+    "module": "dist/esm/index.js",
     "types": "dist/index",
+    "sideEffects": false,
     "private": true,
     "files": [
         "dist"
     ],
     "scripts": {
-        "build": "tsc",
+        "build": "tsc && tsc -p tsconfig.esm.json",
         "test": "jest"
     },
     "dependencies": {

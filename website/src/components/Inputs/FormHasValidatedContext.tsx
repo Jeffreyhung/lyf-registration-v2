@@ -1,4 +1,4 @@
 import { createContext } from "react"
 
-const FormHasValidatedContext = createContext<Boolean>(false);
+const FormHasValidatedContext = createContext<boolean>(false);
 export default FormHasValidatedContext;

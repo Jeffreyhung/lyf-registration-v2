@@ -47,9 +47,8 @@ export default function SmallGroupAssignments({
     girls: RegistrationData[]
     nonBinary: RegistrationData[]
   }[] = []
-  let groupIndex = 0
   grades.forEach(({ boys, girls, nonBinary, numCampers }) => {
-    const groupsForThisGrade = []
+    const groupsForThisGrade: typeof smallGroups = []
 
     // Split grade groups evenly by gender if there are too many campers
     const numGroups = Math.ceil(numCampers / MAX_SMALL_GROUP_SIZE)

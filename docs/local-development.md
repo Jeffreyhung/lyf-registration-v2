@@ -103,10 +103,12 @@ in `website/tsconfig.json`.
   workspace dependency resolves outside the monorepo. All imports inside
   `functions/src` must therefore be local or published packages.
 - Email templates are [MJML](https://mjml.io/) + Mustache under
-  `functions/src/emailTemplates`. They are not TypeScript, so the `copy-files`
-  script copies `.html`/`.mjml` into `lib/` as part of `yarn build`. The
-  VS Code MJML extension or [MJML's live editor](https://mjml.io/try-it-live)
-  renders them while editing.
+  `functions/src/emailTemplates`, compiled to HTML at build time rather than in
+  the deployed functions: `yarn build:templates` (run by `yarn build` and by
+  the jest global setup) writes `src/emailTemplates/*.html` (git-ignored) and
+  `copy-files` copies the HTML into `lib/`. After editing a `.mjml` file, run
+  `yarn build:templates` to see the change. The VS Code MJML extension or
+  [MJML's live editor](https://mjml.io/try-it-live) renders them while editing.
 
 ## Emulators
 

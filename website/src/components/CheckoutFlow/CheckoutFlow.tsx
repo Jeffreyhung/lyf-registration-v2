@@ -72,13 +72,13 @@ export default function CheckoutFlow({
     }
   }, [reviewStepIndex])
 
+  const contextValue = React.useMemo(
+    () => ({ activeStep, setActiveStep }),
+    [activeStep]
+  )
+
   return (
-    <CheckoutFlowContext.Provider
-      value={{
-        activeStep,
-        setActiveStep,
-      }}
-    >
+    <CheckoutFlowContext.Provider value={contextValue}>
       <Stack
         sx={{
           padding: 1,

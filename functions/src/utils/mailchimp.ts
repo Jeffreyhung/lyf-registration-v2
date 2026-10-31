@@ -1,7 +1,7 @@
 import * as Sentry from "@sentry/node";
 import {logger} from "firebase-functions";
 import mailchimp from "@mailchimp/mailchimp_marketing";
-import md5 from "md5";
+import {createHash} from "crypto";
 
 import {RegistrationType} from "../utils";
 import {CollectionReference} from "firebase-admin/firestore";
@@ -35,6 +35,14 @@ export const getMailchimpList = (regType: RegistrationType) => {
 
 export const getMailchimpTag = (campYear: string, regType: RegistrationType) =>
   `${campYear}${regType}`;
+
+/**
+ * Mailchimp addresses list members by the MD5 hash of the lowercased email
+ * (the "subscriber hash"). Node's crypto module computes it; no package needed.
+ * @param email
+ */
+export const mailchimpSubscriberHash = (email: string) =>
+  createHash("md5").update(email.toLowerCase()).digest("hex");
 
 export const getMailchimpTagForCampTrack = (
   campYear: string,
@@ -81,7 +89,7 @@ export async function addMailchimpTags(
   tagsToAdd: string[],
   regType: RegistrationType
 ) {
-  const hashedEmail = md5(email.toLowerCase());
+  const hashedEmail = mailchimpSubscriberHash(email);
   const mailingList = getMailchimpList(regType);
 
   await mailchimp.lists.updateListMemberTags(mailingList, hashedEmail, {
@@ -120,7 +128,7 @@ export async function removeMailchimpTags(
   tagsToRemove: string[],
   regType: RegistrationType
 ) {
-  const hashedEmail = md5(email.toLowerCase());
+  const hashedEmail = mailchimpSubscriberHash(email);
   const mailingList = getMailchimpList(regType);
 
   await mailchimp.lists.updateListMemberTags(mailingList, hashedEmail, {
@@ -161,7 +169,7 @@ export async function addMailchimpUserToMailingList(
   lastName: string | null,
   regType: RegistrationType
 ) {
-  const hashedEmail = md5(email.toLowerCase());
+  const hashedEmail = mailchimpSubscriberHash(email);
   const mailingList = getMailchimpList(regType);
 
   try {

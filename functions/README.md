@@ -33,5 +33,12 @@ into `isolate/` so the `lyf-registration-schemas` dependency resolves outside
 the monorepo. Keep imports local or published.
 
 Email templates are [MJML](https://mjml.io/) + Mustache under
-[src/emailTemplates](src/emailTemplates/); `yarn build` runs `copy-files` to
-copy the `.html` / `.mjml` files into `lib/` because `tsc` does not.
+[src/emailTemplates](src/emailTemplates/), compiled to HTML at build time rather
+than in the deployed functions: `yarn build:templates` (run by `yarn build` and
+by the jest global setup) writes `src/emailTemplates/*.html` (git-ignored),
+`copy-files` copies the HTML into `lib/`, and
+`src/registrationUtils/emailTemplates.ts` reads a template the first time it is
+needed. This keeps `mjml` out of the production bundle and off the cold-start
+path. After editing a `.mjml` file, run `yarn build:templates` (or `yarn build`)
+to see the change; the VS Code MJML extension or
+[MJML's live editor](https://mjml.io/try-it-live) render a file as you edit it.

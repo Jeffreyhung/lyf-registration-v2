@@ -1,9 +1,7 @@
 import React from "react"
 import { Box } from "@mui/material"
 
-type TriangleBorderProps = {}
-
-export default function TriangleBorder({}: TriangleBorderProps) {
+export default function TriangleBorder() {
   return (
     <Box
       sx={{

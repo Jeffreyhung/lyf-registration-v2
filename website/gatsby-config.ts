@@ -35,19 +35,10 @@ const config: GatsbyConfig = {
       },
       __key: "images",
     },
-    {
-      resolve: `gatsby-omni-font-loader`,
-      options: {
-        enableListener: true,
-        preconnect: [`https://fonts.googleapis.com`, `https://fonts.gstatic.com`],
-        web: [
-          {
-            name: `IBM Plex Mono`,
-            file: `https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap`,
-          },
-        ],
-      },
-    },
+    // IBM Plex Mono is only used by the admin small-group assignments; that
+    // component loads it when it mounts (see SmallGroupAssignmentsV2) instead
+    // of every page carrying the Google Fonts request plus react-helmet via
+    // gatsby-omni-font-loader. Nunito comes bundled from @fontsource.
     {
       resolve: "gatsby-plugin-manifest",
       options: {

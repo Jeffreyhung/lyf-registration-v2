@@ -65,7 +65,7 @@ export default function SelectNumCampersStep({
             min={1}
             max={10}
             value={registrationData.campers.length}
-            onChange={(event, val) =>
+            onChange={(_event, val) =>
               dispatch({
                 type: RegistrationActionType.SetNumOfCampers,
                 numOfCampers: val,
@@ -83,7 +83,7 @@ export default function SelectNumCampersStep({
             {preRegistrations.map((reg) => (
               <ListItem key={reg.id}>
                 <ListItemIcon>
-                  {/* @ts-ignore We do actually allow tertiary because it's a value in our app palette but the type isn't augmented */}
+                  {/* @ts-expect-error We do actually allow tertiary because it's a value in our app palette but the type isn't augmented */}
                   <Star color="tertiary" />
                 </ListItemIcon>
                 <ListItemText primary={reg.camperName} />

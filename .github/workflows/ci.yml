@@ -90,7 +90,7 @@ jobs:
         run: yarn workspace small-group-pairing test
 
   website:
-    name: Website (type-check)
+    name: Website (type-check + lint + unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -103,10 +103,14 @@ jobs:
       # built for their declarations to resolve.
       - name: Build local workspace packages
         run: yarn build:packages
-      # The website has no lint or test script yet; add the steps here when
-      # website/package.json gains them.
       - name: Type-check
         run: yarn workspace lyf-registration-website typecheck
+      - name: Lint
+        run: yarn workspace lyf-registration-website lint
+      # The unit tests import lyf-registration-schemas, so they also need the
+      # packages built above.
+      - name: Unit tests
+        run: yarn workspace lyf-registration-website test
 
   audit:
     name: Dependency audit (advisory)

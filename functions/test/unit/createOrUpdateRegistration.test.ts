@@ -11,7 +11,7 @@ import {
 jest.mock("../../src/utils", () => ({db: {}}));
 
 import {createOrUpdateRegistration} from "../../src/registration/createOrUpdateRegistration";
-import {FakeFirestore} from "./fakeFirestore";
+import {FakeDocRef, FakeFirestore} from "./fakeFirestore";
 
 const PARENT = "pat@example.com";
 const SITE = "https://lyf-registration.tacl.org/registration";
@@ -66,6 +66,27 @@ function setup() {
 }
 
 describe("createOrUpdateRegistration", () => {
+  it("keeps parentRefs in payload order when the first parent's write finishes last", async () => {
+    const db = setup();
+    const originalSet = FakeDocRef.prototype.set;
+    jest
+      .spyOn(FakeDocRef.prototype, "set")
+      .mockImplementation(async function (this: FakeDocRef, data, options) {
+        // Only the signed-in parent's document is slow.
+        if (this.id === PARENT) await new Promise((r) => setTimeout(r, 10));
+        return originalSet.call(this, data, options);
+      });
+
+    try {
+      const {parentRefs} = await createOrUpdateRegistration(
+        db.as(), websitePayload(), false, PARENT
+      );
+      expect(parentRefs.map((r) => r.id)).toEqual([PARENT, "555-0101"]);
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
   it("writes every document through its validator for a real website payload", async () => {
     const db = setup();
 

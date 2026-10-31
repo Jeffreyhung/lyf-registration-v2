@@ -20,29 +20,28 @@ export interface RowWithStatusAndNotes extends TableValidRow {
   internalNotes: string
 }
 
-export type CancelStatusPromise = {
-  newRow: RowWithStatusAndNotes
-  oldRow: RowWithStatusAndNotes
-  resolve: (
-    value: RowWithStatusAndNotes | PromiseLike<RowWithStatusAndNotes>
-  ) => void
-  reject: (reason?: any) => void
+// Generic over the grid's row type so a dashboard gets its own rows back from
+// resolve/updateRow instead of the widened base type.
+export type CancelStatusPromise<
+  Row extends RowWithStatusAndNotes = RowWithStatusAndNotes
+> = {
+  newRow: Row
+  oldRow: Row
+  resolve: (value: Row | PromiseLike<Row>) => void
+  reject: (reason?: unknown) => void
 }
 
-export type CancelStatusDialogProps = {
-  context: CancelStatusPromise | null
-  setContext: React.Dispatch<CancelStatusPromise | null>
-  updateRow: (
-    newRow: RowWithStatusAndNotes,
-    cancelText: string
-  ) => Promise<void>
+export type CancelStatusDialogProps<Row extends RowWithStatusAndNotes> = {
+  context: CancelStatusPromise<Row> | null
+  setContext: React.Dispatch<CancelStatusPromise<Row> | null>
+  updateRow: (newRow: Row, cancelText: string) => Promise<void>
 }
 
-export default function CancelStatusDialog({
+export default function CancelStatusDialog<Row extends RowWithStatusAndNotes>({
   context,
   setContext,
   updateRow,
-}: CancelStatusDialogProps) {
+}: CancelStatusDialogProps<Row>) {
   const [cancelText, setCancelText] = React.useState<string | null>("")
   const handleTextChange = (event: React.BaseSyntheticEvent) => {
     setCancelText(event.target.value as string)
@@ -63,12 +62,12 @@ export default function CancelStatusDialog({
     if (!context) {
       return
     }
-    const { newRow, oldRow, resolve, reject } = context
+    const { newRow, resolve, reject } = context
 
     try {
       await updateRow(newRow, `${cancelDateText}${cancelText || ""}`)
       resolve(newRow)
-    } catch (e) {
+    } catch {
       reject(new Error("Failed to update row."))
     }
     setContext(null)

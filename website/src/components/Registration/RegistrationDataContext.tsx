@@ -52,7 +52,7 @@ export interface RegistrationEditHouseholdAction extends RegistrationBaseAction 
   newValue: any
 }
 
-export interface RegistrationAddAction extends RegistrationBaseAction {}
+export type RegistrationAddAction = RegistrationBaseAction
 
 export interface RegistrationRemoveAction extends RegistrationBaseAction {
   index: number
@@ -209,7 +209,7 @@ export function registrationReducer(
 
       try {
         changedState = JSON.parse(storedRegistrationState)
-      } catch (e) {
+      } catch {
         changedState = registrationState
       }
       break
@@ -217,14 +217,14 @@ export function registrationReducer(
     case RegistrationActionType.SetNumOfCampers: {
       const { numOfCampers } = action as RegistrationSetNumOfCampersAction
       const currentNumOfCampers = registrationState.campers.length
-      let newCampers =
+      const newCampers =
         currentNumOfCampers < numOfCampers
           ? [
               ...registrationState.campers,
               ...Array(numOfCampers - currentNumOfCampers).fill({}),
             ]
           : registrationState.campers.slice(0, numOfCampers)
-      let newDemographics =
+      const newDemographics =
         currentNumOfCampers < numOfCampers
           ? [
               ...registrationState.demographics,
@@ -432,7 +432,9 @@ export function registrationReducer(
   return changedState
 }
 
-export function createEmptyRegistrationData(campYear: number) {
+export function createEmptyRegistrationData(
+  campYear: number
+): RegistrationData {
   return {
     campYear: campYear,
     family: {},
@@ -445,8 +447,6 @@ export function createEmptyRegistrationData(campYear: number) {
   }
 }
 
-// @ts-ignore Null will immediately be set by the parent component
 export const RegistrationDataContext = createContext<RegistrationData>(null)
-// @ts-ignore Null will immediately be set by the parent component
 export const RegistrationDispatchContext =
   createContext<React.Dispatch<RegistrationAction>>(null)

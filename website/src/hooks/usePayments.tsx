@@ -1,3 +1,4 @@
+import React from "react"
 import {
   collection,
   DocumentData,
@@ -21,20 +22,25 @@ export default function usePayments({
   adminRole,
   firestore,
 }: UsePaymentsProps): [Payment[], boolean, FirestoreError | undefined] {
-  const canReadPayments = isAdmin && roleHasCapability(adminRole, "managePayments")
+  const canReadPayments =
+    isAdmin && roleHasCapability(adminRole, "managePayments")
   const [values, loading, error] = useCollection<Payment>(
     canReadPayments
       ? query<Payment, DocumentData>(
-          // @ts-ignore
+          // @ts-expect-error collection() is untyped; query<Payment> narrows it
           collection(firestore, "payments")
         )
       : null
   )
 
-  const data: Payment[] =
-    values?.docs.map((payment) => {
-      return { ...payment.data(), ref: payment.ref, id: payment.id }
-    }) ?? []
+  // Rebuilt only when a new snapshot arrives, not on every render.
+  const data: Payment[] = React.useMemo(
+    () =>
+      values?.docs.map((payment) => {
+        return { ...payment.data(), ref: payment.ref, id: payment.id }
+      }) ?? [],
+    [values]
+  )
 
   return [data, loading, error]
 }

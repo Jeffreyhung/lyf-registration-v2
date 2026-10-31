@@ -36,6 +36,7 @@ import {parseCallablePayload} from "../utils/validate";
 import {
   CampYear,
   getRegistrationPrice,
+  normalizeEmail,
   RegistrationPayload,
   RegistrationStatus,
   validateRegistrationPayload,
@@ -143,10 +144,16 @@ export const createRegistrationSession = onCall<RegistrationPayload>(
         request.auth.token.email!
       );
 
-    // Assume the first parent is the signed in parent.
-    const signedInParentRef = parentRefs[0];
-    const signedInParentEmail =
-      request.auth.token.email ?? (parents[0].email?.toLowerCase() as string);
+    // The Stripe customer is created for, and stored on, the signed-in
+    // parent's document, so find that parent by the verified auth email
+    // rather than assuming they were listed first. assertCallerEmailInList
+    // (in createOrUpdateRegistration) guarantees a match exists.
+    const signedInParentEmail = normalizeEmail(request.auth.token.email!);
+    const signedInParentIndex = parents.findIndex(
+      (p) => !!p.email && normalizeEmail(p.email) === signedInParentEmail
+    );
+    const signedInParentRef =
+      parentRefs[signedInParentIndex >= 0 ? signedInParentIndex : 0];
 
     const waitlistedCampers = camperAndStatuses.filter(
       ({isWaitlisted}) => isWaitlisted

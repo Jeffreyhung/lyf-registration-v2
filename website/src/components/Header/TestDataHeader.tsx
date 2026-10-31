@@ -2,9 +2,7 @@ import React from "react"
 import { AppBar, Container, Toolbar, Typography } from "@mui/material"
 import { ProdContext } from "@components/ProdContext"
 
-type TestDataHeaderProps = {}
-
-export default function TestDataHeader({}: TestDataHeaderProps) {
+export default function TestDataHeader() {
   const { isProd } = React.useContext(ProdContext)
   return isProd ? (
     <></>

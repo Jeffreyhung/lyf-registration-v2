@@ -11,11 +11,11 @@ const LinkButton = React.forwardRef<HTMLElement, LinkButtonProps>(
     <Button
       component={to ? Link : "button"}
       to={to && to.charAt(0) != "/" ? `/${to}` : to}
-      // @ts-ignore Ref type weirdness
       ref={ref}
       {...rest}
     />
   )
 )
+LinkButton.displayName = "LinkButton"
 
 export default LinkButton

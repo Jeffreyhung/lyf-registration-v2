@@ -1,11 +1,5 @@
 import React from "react"
-import {
-  Card,
-  Checkbox,
-  CardActionArea,
-  Stack,
-  Typography,
-} from "@mui/material"
+import { Card, CardActionArea, Stack, Typography } from "@mui/material"
 import { animated } from "@react-spring/web"
 
 // Utils

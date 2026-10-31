@@ -262,7 +262,7 @@ export default function CampYearTab() {
     if (!isTestData) {
       setProdYears([])
       setCopyYear("")
-      return
+      return undefined
     }
     let cancelled = false
     getDocs(collection(prodFirestore, "camps"))
