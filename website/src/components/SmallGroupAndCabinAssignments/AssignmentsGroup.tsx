@@ -1,17 +1,7 @@
 import React from "react"
 import {
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Collapse,
   Grid,
-  Table,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-  IconButton,
-  ListItem,
   Typography,
   List,
   Divider,
@@ -28,14 +18,11 @@ import { UNASSIGNED_GROUP_ID } from "small-group-pairing"
 import {
   PairingCamper,
   PairingGroup,
-  CamperMetadata,
   SmallGroupDispatchContext,
   SmallGroupActionType,
 } from "./SmallGroupContext"
 import { ColumnDef } from "./SmallGroupAssignmentsV2"
 import AssignmentsCamper from "./AssignmentsCamper"
-
-const AnimatedGrid = animated(Grid)
 
 type AssignmentsGroupProps = {
   group: PairingGroup

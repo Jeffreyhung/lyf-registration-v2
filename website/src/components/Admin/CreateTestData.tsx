@@ -40,7 +40,6 @@ async function getFamilyRefs(
 ) {
   const familyId = `${email}_test_family`
   const familiesQuery = query(
-    // @ts-ignore Ignore collection not being able to provide a type.
     collection(firestore, "families"),
     where("emails", "array-contains", email)
   )
@@ -174,10 +173,7 @@ async function deleteTestFamily(
     deleteBatch.delete(parent.ref)
   })
 
-  const campersQuery = query(
-    // @ts-ignore Ignore collection not being able to provide a type.
-    collection(firestore, `${familyRef.path}/campers`)
-  )
+  const campersQuery = query(collection(firestore, `${familyRef.path}/campers`))
 
   const campersSnapshot = await getDocs(campersQuery)
 

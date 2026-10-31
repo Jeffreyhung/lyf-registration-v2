@@ -435,7 +435,7 @@ export default function RegistrationDashboard({
     Map<RegistrationData, Payment[]>
   >(new Map())
   const [cancelPromiseContext, setCancelPromiseContext] =
-    React.useState<CancelStatusPromise | null>(null)
+    React.useState<CancelStatusPromise<RegDashboardRow> | null>(null)
   const [namedExportOpen, setNamedExportOpen] = React.useState(false)
 
   // Row building joins parents and family data for every registration, so it
@@ -621,7 +621,7 @@ export default function RegistrationDashboard({
                     await Promise.all(
                       rowSelection.map(async (rowId) => {
                         const registration =
-                          registrationData[rows[rowId].index - 1]
+                          registrationData[rows[Number(rowId)].index - 1]
                         const payments = await Promise.all(
                           !registration.payments
                             ? []

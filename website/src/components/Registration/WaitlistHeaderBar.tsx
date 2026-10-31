@@ -1,7 +1,7 @@
 import React from "react"
 import { AppBar, Toolbar, Typography, Container } from "@mui/material"
 
-import { CampTrackInfo, CampYear } from "lyf-registration-schemas"
+import { CampTrackInfo } from "lyf-registration-schemas"
 
 type WaitlistHeaderBarProps = {
   campTracksInfo: CampTrackInfo[]

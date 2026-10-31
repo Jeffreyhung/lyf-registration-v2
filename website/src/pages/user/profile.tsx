@@ -117,7 +117,7 @@ const columns: GridColDef[] = [
         [RegistrationStatus, number | null, CampTrack]
       >
     ) => {
-      const [status, waitlistPosition, campTrack] = params.value
+      const [status, , campTrack] = params.value
 
       const chipColor = (() => {
         switch (status) {
@@ -320,7 +320,7 @@ const ProfilePage: React.FC<PageProps> = () => {
 
     setSaving(true)
     editableColumns.forEach((column) => {
-      const field = column.field
+      const field = column.field as keyof ParentDashboardRow
       if (newRow[field] === oldRow[field]) return
       if (REGISTRATION_FIELDS.has(field)) {
         registrationUpdate.push([field, newRow[field]])
@@ -376,14 +376,14 @@ const ProfilePage: React.FC<PageProps> = () => {
       getActions: ({ id }) =>
         rowModesModel[id]?.mode === GridRowModes.Edit
           ? [
-              <Tooltip title="Save" disableInteractive>
+              <Tooltip key="save" title="Save" disableInteractive>
                 <GridActionsCellItem
                   icon={<SaveIcon />}
                   label="Save"
                   onClick={handleConfirmClick(id)}
                 />
               </Tooltip>,
-              <Tooltip title="Restore" disableInteractive>
+              <Tooltip key="restore" title="Restore" disableInteractive>
                 <GridActionsCellItem
                   icon={<RestoreIcon />}
                   label="Restore"
@@ -392,7 +392,7 @@ const ProfilePage: React.FC<PageProps> = () => {
               </Tooltip>,
             ]
           : [
-              <Tooltip title="Edit" disableInteractive>
+              <Tooltip key="edit" title="Edit" disableInteractive>
                 <GridActionsCellItem
                   icon={<EditIcon />}
                   label="Edit"

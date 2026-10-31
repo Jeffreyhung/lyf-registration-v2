@@ -1,4 +1,6 @@
-import { PaletteColorOptions } from "@mui/material"
+// A module (not a script) so the declarations below augment MUI instead of
+// replacing it.
+export {}
 
 declare module "@mui/material/styles" {
   interface Palette {

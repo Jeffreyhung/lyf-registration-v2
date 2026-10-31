@@ -10,8 +10,6 @@ type DemographicsProps = {
   data: RegistrationData[]
 }
 
-const allRegistrationStatuses = Object.values(RegistrationStatus)
-
 export default function Demographics({ data }: DemographicsProps) {
   const [filteredData, selectComponent] = useFilterRegistrationStatus(data, [
     RegistrationStatus.ACTIVE,

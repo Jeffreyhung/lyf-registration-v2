@@ -122,20 +122,20 @@ async function updateAndGetParents(
   familyRef: DocumentReference<Family>,
   parentsPayload: Parent[]
 ): Promise<DocumentReference<Parent>[]> {
-  const parentRefs: DocumentReference<Parent>[] = [];
-  await Promise.all(
+  // The refs are returned in payload order: callers match them back to the
+  // parents by index (to find the signed-in parent). Pushing from inside the
+  // async callbacks would order them by write completion instead.
+  return Promise.all(
     parentsPayload.map(async (parent) => {
       const parentRef = await findOrCreateParent(familyRef, parent);
-      parentRefs.push(parentRef);
       // parentDocumentFields drops undefined keys (the SDK rejects them);
       // the validator then checks what is actually written.
       await parentRef.set(validateParentWrite(parentDocumentFields(parent)), {
         merge: true,
       });
+      return parentRef;
     })
   );
-
-  return parentRefs;
 }
 
 /**

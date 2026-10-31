@@ -1,10 +1,9 @@
 import React from "react"
 import { GridColDef } from "@mui/x-data-grid"
-import { Button, Card, CardHeader, Stack } from "@mui/material"
+import { Card, CardHeader } from "@mui/material"
 
 // Components
 import AuthContext from "@components/Auth/AuthContext"
-import SnackbarAlertContext from "@components/SnackbarAlert/SnackbarAlertContext"
 import Table from "@components/Table"
 
 // Hooks
@@ -13,8 +12,6 @@ import usePayments from "@hooks/usePayments"
 // Utils
 import { DataGridColumnAlign } from "@components/Table"
 import { ProdContext } from "@components/ProdContext"
-
-type PaymentDashboardProps = {}
 
 const columns: GridColDef[] = [
   {
@@ -67,10 +64,10 @@ const columns: GridColDef[] = [
   },
 ]
 
-export default function PaymentDashboard({}: PaymentDashboardProps) {
+export default function PaymentDashboard() {
   const { isAdmin, adminRole } = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
-  const [data, loading, error] = usePayments({ isAdmin, adminRole, firestore })
+  const [data, loading] = usePayments({ isAdmin, adminRole, firestore })
 
   // We want most recent payments first. Sorted on a copy (the hook's array is
   // memoised and shared) and only when a new snapshot arrives.

@@ -53,7 +53,7 @@ export default function TimeGated({
     }
     checkTime()
     // Re-evaluate when the bypass decision arrives after sign-in.
-  }, [hideAfterDateTime, shouldBypassTimeGate])
+  }, [forceHide, hideAfterDateTime, shouldBypassTimeGate])
 
   return (
     <>

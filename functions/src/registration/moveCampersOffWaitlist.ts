@@ -4,8 +4,6 @@ import {formatInTimeZone} from "date-fns-tz";
 import {logger} from "firebase-functions";
 import {onCall} from "firebase-functions/v2/https";
 import * as Mustache from "mustache";
-import * as fs from "fs";
-import * as path from "path";
 
 import {
   combineNames,
@@ -28,6 +26,7 @@ import {
 import {DocumentReference, FieldValue} from "firebase-admin/firestore";
 import {applySpotDelta} from "../registrationUtils";
 import {getEmailHeaderImageUrl} from "../registrationUtils/emailHeaderImage";
+import {loadEmailTemplate} from "../registrationUtils/emailTemplates";
 import {sendMessageToRegistrationErrorMessages} from "../slack/slackChannelWebhooks";
 import {
   assertAdmin,
@@ -35,7 +34,6 @@ import {
 } from "../utils/auth";
 import {withSentryCallable} from "../utils/sentry";
 import {parseCallablePayload} from "../utils/validate";
-import mjml2html from "mjml";
 
 // Ensure that all variables wrapped in {{}} are represented here
 type BodyTemplateInput = {
@@ -47,15 +45,6 @@ type BodyTemplateInput = {
   /** camps/{year}.emailHeaderImageUrl; the template falls back when unset. */
   emailHeaderImageUrl: string | undefined;
 };
-
-const mjmlTemplate = fs.readFileSync(
-  path.resolve(__dirname, "../emailTemplates/offWaitlistTemplate.mjml"),
-  {encoding: "utf8"}
-);
-
-const htmlTemplate = mjml2html(mjmlTemplate, {
-  minify: true, // Making it smalle rto save on email file size
-}).html;
 
 /**
  * Moves campers off of the waitlist by marking their registration as pending payment and sending
@@ -149,14 +138,17 @@ export const moveCampersOffWaitlist = onCall<MoveCampersOffWaitlistRequest>(
       registrationDate: formatInTimeZone(
         addDays(new Date(), 7),
         "America/Los_Angeles",
-        "EEEE MMM do, Y"
+        "EEEE MMM do, y"
       ),
       camperName: camperName,
       campTrack: campTrack,
       emailHeaderImageUrl: await getEmailHeaderImageUrl(db, campYear),
     };
 
-    const htmlBody = Mustache.render(htmlTemplate, templateInput);
+    const htmlBody = Mustache.render(
+      loadEmailTemplate("offWaitlistTemplate"),
+      templateInput
+    );
 
     return emailTransport.sendMail({
       from: `TACL-LYF <${REGISTRATION_EMAIL}>`,

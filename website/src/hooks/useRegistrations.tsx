@@ -141,27 +141,20 @@ export default function useRegistrations({
   // insufficient permissions").
   const [loadError, setLoadError] = React.useState<Error | undefined>()
 
-  // @ts-ignore Ignore the fact that we can't set undefined. We have to start out with undefined
   // so that we don't create a new map on every render: https://beta.reactjs.org/reference/react/useRef#avoiding-recreating-the-ref-contents
   const regDataMap = React.useRef<Map<string, RegistrationData>>(undefined)
   // Legacy (pre-schemaVersion 3) caches: camper doc by camper id, family +
   // parents by family id.
-  // @ts-ignore Same as above
   const camperDataMap = React.useRef<Map<string, Partial<Camper>>>(undefined)
-  // @ts-ignore Same as above
   const familyDataMap = React.useRef<Map<string, FamilyData>>(undefined)
   // Resolved private sub-documents by camper path, plus the paths whose
   // reads are still in flight so two snapshots arriving close together
   // (e.g. a webhook status flip right after page load) issue one fetch.
-  // @ts-ignore Same as above
   const privateDataMap = React.useRef<Map<string, PrivateData>>(undefined)
-  // @ts-ignore Same as above
   const privateInFlight = React.useRef<Set<string>>(undefined)
   // Family documents by family id (address / household for the grid columns),
   // plus the ids whose reads are still in flight.
-  // @ts-ignore Same as above
   const familyDocMap = React.useRef<Map<string, Family>>(undefined)
-  // @ts-ignore Same as above
   const familyInFlight = React.useRef<Set<string>>(undefined)
   // Bumped whenever the caches are reset. Async continuations compare the
   // generation they started under with the current one and drop their results
@@ -188,7 +181,6 @@ export default function useRegistrations({
   const [values, loading, error] = useCollection<Registration>(
     isAdmin && adminRole && campYear !== null
       ? query<Registration, DocumentData>(
-          // @ts-ignore
           collection(firestore, `camps/${campYear}/registrations`),
           ...constraints
         )
@@ -345,12 +337,12 @@ export default function useRegistrations({
       const [healthDoc, demoDoc] = await Promise.all([
         canReadHealth(adminRole)
           ? getDoc(doc(firestore, `${camperPath}/private/health`)).catch(
-              () => undefined
+              (): undefined => undefined
             )
           : Promise.resolve(undefined),
         canReadDemographics(adminRole)
           ? getDoc(doc(firestore, `${camperPath}/private/demographics`)).catch(
-              () => undefined
+              (): undefined => undefined
             )
           : Promise.resolve(undefined),
       ])

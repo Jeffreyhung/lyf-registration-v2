@@ -1,23 +1,16 @@
 import React from "react"
-import { collection, doc, getDocs, query, where } from "firebase/firestore"
+import { collection, getDocs, query, where } from "firebase/firestore"
 import { Grid, TextField, Typography } from "@mui/material"
-import { useDocumentData } from "react-firebase-hooks/firestore"
 
-import { CampCredit } from "lyf-registration-schemas"
 import { ProdContext } from "@components/ProdContext"
 import { SnackbarAlertContext } from "@components/SnackbarAlert"
 import { AnimatedButtonWithLoading } from "@components/Button"
 import AddCampCredit from "./AddCampCredit"
 
-type CampCreditProps = {}
-
-export default function CampCreditTab({}: CampCreditProps) {
+export default function CampCreditTab() {
   const { firestore } = React.useContext(ProdContext)
   const [email, setEmail] = React.useState<string>("")
   const [familyId, setFamilyId] = React.useState<string>("")
-  const [campCreditDoc, setCampCreditDoc] = React.useState<CampCredit | null>(
-    null
-  )
 
   const { setSnackbar } = React.useContext(SnackbarAlertContext)
 
@@ -53,12 +46,6 @@ export default function CampCreditTab({}: CampCreditProps) {
 
     setFamilyId(querySnapshot.docs[0].id)
   }
-
-  // Given the family ID, get the camp credit document
-  const [campCredit, campCreditLoading, campCreditError] =
-    useDocumentData<CampCredit>(
-      familyId ? doc(firestore, `/credits/${familyId}`) : null
-    )
 
   return (
     <Grid container justifyContent="center" alignItems="stretch" spacing={2}>

@@ -1382,6 +1382,24 @@ describe("validatePreRegistrationPayload", () => {
       "camperRefsToPreRegister[0]",
       /document path/
     )
+    // Any other document path is rejected too: the function writes to this
+    // path (and its parent family) when the payment lands.
+    for (const path of [
+      "admins/root@example.com",
+      "camps/2026/registrations/reg1",
+      "families/fam1/parents/pat@example.com",
+      "families/fam1/campers/c1/private/health",
+    ]) {
+      expectIssue(
+        () =>
+          validatePreRegistrationPayload({
+            ...payload,
+            camperRefsToPreRegister: [path, "families/fam1/campers/c2"],
+          }),
+        "camperRefsToPreRegister[0]",
+        /camper document path/
+      )
+    }
     expectIssue(
       () => validatePreRegistrationPayload({ ...payload, email: "pat" }),
       "email"

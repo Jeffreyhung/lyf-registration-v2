@@ -99,8 +99,10 @@ function handleStripeWebhookHelper(
       switch (event.type) {
         case "checkout.session.completed":
         case "checkout.session.async_payment_succeeded": {
-          logger.info("Handling a checkout session");
           const session = event.data.object as Stripe.Checkout.Session;
+          logger.info(
+            `Handling ${event.type} for session ${session.id} (event ${event.id})`
+          );
           const sessionWithLineItems = await stripe.checkout.sessions.retrieve(
             session.id,
             {
@@ -162,8 +164,10 @@ function handleStripeWebhookHelper(
         case "checkout.session.expired": {
           // Registration sessions hold camp spots (see createOrUpdateRegistration);
           // when the session lapses unpaid, hand them back.
-          logger.info("Handling an expired checkout session");
           const session = event.data.object as Stripe.Checkout.Session;
+          logger.info(
+            `Handling expired session ${session.id} (event ${event.id})`
+          );
           const sessionWithLineItems = await stripe.checkout.sessions.retrieve(
             session.id,
             {expand: ["line_items.data.price.product"]}
@@ -189,12 +193,14 @@ function handleStripeWebhookHelper(
           break;
         }
         default:
-          logger.error("Unhandled event type");
+          logger.error(`Unhandled event type ${event.type} (event ${event.id})`);
       }
     } catch (error) {
       Sentry.captureException(error);
-      logger.error("Failed to handle the event: ", error);
-      sendMessageToRegistrationErrorMessages("Failed to handle an event");
+      logger.error(`Failed to handle ${event.type} (event ${event.id})`, error);
+      sendMessageToRegistrationErrorMessages(
+        `Failed to handle Stripe event ${event.id} (${event.type}); see Sentry`
+      );
       // Release the claim so Stripe's retry can reprocess this event.
       await eventRef.delete().catch((e) => logger.error(e));
       response.status(500).send();

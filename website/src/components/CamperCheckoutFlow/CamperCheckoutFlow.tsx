@@ -47,7 +47,7 @@ export default function CamperCheckoutFlow({
   const nextCampYear = campYear + 1
   const auth = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
-  const [familyData, loading, error] = useFamilyData({
+  const [familyData, loading] = useFamilyData({
     ...auth,
     firestore: firestore,
     includeParents: false,
@@ -102,7 +102,7 @@ export default function CamperCheckoutFlow({
       const nextYearPreReg = nextYearsRegistrations?.find(
         (reg) => registrations.get(reg.path)?.isPreRegistered
       )
-      const nextYearPreRegStatus = !!nextYearPreReg
+      const nextYearPreRegStatus = nextYearPreReg
         ? (registrations.get(nextYearPreReg.path)?.status as RegistrationStatus)
         : null
 
@@ -172,19 +172,23 @@ export default function CamperCheckoutFlow({
       }
       checkoutSteps={[
         <PreRegistrationAgreementStep
+          key="agreement"
           hideCamperCheckout={hideCamperCheckout}
           preRegistrationFee={preRegistrationFee}
         />,
         <PreRegistrationStep
+          key="pre-registration"
           campers={campersWithRegistration}
           preRegisteredCampersIds={preRegisteredCampersIds}
           setPreRegisteredCampersIds={setPreRegisteredCampersIds}
         />,
         <DonateStep
+          key="donate"
           donationAmount={donationAmount}
           setDonationAmount={setDonationAmount}
         />,
         <CheckoutStep
+          key="checkout"
           nextCampYear={nextCampYear}
           campers={campersWithRegistration}
           preRegisteredCampersIds={preRegisteredCampersIds}

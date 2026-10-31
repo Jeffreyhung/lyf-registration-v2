@@ -52,10 +52,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   const { isSignedIn, user, isAdmin } = React.useContext(AuthContext)
   const { firestore } = React.useContext(ProdContext)
   // Load data from the server
-  const [campInfo, campInfoLoading, campInfoError] = useCampYearInfo(
-    campYear,
-    firestore
-  )
+  const [campInfo] = useCampYearInfo(campYear, firestore)
   // Opening times live on camps/{year} (earlyRegOpenDate for pre-registered
   // families, registrationOpenDate for everyone) and are edited from the
   // admin dashboard. A missing date means "not open".
@@ -67,7 +64,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   const showRemainingSpots = schedule.campInfo?.showRemainingSpots === true
   const registrationOpenForPreRegistered = schedule.earlyRegOpen ?? FAR_FUTURE
   const registrationOpen = schedule.registrationOpen ?? FAR_FUTURE
-  const [familyData, loading, error] = useFamilyData({
+  const [familyData, loading] = useFamilyData({
     isSignedIn: isSignedIn,
     user: user,
     firestore: firestore,
@@ -345,14 +342,16 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
           }
           checkoutSteps={[
             <InfoStep
+              key="info"
               campTracksInfo={campTracksInfo}
               campYear={campYear}
               infoSessionDate={schedule.infoSessionDate}
               infoSessionImageUrl={schedule.campInfo?.infoSessionImageUrl}
               showRemainingSpots={showRemainingSpots}
             />,
-            <ParentGuardianStep />,
+            <ParentGuardianStep key="parents" />,
             <SelectNumCampersStep
+              key="num-campers"
               preRegistrations={preRegistrations}
               campYear={campYear}
             />,
@@ -360,6 +359,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
             ...registrationData.campers
               .map((camper, index) => [
                 <CamperStep
+                  key={`camper-${index}`}
                   camper={camper}
                   camperIndex={index}
                   campersInDatabase={useFamily ? campers : []}
@@ -367,13 +367,18 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
                   campYear={campYear}
                 />,
                 <DemographicsStep
+                  key={`demographics-${index}`}
                   demographics={registrationData.demographics[index]}
                   demographicsIndex={index}
                 />,
               ])
               .flat(),
-            <FamilyCultureStep household={registrationData.household} />,
+            <FamilyCultureStep
+              key="family-culture"
+              household={registrationData.household}
+            />,
             <ReviewStep
+              key="review"
               preRegistrations={preRegistrations}
               campCredit={useFamily ? campCredit : 0}
               campInfo={campInfo}

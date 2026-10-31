@@ -89,6 +89,15 @@ export const createPreRegistrationSession = onCall<PreRegistrationInputPayload>(
           "You do not have permission to pre-register this camper"
         );
       }
+      // The path is stamped into Stripe metadata and written to on
+      // fulfilment; a camper that does not exist would take the payment and
+      // then fail the webhook (no pre-registration, retries for days).
+      if (!(await camperDoc.get()).exists) {
+        throw new HttpsError(
+          "not-found",
+          `Camper ${camperDoc.id} was not found in your family`
+        );
+      }
     }
 
     const camperCurrentGradesString = camperCurrentGrades?.map((grade) =>

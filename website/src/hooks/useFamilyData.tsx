@@ -108,9 +108,8 @@ export default function useFamilyData({
   // >(new Set()) // We use strings because Sets use object reference equality.
 
   // This could be multiple families but we're going to limit to 1 with maybe a log that we got 2?
-  const [familyDocs, familyDocsLoading, error] = useCollectionOnce<Family>(
+  const [familyDocs, familyDocsLoading] = useCollectionOnce<Family>(
     query(
-      // @ts-ignore Ignore collection not being able to provide a type.
       isSignedIn ? collection(firestore, "families") : null,
       isSignedIn ? where("emails", "array-contains", user?.email) : null
     )
@@ -146,7 +145,7 @@ export default function useFamilyData({
         (includeCampers || includeRegistrations) && familyDocsLoading
       )
       setParentLoading(includeParents && familyDocsLoading)
-      return
+      return undefined
     }
 
     // A user can be listed in more than one family if someone else named them
@@ -178,7 +177,7 @@ export default function useFamilyData({
     )
     const unsubscribeCampersCollectionListener = includeCampers
       ? onSnapshot(
-          // @ts-ignore Ignore collection for now
+          // @ts-expect-error Ignore collection for now
           query<Camper>(campersCollection),
           async (camperSnapshot) => {
             // First run, the entire map changes
@@ -220,7 +219,6 @@ export default function useFamilyData({
                     camperRegistrations.map(async (reg) => {
                       if (!newRegistrations.has(reg.path)) {
                         const registrationDoc = await getDoc(
-                          // @ts-ignore Doc doesn't allow us to define a type
                           doc(firestore, reg.path)
                         )
                         newRegistrations.set(reg.path, {
@@ -258,7 +256,7 @@ export default function useFamilyData({
     )
     const unsubscribeParentsCollectionListener = includeParents
       ? onSnapshot(
-          // @ts-ignore Ignore collection for now
+          // @ts-expect-error Ignore collection for now
           query<Parent>(parentsCollection),
           async (parentSnapshot) => {
             // First run, the entire map changes
@@ -290,7 +288,7 @@ export default function useFamilyData({
 
   useEffect(() => {
     if (camperRegistrationLoading) {
-      return
+      return undefined
     }
 
     // A camper that has never registered has no `registrations` field. Only
@@ -308,7 +306,7 @@ export default function useFamilyData({
 
     if (camperRegistrations.length <= 0 || !campYear) {
       setRegistrationLoading(false)
-      return
+      return undefined
     }
 
     const IN_LIMIT = 30
@@ -319,7 +317,7 @@ export default function useFamilyData({
 
     const unsubscribes = idChunks.map((ids) =>
       onSnapshot(
-        // @ts-ignore Ignore collection for now
+        // @ts-expect-error Ignore collection for now
         query<Registration>(
           collection(firestore, `camps/${campYear}/registrations`),
           where(documentId(), "in", ids)

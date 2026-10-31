@@ -85,6 +85,84 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
+    // ---------- Field shape helpers ----------
+    // The functions validate every document they write through the schemas
+    // package. These give the handful of fields parents write straight from
+    // the website the same floor: the right type and a sane size, so a map
+    // or a megabyte cannot land where the admin grid expects a short string.
+    // `keys` is the set of keys to check — every key on a create, only the
+    // changed keys on an update — so a legacy value in an untouched field
+    // never blocks an unrelated edit. null is accepted wherever text is.
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Keys to check for a create-or-update rule: resource is null on create.
+    function writtenKeys() {
+      return resource == null ? request.resource.data.keys() : changedKeys();
+    }
+
+    function textOk(d, keys, key, max) {
+      return !(key in keys) || !(key in d) || d[key] == null ||
+        (d[key] is string && d[key].size() <= max);
+    }
+
+    function boolOk(d, keys, key) {
+      return !(key in keys) || !(key in d) || d[key] is bool;
+    }
+
+    function timestampOk(d, keys, key) {
+      return !(key in keys) || !(key in d) || d[key] == null ||
+        d[key] is timestamp;
+    }
+
+    function listOk(d, keys, key, max) {
+      return !(key in keys) || !(key in d) ||
+        (d[key] is list && d[key].size() <= max);
+    }
+
+    function mapOk(d, keys, key) {
+      return !(key in keys) || !(key in d) || d[key] is map;
+    }
+
+    // Mirrors the camper profile fields in schemas/src/validation.ts.
+    function camperProfileShapeOk(d, keys) {
+      return textOk(d, keys, 'firstName', 200) &&
+        textOk(d, keys, 'lastName', 200) &&
+        textOk(d, keys, 'preferredName', 200) &&
+        textOk(d, keys, 'birthDate', 50) &&
+        listOk(d, keys, 'gender', 20) &&
+        textOk(d, keys, 'pronouns', 200) &&
+        textOk(d, keys, 'email', 320) &&
+        boolOk(d, keys, 'returning');
+    }
+
+    function camperHealthShapeOk(d, keys) {
+      return textOk(d, keys, 'dietAndFoodAllergies', 5000) &&
+        textOk(d, keys, 'medicalConditions', 5000);
+    }
+
+    function familyAddressShapeOk(d, keys) {
+      return textOk(d, keys, 'street', 200) &&
+        textOk(d, keys, 'suite', 200) &&
+        textOk(d, keys, 'city', 200) &&
+        textOk(d, keys, 'state', 200) &&
+        textOk(d, keys, 'zip', 50) &&
+        textOk(d, keys, 'country', 200) &&
+        mapOk(d, keys, 'household');
+    }
+
+    // The registration fields the profile page and camper checkout write.
+    function parentRegistrationShapeOk(d, keys) {
+      return textOk(d, keys, 'shirtSize', 50) &&
+        textOk(d, keys, 'additionalNotes', 5000) &&
+        boolOk(d, keys, 'isCheckedOut') &&
+        textOk(d, keys, 'nameOfParentCheckedOut', 200) &&
+        timestampOk(d, keys, 'checkedOutTime') &&
+        timestampOk(d, keys, 'updatedAt');
+    }
+
     // Fields a parent may set on their own camper. Health and demographics
     // are deliberately absent — they live under private/ and are gated there.
     function camperProfileKeys() {
@@ -118,7 +196,8 @@ service cloud.firestore {
       // (membership) and `registrations` are function-managed.
       allow update: if isFullAdmin() ||
         (isMemberOfResourceFamily() &&
-          onlyUpdates(['street', 'suite', 'city', 'state', 'zip', 'country', 'household']));
+          onlyUpdates(['street', 'suite', 'city', 'state', 'zip', 'country', 'household']) &&
+          familyAddressShapeOk(request.resource.data, changedKeys()));
 
       match /parents/{parentId} {
         allow read: if isAnyAdmin() || isFamilyMember(familyId);
@@ -133,9 +212,11 @@ service cloud.firestore {
         allow create: if isFamilyMember(familyId) &&
           request.resource.data.keys().hasOnly(camperProfileKeys()) &&
           (!('registrations' in request.resource.data) ||
-            request.resource.data.registrations.size() == 0);
+            request.resource.data.registrations.size() == 0) &&
+          camperProfileShapeOk(request.resource.data, request.resource.data.keys());
         allow update: if isFamilyMember(familyId) &&
-          onlyUpdates(camperProfileKeys().removeAll(['registrations', 'schemaVersion']));
+          onlyUpdates(camperProfileKeys().removeAll(['registrations', 'schemaVersion'])) &&
+          camperProfileShapeOk(request.resource.data, changedKeys());
 
         // Private sub-documents — one match for every sensitive section.
         // Section gates mirror PRIVATE_SECTIONS in schemas/src/families.ts:
@@ -149,7 +230,8 @@ service cloud.firestore {
           // Parents own their child's health info and may keep it current.
           allow create, update: if section == 'health' &&
             isFamilyMember(familyId) &&
-            request.resource.data.keys().hasOnly(['dietAndFoodAllergies', 'medicalConditions']);
+            request.resource.data.keys().hasOnly(['dietAndFoodAllergies', 'medicalConditions']) &&
+            camperHealthShapeOk(request.resource.data, writtenKeys());
         }
       }
     }
@@ -202,7 +284,8 @@ service cloud.firestore {
         allow update: if hasEmail() &&
           callerEmail() in resource.data.familyEmails &&
           onlyUpdates(['shirtSize', 'additionalNotes', 'isCheckedOut',
-                       'nameOfParentCheckedOut', 'checkedOutTime', 'updatedAt']);
+                       'nameOfParentCheckedOut', 'checkedOutTime', 'updatedAt']) &&
+          parentRegistrationShapeOk(request.resource.data, changedKeys());
       }
     }
 
