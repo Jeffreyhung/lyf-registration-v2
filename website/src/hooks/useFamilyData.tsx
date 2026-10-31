@@ -24,6 +24,7 @@ import {
   RegistrationStatus,
   isEstablishedFamilyMember,
 } from "lyf-registration-schemas"
+import { camperRegistrationRefs } from "@utils/camperRegistrations"
 
 export type DocumentIdWithType<T> = T & {
   ref: DocumentReference<T>
@@ -201,8 +202,15 @@ export default function useFamilyData({
                 } catch {
                   // Not readable — leave empty
                 }
+                // Only genuine references are kept, so nothing downstream
+                // has to defend against a malformed `registrations` entry.
+                const camperRegistrations = camperRegistrationRefs(
+                  camper.doc.data().registrations,
+                  camper.doc.ref.path
+                )
                 const data: CamperWithHealth = {
                   ...camper.doc.data(),
+                  registrations: camperRegistrations,
                   ref: camper.doc.ref,
                   id: camper.doc.id,
                   health,
@@ -213,11 +221,16 @@ export default function useFamilyData({
                 // fetch the registration data. We only fetch registrations
                 // that we haven't already fetched data for. That means
                 // we don't actually listen for any changes to registration data.
-                const camperRegistrations = camper.doc.data().registrations
-                if (includeRegistrations && camperRegistrations) {
+                // A registration that cannot be loaded is skipped: a rejection
+                // here would escape the snapshot handler as an unhandled
+                // rejection and leave the whole family stuck loading.
+                if (includeRegistrations) {
                   await Promise.all(
                     camperRegistrations.map(async (reg) => {
-                      if (!newRegistrations.has(reg.path)) {
+                      if (newRegistrations.has(reg.path)) {
+                        return
+                      }
+                      try {
                         const registrationDoc = await getDoc(
                           doc(firestore, reg.path)
                         )
@@ -233,6 +246,11 @@ export default function useFamilyData({
                             id: registrationDoc.id,
                           }),
                         })
+                      } catch (error) {
+                        console.warn(
+                          `Could not load registration ${reg.path}`,
+                          error
+                        )
                       }
                     })
                   )
