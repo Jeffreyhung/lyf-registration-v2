@@ -29,8 +29,8 @@ happens on forks and lands through pull requests against `main`. Merging to
 yarn install            # root only; never `yarn add` inside a workspace folder
 yarn build:packages     # schemas + small-group-pairing dist/ FIRST: functions, website, scripts import them
 yarn typecheck          # build:packages, then tsc for functions and website
-yarn lint               # ESLint in functions/ (the website has no lint script yet)
-yarn test               # jest: schemas, functions (test/unit), small-group-pairing
+yarn lint               # ESLint in functions/ and website/
+yarn test               # jest: schemas, functions (test/unit), small-group-pairing, website (test/unit)
 yarn format:check       # prettier, scope defined by .prettierignore
 yarn workspace functions test            # builds schemas itself, then jest
 yarn workspace firestore-rules-tests test:emulator   # needs Java
@@ -89,7 +89,8 @@ region). The website calls them through `FUNCTION_NAMES` in
 - Secrets only in `functions/.env` / `website/.env` (git-ignored; examples
   checked in). Admin SDK scripts authenticate with gcloud ADC; no key files.
 - Tests: `functions/test/unit/*.test.ts` (fake Firestore in `fakeFirestore.ts`),
-  `schemas/test`, `small-group-pairing/tests`. Keep tests out of `src/`.
+  `schemas/test`, `small-group-pairing/tests`, `website/test/unit` (pure logic
+  only; no component tests). Keep tests out of `src/`.
 - Scripts that write data: dry run by default, `APPLY=1` to write, database
   chosen by env var; document usage in the file header and `scripts/README.md`.
 
@@ -101,6 +102,9 @@ On merge to `main`: `deploy-website.yml` (GitHub Pages) and, when
 and refuses to deploy if one is empty). Never deploy from a branch or a laptop
 unless `docs/deployment.md` says so. New secret → `functions/.env.example`,
 the workflow and `docs/deployment.md`.
+
+The longer, invariant-level guide is [AGENTS.md](AGENTS.md); keep the two in
+agreement.
 
 ## Read next
 

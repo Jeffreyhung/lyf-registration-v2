@@ -1,9 +1,11 @@
 # AGENTS.md
 
 Guidance for people and AI coding agents working in this repository. It
-complements the [README](README.md) (product and deployment detail) and the
-per-workspace READMEs; it does not repeat them. When this file and the code
-disagree, the code wins — fix this file.
+complements the [README](README.md), the long-form docs in [docs/](docs/)
+(local development, registration architecture, admin runbook, deployment) and
+the per-workspace READMEs; it does not repeat them. [CLAUDE.md](CLAUDE.md) is
+the short orientation for assistants and must agree with this file. When this
+file and the code disagree, the code wins — fix this file.
 
 ## What this repo is
 
@@ -24,8 +26,9 @@ host, look in the v1 repo first — both sites report to the same Sentry project
 
 ## Workspace map
 
-Yarn 1 workspaces, TypeScript project references, Node 22 (CI); local Node
-may be newer because `.yarnrc` sets `--ignore-engines`.
+Yarn 1 workspaces, TypeScript project references, Node 22 (`.nvmrc`, CI and
+the functions runtime); local Node may be newer because `.yarnrc` sets
+`--ignore-engines`.
 
 | Workspace                | Package name               | What lives there                                                                                                                                                                                                                                                                                                                                   |
 | ------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -34,41 +37,46 @@ may be newer because `.yarnrc` sets `--ignore-engines`.
 | `website/`               | `lyf-registration-website` | Gatsby 5 + React 18 + MUI site. Pages: `/`, `/registration`, `/preregistration`, `/login`, `/admin`, `/user/profile`. Path aliases `@components/*`, `@hooks/*`, `@utils/*`.                                                                                                                                                                        |
 | `firestore-rules-tests/` | `firestore-rules-tests`    | Role × collection matrix for `firestore.rules`, run against the Firestore emulator.                                                                                                                                                                                                                                                                |
 | `small-group-pairing/`   | `small-group-pairing`      | Pure TS pairing algorithm used by the admin dashboard.                                                                                                                                                                                                                                                                                             |
-| `scripts/`               | `lyf-registration-scripts` | One-off Admin SDK migrations, seeding and stats (`scripts/src/*.ts`). Exports moved to the dashboard; see `scripts/run.sh`.                                                                                                                                                                                                                        |
-| `migration/`             | —                          | 2023 Python import of the legacy camp data. Historical; do not touch.                                                                                                                                                                                                                                                                              |
-| `docs/`                  | —                          | Design notes and assessments (e.g. Firestore → Cloud SQL assessment).                                                                                                                                                                                                                                                                              |
+| `scripts/`               | `lyf-registration-scripts` | Admin SDK maintenance scripts (`scripts/src/*.ts`, run through `scripts/run.sh` with gcloud ADC; dry run by default). `src/archive/` holds retired one-offs: kept for reference, not built, linted or formatted. Data exports moved to the dashboard.                                                                                              |
+| `docs/`                  | —                          | Long-form docs: `local-development.md`, `architecture-registration.md`, `admin-runbook.md`, `deployment.md`, `legacy/README.md` (what was removed from the tree and why), plus assessments and upgrade plans.                                                                                                                                      |
 
 Root files that matter: `firestore.rules` and `firestore.indexes.json` (deployed
 to **both** named databases per `firebase.json`), `firebase.json` (functions
-predeploy hooks: build schemas, lint, build, isolate, copy `.env`), `.github/workflows/`.
+predeploy hooks: build schemas, lint, build, isolate, copy `.env`; also the
+emulator ports), `.prettierrc` / `.prettierignore` (formatting scope, see Code
+style), `.husky/pre-commit`, `.github/` (workflows, Dependabot, the PR
+template), `CONTRIBUTING.md`.
 
 ## Setup and everyday commands
 
 ```bash
 yarn install                                   # root, once
-cp functions/.env.example functions/.env       # values: see functions/README.md
+cp functions/.env.example functions/.env       # values: docs/local-development.md, "Environment files"
 cp website/.env.example website/.env
 ```
 
 Build order matters: `schemas` and `small-group-pairing` must be built before
 anything that imports them type-checks.
 
-| Task                                     | Command                                                                                                                                                                                                               |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build shared packages                    | `yarn workspace lyf-registration-schemas build` then `yarn workspace small-group-pairing build`                                                                                                                       |
-| Type-check everything (what CI checks)   | `yarn typecheck` (root)                                                                                                                                                                                               |
-| All unit tests                           | `yarn test` (root) — schemas, functions, small-group-pairing                                                                                                                                                          |
-| One workspace's tests                    | `yarn workspace functions test` (builds schemas first), `yarn workspace lyf-registration-schemas test`, `yarn workspace small-group-pairing test`                                                                     |
-| Functions lint                           | `yarn workspace functions lint` (`lint-fix` to autofix)                                                                                                                                                               |
-| Rules tests                              | `yarn workspace firestore-rules-tests test:emulator` (needs Java for the emulator)                                                                                                                                    |
-| Website dev server                       | `cd website && yarn develop` → http://localhost:8000 ; add `GATSBY_USE_EMULATORS=true` to point at local emulators                                                                                                    |
-| Website production build                 | `yarn workspace lyf-registration-website build`                                                                                                                                                                       |
-| Emulators (functions + firestore + auth) | `yarn emulators` (root; runs `functions:isolate` first), then `scripts/seed-emulator.sh` to seed `config/site`, sample camp years and admin docs                                                                      |
-| Admin SDK script                         | `cd scripts && yarn build && node lib/<name>.js` with Application Default Credentials for a `tacl.org` account that has access to the project (the service-account key `scripts/run.sh` references is not checked in) |
+| Task                                     | Command                                                                                                                                                                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build shared packages                    | `yarn build:packages` (root; schemas then small-group-pairing)                                                                                                                                                                         |
+| Type-check everything (what CI checks)   | `yarn typecheck` (root; builds the packages first)                                                                                                                                                                                     |
+| All unit tests                           | `yarn test` (root) — schemas, functions, small-group-pairing, website                                                                                                                                                                  |
+| One workspace's tests                    | `yarn workspace functions test` (builds schemas first), `yarn workspace lyf-registration-schemas test`, `yarn workspace small-group-pairing test`, `yarn workspace lyf-registration-website test` (needs built packages)               |
+| Lint                                     | `yarn lint` (root) — `yarn workspace functions lint` (`lint-fix` to autofix) and `yarn workspace lyf-registration-website lint` (ESLint flat config, `website/eslint.config.mjs`)                                                      |
+| Formatting                               | `yarn format:check` / `yarn format` (root prettier over everything `.prettierignore` allows)                                                                                                                                           |
+| Rules tests                              | `yarn workspace firestore-rules-tests test:emulator` (needs Java for the emulator)                                                                                                                                                     |
+| Website dev server                       | `cd website && yarn develop` → http://localhost:8000 ; add `GATSBY_USE_EMULATORS=true` to point at local emulators                                                                                                                     |
+| Website production build                 | `yarn workspace lyf-registration-website build`                                                                                                                                                                                        |
+| Emulators (functions + firestore + auth) | `yarn emulators` (root; runs `functions:isolate` first), then `scripts/seed-emulator.sh` to seed `config/site`, sample camp years and admin docs                                                                                       |
+| Admin SDK script                         | `scripts/run.sh -n <name>` (builds `scripts/src`, runs `lib/<name>.js`) with Application Default Credentials for a `tacl.org` account that has access to the project; no key file is checked in. Usage per script: `scripts/README.md` |
 
-There is **no pre-commit hook** in this repository (the root `package.json`
-carries a lint-staged config, but no `.husky/pre-commit` is committed), so run
-the lint, format and type checks yourself before pushing.
+`yarn install` installs a husky pre-commit hook (`.husky/pre-commit`) that runs
+lint-staged on staged files only: ESLint for `functions/`, `prettier --check`
+for everything `.prettierignore` allows. It checks and does not rewrite, and it
+runs neither `tsc` nor the tests, so still run `yarn typecheck` and `yarn test`
+before pushing.
 
 Deploys are **not** run by hand from a checkout. Merge to `main` and GitHub
 Actions deploys (see "CI and deployment").
@@ -96,8 +104,8 @@ Change one, change the other in the same PR.
   boundary and callable input through `validateXPayload(...)`; follow the
   patterns in `schemas/README.md`.
 - **Runtime secrets.** `functions/.env.example`, the secret check in
-  `.github/workflows/deploy-firebase.yml` and the list in the root README
-  describe the same set of variables. A new env var goes in all three; the
+  `.github/workflows/deploy-firebase.yml` and the table in
+  `docs/deployment.md` describe the same set of variables. A new env var goes in all three; the
   deploy refuses to run if any value is empty because an empty value would
   overwrite live configuration.
 - **Named databases.** Functions bind triggers and clients via
@@ -142,7 +150,7 @@ Change one, change the other in the same PR.
   skip it.
 - **Camp years are data, not code.** Dates, fees, caps, images and display
   toggles come from `camps/{year}` and `config/site` (see "Camp year
-  rollover" in the README). Do not reintroduce hardcoded years or dates; the
+  rollover" in `docs/admin-runbook.md`). Do not reintroduce hardcoded years or dates; the
   only remaining code-edited copy is the long notice text in `InfoStep.tsx`.
 
 ## Code style
@@ -156,10 +164,14 @@ Each workspace has its own conventions; match the file you are in.
   rules, so `yarn workspace functions lint` catches correctness problems but
   **not** style drift — copy the surrounding code. The workspace is **not**
   prettier-clean and must never be prettier-formatted.
-- **`website/`, `schemas/`, `scripts/`, `small-group-pairing/`** have a
-  `.prettierrc` (2 spaces, **no semicolons**; `scripts` and
-  `small-group-pairing` also `bracketSpacing: false`). Format only the files
-  you change, with that workspace's `.prettierrc`.
+- **Everything else** uses the root `.prettierrc` (2 spaces, **no
+  semicolons**; `scripts/` and `small-group-pairing/` also
+  `bracketSpacing: false`). `.prettierignore` excludes `functions/`,
+  `scripts/src/archive/` and the areas not formatted yet (`website/`,
+  `schemas/`, `small-group-pairing/`, `firestore-rules-tests/`); in those,
+  format only the files you change and never reformat an area as a side
+  effect. Formatting a whole area is its own PR that also deletes its
+  `.prettierignore` line so `yarn format:check` starts covering it.
 - TypeScript is strict in `functions/`; the website's tsconfig is looser but
   CI type-checks it, so keep it clean. Avoid `any` in new code.
 - Comments explain _why_ (constraints, history, invariants), as the existing
@@ -176,15 +188,21 @@ Each workspace has its own conventions; match the file you are in.
   `functions/test/unit/` (never under `src/`, which is the deploy bundle) and
   use `fakeFirestore.ts` instead of the emulator.
 - Email templates are MJML files under `functions/src/emailTemplates/`,
-  compiled with `mjml2html` at runtime; the `copy-files` step copies them into
-  `lib/`, so a new template needs no build change but must keep the `.mjml`
-  extension.
+  compiled to HTML at build time, not in the deployed functions:
+  `yarn build:templates` (run by `yarn build` and by the jest global setup)
+  writes git-ignored `src/emailTemplates/*.html`, `copy-files` copies the
+  HTML into `lib/`, and `src/registrationUtils/emailTemplates.ts` loads a
+  template on first use. `mjml` is a devDependency and must stay out of
+  `dependencies`. A new template keeps the `.mjml` extension and gets a name
+  in `EmailTemplateName` in that loader.
 
 ## Testing expectations
 
 - Unit tests are required for pricing, capacity, window, validation and
-  auth logic (`functions/test/unit/`, `schemas/test/`). Dashboard UI has no
-  test harness; describe manual verification in the PR instead.
+  auth logic (`functions/test/unit/`, `schemas/test/`). The website has a
+  jest harness for pure logic only (`website/test/unit/`: reducers, export
+  and CSV builders, CSP, time helpers); there are no component tests, so
+  describe manual verification of UI changes in the PR.
 - `yarn workspace functions test` runs ts-jest **with type checking** and is
   slow on a cold cache. For fast iteration, point jest at a scratch config
   with `isolatedModules: true, diagnostics: false`, then do the final run
@@ -197,25 +215,34 @@ Each workspace has its own conventions; match the file you are in.
 
 ## CI and deployment
 
-- Pull requests run `ci.yml` (schemas build+test, functions lint+test+typecheck,
-  small-group-pairing build+test, website typecheck) and, when rules files
-  change, `test-firestore-rules.yml`. **Nothing deploys from a PR.**
+- Pull requests run `ci.yml` (prettier `format:check`; schemas build+test and
+  the scripts build; functions lint+test+typecheck; small-group-pairing
+  build+test; website typecheck+lint+tests; an advisory `yarn audit` that
+  cannot fail the run), `codeql.yml`, and, when rules files change,
+  `test-firestore-rules.yml`. **Nothing deploys from a PR.**
 - Pushes to `main` deploy: `deploy-website.yml` builds the Gatsby site to
   GitHub Pages on every push; `deploy-firebase.yml` deploys Cloud Functions
   (`v2` codebase) and Firestore rules/indexes only when their paths changed.
   Firebase auth is Workload Identity Federation; there is no service-account
   key anywhere in the repo or in Actions.
-- CI installs with `yarn install --frozen-lockfile`, so a `package.json`
-  change with a stale `yarn.lock` fails every job. Regenerate the lockfile
-  with a real `yarn install`; **never hand-edit `yarn.lock`**.
-- GitHub Actions are pinned to commit SHAs with a version comment; Dependabot
-  bumps them weekly. Keep the comment when you update a pin.
+- CI installs with `yarn install --frozen-lockfile`. Regenerate `yarn.lock`
+  with a real `yarn install` whenever any `package.json` changes: yarn 1 does
+  not reliably fail on a missing entry for a workspace dependency, so a green
+  CI does not prove the lockfile is current. **Never hand-edit `yarn.lock`.**
+- GitHub Actions are pinned to commit SHAs with a version comment; keep the
+  comment when you update a pin. Dependabot (`.github/dependabot.yml`) bumps
+  Actions weekly and npm weekly from the root lockfile: minor and patch
+  updates grouped into one PR, each other major in its own PR, and majors of
+  the frameworks (Gatsby, React, MUI, the Firebase SDKs, Stripe) excluded
+  because those upgrades are planned work (`docs/functions-upgrade-plan.md`).
 - Deleted functions are removed on deploy (`--force`); renaming a function
   means the old name disappears from production.
 
 ## Git and pull request conventions
 
 - Branch from `main`; one concern per PR; merge via PR (CI must be green).
+  Fill in `.github/pull_request_template.md`; `CONTRIBUTING.md` has the
+  before-you-push list.
 - Commit messages: imperative subject that says what changed and why it
   matters ("Reject non-POST Stripe webhook requests before verifying the
   signature"). Agents add their co-author trailer.
@@ -224,7 +251,8 @@ Each workspace has its own conventions; match the file you are in.
   reviewer must do (e.g. run `yarn install` and commit the lockfile, deploy
   order for data + code changes, admin roles to grant).
 - Data-plus-code changes need a rollout order (rules → data → functions →
-  website); write it down as the README's "One-time rollout order" does.
+  website); write it down as `docs/admin-runbook.md` ("One-time rollout
+  order") does.
 - This repo is commonly worked on from a fork with `origin` = the fork and
   `upstream` = `TACL-LYF/lyf-registration-v2`. `gh` defaults to `upstream`,
   so pass `--repo <owner>/lyf-registration-v2` explicitly when opening PRs or
@@ -273,10 +301,19 @@ tools. What to do when that happens:
 
 ## Where to look first
 
-- Registration and payment flow, admin dashboard, camp-year rollover,
-  deployment and secrets: root [README.md](README.md).
+- Setup, `.env` files, emulators, per-workspace conventions:
+  [docs/local-development.md](docs/local-development.md).
+- Registration and payment flow, step by step:
+  [docs/architecture-registration.md](docs/architecture-registration.md).
+- Admin dashboard, exports, camp-year rollover, test mode:
+  [docs/admin-runbook.md](docs/admin-runbook.md).
+- Deploy workflows, Workload Identity Federation, the secrets table:
+  [docs/deployment.md](docs/deployment.md).
 - Validation patterns and which fields are strict: [schemas/README.md](schemas/README.md).
-- Functions local setup, emulator smoke scripts, MJML: [functions/README.md](functions/README.md).
+- Admin SDK scripts and their env vars: [scripts/README.md](scripts/README.md).
+- What was removed from the tree and where it went: [docs/legacy/README.md](docs/legacy/README.md).
 - Why the app stays on Firestore and what its scale is:
-  [docs/firestore-to-cloud-sql-assessment.md](docs/firestore-to-cloud-sql-assessment.md).
+  [docs/firestore-to-cloud-sql-assessment.md](docs/firestore-to-cloud-sql-assessment.md);
+  the website's remaining TypeScript strictness gaps:
+  [docs/website-strict-mode.md](docs/website-strict-mode.md).
 - Role matrix as executable spec: `firestore-rules-tests/rules.test.ts`.
