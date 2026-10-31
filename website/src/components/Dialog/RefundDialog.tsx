@@ -300,9 +300,9 @@ export default function RefundDialog({
         <Button onClick={handleDialogClose}>Cancel</Button>
         <AnimatedButtonWithLoading
           asyncOnClick={handleRefunds}
-          onMouseDown={(e) => {
-            e.preventDefault()
-          }}
+          // No onMouseDown preventDefault here: the refund NumberInputs
+          // commit their value on blur, and pressing this button is what
+          // blurs the field being edited.
           variant="outlined"
           boopProps={{}}
           disabled={!(changes > 0)}
