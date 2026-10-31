@@ -10,12 +10,19 @@ type SnackbarAlertProviderProps = {
   children: React.ReactNode | React.ReactNode[]
 }
 
-export default function SnackbarAlertProvider({children}: SnackbarAlertProviderProps) {
+export default function SnackbarAlertProvider({
+  children,
+}: SnackbarAlertProviderProps) {
   const [snackbar, setSnackbar] = React.useState<SnackbarAlertType>(null)
-  const providerValue = {
-    snackbar: snackbar,
-    setSnackbar: setSnackbar
-  }
+  // Stable identity so consumers (every grid and form under the provider)
+  // only re-render when the snackbar itself changes.
+  const providerValue = React.useMemo(
+    () => ({
+      snackbar: snackbar,
+      setSnackbar: setSnackbar,
+    }),
+    [snackbar]
+  )
 
   return (
     <SnackbarAlertContext.Provider value={providerValue}>

@@ -422,8 +422,9 @@ export default function RegistrationDashboard({
   const [filteredData, selectComponent] = useFilterRegistrationStatus(data, [
     RegistrationStatus.ACTIVE,
   ])
-  const registrationData = filteredData.sort((a, b) =>
-    a.status.localeCompare(b.status)
+  const registrationData = React.useMemo(
+    () => [...filteredData].sort((a, b) => a.status.localeCompare(b.status)),
+    [filteredData]
   )
 
   const [rowSelection, setRowSelection] = React.useState<GridRowSelectionModel>(
@@ -437,49 +438,57 @@ export default function RegistrationDashboard({
     React.useState<CancelStatusPromise<RegDashboardRow> | null>(null)
   const [namedExportOpen, setNamedExportOpen] = React.useState(false)
 
-  const rows: RegDashboardRow[] = registrationData.map((reg, index) => ({
-    id: index.toString(),
-    index: index + 1,
-    name: reg.camperName,
-    preferredName: reg.preferredName || "",
-    grade: reg.grade,
-    status: reg.status,
-    birthDate: dayjs(reg.birthDate ?? "").toDate(),
-    isPreRegistered: reg.isPreRegistered,
-    gender: reg.gender?.join(", ") || "",
-    pronouns: reg.pronouns || "",
-    shirtSize: reg.shirtSize || "",
-    medicalConditions: reg.medicalConditions || "",
-    dietAndFoodAllergies: reg.dietAndFoodAllergies || "",
-    cabinPreference: reg.cabinPreference || "",
-    isReturning: !!reg.isReturning,
+  // Row building joins parents and family data for every registration, so it
+  // only reruns when the registrations change, not when a dialog opens or a
+  // row is selected.
+  const rows: RegDashboardRow[] = React.useMemo(
+    () =>
+      registrationData.map((reg, index) => ({
+        id: index.toString(),
+        index: index + 1,
+        name: reg.camperName,
+        preferredName: reg.preferredName || "",
+        grade: reg.grade,
+        status: reg.status,
+        birthDate: dayjs(reg.birthDate ?? "").toDate(),
+        isPreRegistered: reg.isPreRegistered,
+        gender: reg.gender?.join(", ") || "",
+        pronouns: reg.pronouns || "",
+        shirtSize: reg.shirtSize || "",
+        medicalConditions: reg.medicalConditions || "",
+        dietAndFoodAllergies: reg.dietAndFoodAllergies || "",
+        cabinPreference: reg.cabinPreference || "",
+        isReturning: !!reg.isReturning,
 
-    // Join the parent's names if they exist.
-    parentNames: getParentNames(reg),
-    // Join the parent's emails if they exist.
-    parentEmails: getParentEmails(reg),
-    // Join the parent's phone numbers if they exist.
-    parentPhoneNumbers: getParentPhoneNumbers(reg),
+        // Join the parent's names if they exist.
+        parentNames: getParentNames(reg),
+        // Join the parent's emails if they exist.
+        parentEmails: getParentEmails(reg),
+        // Join the parent's phone numbers if they exist.
+        parentPhoneNumbers: getParentPhoneNumbers(reg),
 
-    familyEmails: (reg.familyData?.emails ?? []).join(", "),
-    street: reg.familyData?.street ?? "",
-    suite: reg.familyData?.suite ?? "",
-    city: reg.familyData?.city ?? "",
-    state: reg.familyData?.state ?? "",
-    zip: reg.familyData?.zip ?? "",
-    country: reg.familyData?.country ?? "",
-    householdCamperMessage: reg.familyData?.household?.camperMessage ?? "",
-    householdLanguageFrequency:
-      reg.familyData?.household?.languageFrequency ?? "",
-    householdCultureConfidence:
-      reg.familyData?.household?.cultureConfidence ?? "",
-    householdCultureLearn: reg.familyData?.household?.cultureLearn ?? "",
-    householdCultureBarrier: reg.familyData?.household?.cultureBarrier ?? "",
-    householdCultureLesson: reg.familyData?.household?.cultureLesson ?? "",
+        familyEmails: (reg.familyData?.emails ?? []).join(", "),
+        street: reg.familyData?.street ?? "",
+        suite: reg.familyData?.suite ?? "",
+        city: reg.familyData?.city ?? "",
+        state: reg.familyData?.state ?? "",
+        zip: reg.familyData?.zip ?? "",
+        country: reg.familyData?.country ?? "",
+        householdCamperMessage: reg.familyData?.household?.camperMessage ?? "",
+        householdLanguageFrequency:
+          reg.familyData?.household?.languageFrequency ?? "",
+        householdCultureConfidence:
+          reg.familyData?.household?.cultureConfidence ?? "",
+        householdCultureLearn: reg.familyData?.household?.cultureLearn ?? "",
+        householdCultureBarrier:
+          reg.familyData?.household?.cultureBarrier ?? "",
+        householdCultureLesson: reg.familyData?.household?.cultureLesson ?? "",
 
-    internalNotes: reg.internalNotes,
-    createdAt: reg.createdAt.toDate(),
-  }))
+        internalNotes: reg.internalNotes,
+        createdAt: reg.createdAt.toDate(),
+      })),
+    [registrationData]
+  )
 
   const updateRow = async (newRow: RegDashboardRow) => {
     const registrationRef = registrationData[newRow.index - 1].registrationRef
@@ -553,89 +562,104 @@ export default function RegistrationDashboard({
   const gridFileName = exportFileName(campYear, "registrations")
   const canReadHealth = roleHasCapability(adminRole, "readHealth")
 
-  const toolbar = (props: GridSlotProps["toolbar"]) => {
-    const { rowSelection } = props
+  // Passed to the grid as a slot component. A new function identity on every
+  // render would make the grid unmount and remount the whole toolbar each
+  // time, so it is only rebuilt when something it closes over changes.
+  const toolbar = React.useMemo(
+    () =>
+      function RegistrationToolbar(props: GridSlotProps["toolbar"]) {
+        const { rowSelection } = props
 
-    return (
-      <GridToolbarContainer>
-        <GridToolbarColumnsButton />
-        <GridToolbarFilterButton />
-        <GridToolbarDensitySelector />
-        <GridToolbarExportContainer>
-          <ExportMenuSection
-            label="This grid (filtered rows)"
-            divider={false}
-          />
-          <GridCsvExportMenuItem
-            label="Download as CSV (visible columns)"
-            options={{ fileName: gridFileName, utf8WithBom: true }}
-          />
-          <GridCsvExportMenuItem
-            label="Download as CSV (all columns)"
-            options={{
-              fileName: `${gridFileName}-all-columns`,
-              allColumns: true,
-              utf8WithBom: true,
-            }}
-          />
-          <GridPrintExportMenuItem options={{ fileName: gridFileName }} />
-          <ExportMenuSection label="One-click exports (all registrations)" />
-          {QUICK_EXPORTS.map((quickExport) => (
-            <ExportMenuItem
-              key={quickExport.id}
-              label={quickExport.label}
-              onClick={() =>
-                downloadCsv(
-                  exportFileName(campYear, quickExport.fileSuffix),
-                  toCsv(quickExport.build(data, { canReadHealth }))
-                )
-              }
-            />
-          ))}
-          <ExportMenuItem
-            label="Parent emails for specific campers…"
-            onClick={() => setNamedExportOpen(true)}
-          />
-        </GridToolbarExportContainer>
-        <ExportHelp />
-        <GridToolbarQuickFilter debounceMs={300} />
-        <Box sx={{ flexGrow: 1 }} />
-        {roleHasCapability(adminRole, "managePayments") && (
-          <Button
-            onClick={async () => {
-              const paymentMap: [RegistrationData, Payment[]][] =
-                await Promise.all(
-                  rowSelection.map(async (rowId) => {
-                    const registration =
-                      registrationData[rows[Number(rowId)].index - 1]
-                    const payments = await Promise.all(
-                      !registration.payments
-                        ? []
-                        : registration.payments.map(async (p) => ({
-                            ...(await getDoc(p)).data(),
-                            ref: p,
-                            id: p.id,
-                          }))
+        return (
+          <GridToolbarContainer>
+            <GridToolbarColumnsButton />
+            <GridToolbarFilterButton />
+            <GridToolbarDensitySelector />
+            <GridToolbarExportContainer>
+              <ExportMenuSection
+                label="This grid (filtered rows)"
+                divider={false}
+              />
+              <GridCsvExportMenuItem
+                label="Download as CSV (visible columns)"
+                options={{ fileName: gridFileName, utf8WithBom: true }}
+              />
+              <GridCsvExportMenuItem
+                label="Download as CSV (all columns)"
+                options={{
+                  fileName: `${gridFileName}-all-columns`,
+                  allColumns: true,
+                  utf8WithBom: true,
+                }}
+              />
+              <GridPrintExportMenuItem options={{ fileName: gridFileName }} />
+              <ExportMenuSection label="One-click exports (all registrations)" />
+              {QUICK_EXPORTS.map((quickExport) => (
+                <ExportMenuItem
+                  key={quickExport.id}
+                  label={quickExport.label}
+                  onClick={() =>
+                    downloadCsv(
+                      exportFileName(campYear, quickExport.fileSuffix),
+                      toCsv(quickExport.build(data, { canReadHealth }))
                     )
-                    return [registration, payments]
-                  })
-                )
-              setRefundPayments(new Map(paymentMap))
-              setRefundDialogOpen(true)
-            }}
-            onMouseDown={(e: React.MouseEvent) => {
-              // Prevents moving focus away from other elements
-              e.preventDefault()
-            }}
-            disabled={rowSelection.length === 0}
-            variant="outlined"
-          >
-            Refund
-          </Button>
-        )}
-      </GridToolbarContainer>
-    )
-  }
+                  }
+                />
+              ))}
+              <ExportMenuItem
+                label="Parent emails for specific campers…"
+                onClick={() => setNamedExportOpen(true)}
+              />
+            </GridToolbarExportContainer>
+            <ExportHelp />
+            <GridToolbarQuickFilter debounceMs={300} />
+            <Box sx={{ flexGrow: 1 }} />
+            {roleHasCapability(adminRole, "managePayments") && (
+              <Button
+                onClick={async () => {
+                  const paymentMap: [RegistrationData, Payment[]][] =
+                    await Promise.all(
+                      rowSelection.map(async (rowId) => {
+                        const registration =
+                          registrationData[rows[Number(rowId)].index - 1]
+                        const payments = await Promise.all(
+                          !registration.payments
+                            ? []
+                            : registration.payments.map(async (p) => ({
+                                ...(await getDoc(p)).data(),
+                                ref: p,
+                                id: p.id,
+                              }))
+                        )
+                        return [registration, payments]
+                      })
+                    )
+                  setRefundPayments(new Map(paymentMap))
+                  setRefundDialogOpen(true)
+                }}
+                onMouseDown={(e: React.MouseEvent) => {
+                  // Prevents moving focus away from other elements
+                  e.preventDefault()
+                }}
+                disabled={rowSelection.length === 0}
+                variant="outlined"
+              >
+                Refund
+              </Button>
+            )}
+          </GridToolbarContainer>
+        )
+      },
+    [
+      data,
+      registrationData,
+      rows,
+      campYear,
+      adminRole,
+      gridFileName,
+      canReadHealth,
+    ]
+  )
 
   return (
     <>

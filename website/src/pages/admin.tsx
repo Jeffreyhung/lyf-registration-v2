@@ -35,23 +35,41 @@ import { Capability, roleHasCapability } from "lyf-registration-schemas"
 import AuthContext from "@components/Auth/AuthContext"
 import { LinkButton } from "@components/Button"
 import { ProdContext } from "@components/ProdContext"
-import {
-  Demographics,
-  PendingPayments,
-  RegistrationDashboard,
-  Waitlist,
-  CamperCheckout,
-  CreateTestData,
-} from "@components/Admin"
-import { SmallGroupAssignmentsV2 } from "@components/SmallGroupAndCabinAssignments"
+import { SectionErrorBoundary } from "@components/ErrorBoundary"
+// The sections every admin opens first share the registrations grid and load
+// with the page. Imported by path rather than through the @components/Admin
+// barrel so webpack does not also pull the barrel's other sections in.
+import RegistrationDashboard from "@components/Admin/RegistrationDashboard"
+import Waitlist from "@components/Admin/Waitlist"
+import PendingPayments from "@components/Admin/PendingPayments"
+import CamperCheckout from "@components/Admin/CamperCheckout"
 import useRegistrations from "@hooks/useRegistrations"
 import useSiteConfig from "@hooks/useSiteConfig"
 import getPageTitle from "@utils/getPageTitle"
 import { SnackbarAlertProvider } from "@components/SnackbarAlert"
-import PaymentDashboard from "@components/Admin/PaymentDashboard"
-import CampCreditTab from "@components/Admin/CampCreditTab"
-import AdminManagement from "@components/Admin/AdminManagement"
-import CampYearTab from "@components/Admin/CampYearTab"
+
+// The remaining sections each carry a dependency nothing else on the page
+// needs (nivo + d3 + html-to-image for the charts, react-dnd and the pairing
+// library for small groups, the date-time picker for the camp year), so they
+// are split into their own chunks and fetched when first opened.
+const Demographics = React.lazy(() => import("@components/Admin/Demographics"))
+const CreateTestData = React.lazy(
+  () => import("@components/Admin/CreateTestData")
+)
+const SmallGroupAssignmentsV2 = React.lazy(
+  () =>
+    import("@components/SmallGroupAndCabinAssignments/SmallGroupAssignmentsV2")
+)
+const PaymentDashboard = React.lazy(
+  () => import("@components/Admin/PaymentDashboard")
+)
+const CampCreditTab = React.lazy(
+  () => import("@components/Admin/CampCreditTab")
+)
+const AdminManagement = React.lazy(
+  () => import("@components/Admin/AdminManagement")
+)
+const CampYearTab = React.lazy(() => import("@components/Admin/CampYearTab"))
 
 /**
  * One entry in the admin navigation. `id` doubles as the URL hash
@@ -448,7 +466,20 @@ const AdminPage: React.FC = () => {
           {error.message}
         </Typography>
       )}
-      {activeSection && renderSection(activeSection.id)}
+      {activeSection && (
+        // Keyed on the section so an error in one section is cleared by
+        // navigating to another, rather than sticking until a reload.
+        <SectionErrorBoundary
+          key={activeSection.id}
+          label={`the ${activeSection.label} section`}
+        >
+          <React.Suspense
+            fallback={<LinearProgress aria-label="Loading section" />}
+          >
+            {renderSection(activeSection.id)}
+          </React.Suspense>
+        </SectionErrorBoundary>
+      )}
     </Box>
   )
 

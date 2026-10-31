@@ -72,32 +72,40 @@ export default function PendingPayments({
   data,
   loading,
 }: PendingPaymentsProps) {
-  const pendingPayments = data
-    .filter((reg) => reg.status === RegistrationStatus.PENDING_PAYMENT)
-    .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds)
+  const pendingPayments = React.useMemo(
+    () =>
+      data
+        .filter((reg) => reg.status === RegistrationStatus.PENDING_PAYMENT)
+        .sort((a, b) => a.createdAt.seconds - b.createdAt.seconds),
+    [data]
+  )
 
-  const rows: PendingPaymentRow[] = pendingPayments.map((reg, index) => ({
-    id: index.toString(),
-    index: index + 1,
-    name: reg.camperName,
-    updatedAt: reg.updatedAt ? reg.updatedAt.toDate() : new Date(),
-    hasContacted: !!reg.hasContacted,
-    parentInfo: reg.parents
-      .map((p) => {
-        let parentInfo = `${p.firstName} ${p.lastName}`
-        if (p.phoneNumber) {
-          parentInfo += ` | ${p.phoneNumber}`
-        }
+  const rows: PendingPaymentRow[] = React.useMemo(
+    () =>
+      pendingPayments.map((reg, index) => ({
+        id: index.toString(),
+        index: index + 1,
+        name: reg.camperName,
+        updatedAt: reg.updatedAt ? reg.updatedAt.toDate() : new Date(),
+        hasContacted: !!reg.hasContacted,
+        parentInfo: reg.parents
+          .map((p) => {
+            let parentInfo = `${p.firstName} ${p.lastName}`
+            if (p.phoneNumber) {
+              parentInfo += ` | ${p.phoneNumber}`
+            }
 
-        if (p.email) {
-          parentInfo += ` | ${p.email}`
-        }
+            if (p.email) {
+              parentInfo += ` | ${p.email}`
+            }
 
-        return parentInfo
-      })
-      .join(",\n"),
-    internalNotes: reg.internalNotes,
-  }))
+            return parentInfo
+          })
+          .join(",\n"),
+        internalNotes: reg.internalNotes,
+      })),
+    [pendingPayments]
+  )
 
   const updateRow = async (newRow: GridRowModel<PendingPaymentRow>) => {
     const registrationRef = pendingPayments[newRow.index - 1].registrationRef

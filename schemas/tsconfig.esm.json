@@ -1,0 +1,16 @@
+{
+  // ES module build consumed by bundlers through package.json "module". The
+  // CommonJS build in dist/ stays the Node entry (functions, jest, scripts);
+  // this one lets webpack tree-shake the website's imports so that modules it
+  // never uses (validation.ts and its zod dependency) stay out of the bundle.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "module": "ESNext",
+    "outDir": "dist/esm"
+  }
+}

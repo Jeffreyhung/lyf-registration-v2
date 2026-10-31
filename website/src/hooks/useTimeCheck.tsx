@@ -1,7 +1,7 @@
 import React, { useState } from "react"
-import { getServerDate } from "@nodeguy/server-date"
 import dayjs, { Dayjs } from "dayjs"
 import customParseFormat from "dayjs/plugin/customParseFormat"
+import { getServerNow } from "@utils/serverTime"
 
 type UseTimeCheckProps = {
   isAdmin: boolean
@@ -20,17 +20,23 @@ export default function useTimeCheck({
 }: UseTimeCheckProps): boolean {
   const [date, setDate] = useState<Dayjs>(null)
 
-  // Check the server date once. Admins skip the gate, but the effect has to
-  // be registered on every render (rules of hooks).
+  // Run the check against the (session-cached) server date once. The hooks
+  // run on every render, admin or not: admin status resolves asynchronously
+  // after sign-in, and returning before them once it flips would change the
+  // hook order between renders.
   React.useEffect(() => {
-    if (isAdmin) return
-    async function checkDate() {
-      const { date } = await getServerDate()
-      setDate(dayjs(date))
+    let cancelled = false
+    getServerNow()
+      .then((serverDate) => {
+        if (!cancelled) setDate(dayjs(serverDate))
+      })
+      .catch(() => {
+        if (!cancelled) setDate(dayjs())
+      })
+    return () => {
+      cancelled = true
     }
-
-    checkDate()
-  }, [isAdmin])
+  }, [])
 
   if (isAdmin) {
     return true
