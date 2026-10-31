@@ -404,7 +404,9 @@ const parentShape = <F extends Flavour>(f: F) => ({
   email: field(f, contactEmail(f)),
   firstName: field(f, z.string()),
   lastName: field(f, z.string()),
-  lineId: field(f, z.string()),
+  // Legacy parent documents store null here; the website spreads the
+  // stored document straight into the registration payload.
+  lineId: field(f, nullableString),
   phoneNumber: field(f, z.string()),
   subscribeToMailingList: field(f, z.boolean()),
   stripeCustomerId: field(f, z.string()),

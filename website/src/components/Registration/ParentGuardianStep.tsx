@@ -144,7 +144,7 @@ function ParentGuardianForm({
           id="parent-line-id"
           label="LINE ID (optional)"
           fullWidth
-          value={parent.lineId}
+          value={parent.lineId ?? ""}
           onChange={editParentHandler("lineId")}
         />
       </Grid>

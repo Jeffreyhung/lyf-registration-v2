@@ -35,6 +35,12 @@ describe("parentDocumentFields", () => {
     });
   });
 
+  it("passes a legacy null lineId through unchanged", () => {
+    const fields = parentDocumentFields({email: "ada@example.com", lineId: null});
+
+    expect(fields).toEqual({email: "ada@example.com", lineId: null});
+  });
+
   it("ignores fields that are not stored on the parent document", () => {
     const fields = parentDocumentFields({
       email: "ada@example.com",
