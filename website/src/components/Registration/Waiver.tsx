@@ -1,4 +1,5 @@
 import React from "react"
+import dayjs from "dayjs"
 import {
   Button,
   Container,
@@ -28,9 +29,25 @@ export default function Waiver({
   camper,
   camperIndex,
   setWaiverOpen,
+  open,
   ...rest
 }: WaiverProps) {
   const dispatch = React.useContext(RegistrationDispatchContext)
+
+  // Default the sign date to today when the waiver is opened without one.
+  // Done on open rather than at camper creation so a draft restored from
+  // localStorage days later still gets the date it is actually signed on.
+  React.useEffect(() => {
+    if (open && !camper.waiverSignDate) {
+      dispatch({
+        type: RegistrationActionType.EditCamper,
+        index: camperIndex,
+        keyToChange: "waiverSignDate",
+        newValue: dayjs().format("YYYY-MM-DD"),
+      })
+    }
+  }, [open, camper.waiverSignDate, camperIndex, dispatch])
+
   const editCamperHandler =
     (keyToChange: string) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -42,7 +59,7 @@ export default function Waiver({
       })
 
   return (
-    <Drawer {...rest}>
+    <Drawer open={open} {...rest}>
       <Container maxWidth="md">
         <Grid
           container
