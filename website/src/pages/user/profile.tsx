@@ -278,7 +278,7 @@ const ProfilePage: React.FC<PageProps> = () => {
 
   React.useEffect(() => {
     setShouldShowOffWaitlistDialog(pendingPaymentRows.length > 0)
-  }, [curRows])
+  }, [pendingPaymentRows])
 
   const [columnVisibilityModel, setColumnVisibilityModel] =
     React.useState<GridColumnVisibilityModel>({

@@ -323,6 +323,11 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
         clearSavedRegistration()
       }
     }
+    // Mount-only by design: it reads the URL and the cache for the user and
+    // camp year the flow was mounted with, and the page remounts the flow on
+    // sign-in and on the Test Data toggle. Listing user.email and campYear
+    // would re-ask the resume question and reload the cache mid-flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Listen for changes to the first load of family data.
@@ -367,6 +372,10 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
 
     // Otherwise, prefill the signed in parent's and family's info
     prefillFromServer()
+    // Runs once, when the family data first finishes loading. Listing
+    // familyData or the prefill helpers would prefill again, over whatever the
+    // family has typed, on every later snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
 
   return (

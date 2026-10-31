@@ -24,8 +24,8 @@ export default defineConfig([
     plugins: { "react-hooks": pluginReactHooks },
     rules: {
       "react-hooks/rules-of-hooks": "error",
-      // Most of the existing effects are intentionally mount-only; each one is
-      // listed in docs/website-strict-mode.md rather than silenced here.
+      // The two mount-once effects in RegistrationFlow.tsx say why inline;
+      // every other hook lists its dependencies (docs/website-strict-mode.md).
       "react-hooks/exhaustive-deps": "warn",
       // Props are typed with TypeScript.
       "react/prop-types": "off",
