@@ -408,13 +408,22 @@ export default function CamperStep({
             <FormLabel id="attended-camp-before">
               Has this camper attended LYF camp before?
             </FormLabel>
+            {/* A radio's event value is always a string ("true" / "false"),
+                and the registration callable requires a boolean. */}
             <RadioGroup
               row
               aria-labelledby="attended-camp-before"
               defaultValue={false}
               name="radio-buttons-group"
               value={camper.isReturning ?? false}
-              onChange={editCamperHandler("isReturning")}
+              onChange={(event) =>
+                dispatch({
+                  type: RegistrationActionType.EditCamper,
+                  index: camperIndex,
+                  keyToChange: "isReturning",
+                  newValue: event.target.value === "true",
+                })
+              }
             >
               <FormControlLabel value={true} control={<Radio />} label="Yes" />
               <FormControlLabel value={false} control={<Radio />} label="No" />

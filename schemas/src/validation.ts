@@ -404,7 +404,9 @@ const parentShape = <F extends Flavour>(f: F) => ({
   email: field(f, contactEmail(f)),
   firstName: field(f, z.string()),
   lastName: field(f, z.string()),
-  lineId: field(f, z.string()),
+  // Legacy parent documents store null here; the website spreads the
+  // stored document straight into the registration payload.
+  lineId: field(f, nullableString),
   phoneNumber: field(f, z.string()),
   subscribeToMailingList: field(f, z.boolean()),
   stripeCustomerId: field(f, z.string()),
@@ -942,6 +944,16 @@ const buildRegistrationPayload = (u: UnknownKeys) => {
     ...camperHealthShape("read"),
     ...registrationShape("read", embedded),
     grade: gradeSchema.optional(),
+    // The website's "attended camp before?" radio used to send the radio's
+    // string value. Registration state saved in localStorage and pending
+    // payment registrations written before the fix still carry "true" /
+    // "false", so normalize those two strings to the boolean they meant.
+    isReturning: z
+      .preprocess(
+        (v) => (v === "true" ? true : v === "false" ? false : v),
+        z.boolean()
+      )
+      .optional(),
   })
   const parentPayload = obj(embedded, {
     ...parentShape("read"),

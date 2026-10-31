@@ -622,6 +622,7 @@ describe("validateParentWrite", () => {
     }
     expect(validateParentWrite(write)).toEqual(write)
     expect(validateParentWrite({ email: "" })).toEqual({ email: "" })
+    expect(validateParentWrite({ lineId: null })).toEqual({ lineId: null })
     expect(validateParentWrite({ stripeCustomerId: "cus_123" })).toBeDefined()
   })
   it("rejects un-normalized or malformed emails", () => {
@@ -634,6 +635,7 @@ describe("validateParentWrite", () => {
       () => validateParentWrite({ subscribeToMailingList: "yes" }),
       "subscribeToMailingList"
     )
+    expectIssue(() => validateParentWrite({ lineId: 1 }), "lineId")
   })
 })
 
@@ -1070,7 +1072,13 @@ const registrationPayload = {
       phoneNumber: "555-0100",
       subscribeToMailingList: true,
     },
-    { firstName: "Sam", lastName: "Lin", email: "", phoneNumber: "555-0101" },
+    {
+      firstName: "Sam",
+      lastName: "Lin",
+      email: "",
+      phoneNumber: "555-0101",
+      lineId: null,
+    },
   ],
   campers: [
     {
@@ -1115,6 +1123,23 @@ describe("validateRegistrationPayload", () => {
     expect(result.campers[0].grade).toBe(6)
     expect(result.campers[0].dietAndFoodAllergies).toBe("Peanuts")
     expect(result.parents[0].email).toBe("Pat@Example.com")
+    // Legacy parent documents store lineId as null (LYF-REGISTRATION webhook
+    // error "parents[0].lineId: expected string, received null").
+    expect(result.parents[1].lineId).toBeNull()
+  })
+
+  it("normalizes the legacy string isReturning the website radio used to send", () => {
+    const withString = (isReturning: unknown) =>
+      validateRegistrationPayload({
+        ...registrationPayload,
+        campers: [{ ...registrationPayload.campers[0], isReturning }],
+      }).campers[0].isReturning
+    expect(withString("true")).toBe(true)
+    expect(withString("false")).toBe(false)
+    expect(withString(true)).toBe(true)
+    expect(withString(undefined)).toBeUndefined()
+    expectIssue(() => withString("yes"), "campers[0].isReturning")
+    expectIssue(() => withString(1), "campers[0].isReturning")
   })
 
   it("keeps nested leftovers when unknown keys are allowed", () => {

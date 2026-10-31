@@ -26,7 +26,7 @@ export type Parent = DocumentId &
     email: string
     firstName: string
     lastName: string
-    lineId: string
+    lineId: string | null
     phoneNumber: string
     subscribeToMailingList: boolean
   }>
