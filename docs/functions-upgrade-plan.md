@@ -30,11 +30,9 @@ expected to change the plan says "verify with tsc".
   firebase-functions 6).
 - `engines.node` is `"22"`, matching `runtime: nodejs22` in `firebase.json` and
   the new root `.nvmrc`.
-- **Still to do by hand:** run `yarn install` at the repo root and commit the
-  updated `yarn.lock` (the sandbox could not reach the registry). CI stays
-  green meanwhile, because yarn 1's `--frozen-lockfile` ignores entries that
-  are merely no longer needed, but the lockfile keeps the removed packages
-  until it is regenerated.
+- `yarn.lock` regenerated with `yarn install` at the repo root (prune-only:
+  the removed packages and their transitive dependencies are gone, no version
+  changed).
 
 ## 1. Version table
 
