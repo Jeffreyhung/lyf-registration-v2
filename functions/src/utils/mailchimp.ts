@@ -238,7 +238,9 @@ export async function addMailchimpUserToMailingList(
  * @param parentCollectionRef
  * @param campYear
  * @param campTracks
- * @param isTestData Routes the error-channel messages to the test channel.
+ * @param isTestData Drops the error-channel messages for test data, as
+ *   sendMessageToRegistrationErrorMessages does for every other caller;
+ *   the logs (and Sentry, for Mailchimp failures) still get them.
  */
 export async function addParentsToMailchimpList(
   db: Firestore,
