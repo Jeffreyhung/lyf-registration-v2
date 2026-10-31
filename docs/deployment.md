@@ -1,7 +1,8 @@
 # Deployment
 
 Everything deploys from GitHub Actions on merge to `main`. Pull requests only run
-CI (`ci.yml`, `test-firestore-rules.yml`); nothing is deployed from a PR.
+CI (`ci.yml`, `codeql.yml` and, when the rules files change,
+`test-firestore-rules.yml`); nothing is deployed from a PR.
 
 | Workflow                                                        | Deploys                                                    | Triggered by                                                                         |
 | --------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------ |

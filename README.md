@@ -49,10 +49,14 @@ rehearsed without touching production. Camp configuration is data, not code:
 - [docs/architecture-registration.md](docs/architecture-registration.md): the registration flow end to end (website → `createRegistrationSession` → Stripe → webhook).
 - [docs/admin-runbook.md](docs/admin-runbook.md): admin dashboard, exports, the yearly camp-year rollover, test mode.
 - [docs/deployment.md](docs/deployment.md): workflows, secrets and variables, Workload Identity Federation setup.
+- [docs/website-strict-mode.md](docs/website-strict-mode.md): which TypeScript strict flags and lint rules the website has on, and the plan for the rest.
+- [docs/functions-upgrade-plan.md](docs/functions-upgrade-plan.md): checklist for the pending firebase-functions / firebase-admin / Stripe major upgrades.
 - [docs/firestore-to-cloud-sql-assessment.md](docs/firestore-to-cloud-sql-assessment.md): why the data stays in Firestore.
 - [docs/legacy/README.md](docs/legacy/README.md): what was removed or archived, and where to find it.
 - [schemas/README.md](schemas/README.md): the shared types and runtime validators.
+- [scripts/README.md](scripts/README.md): the Admin SDK maintenance scripts and emulator seeding.
 - [CLAUDE.md](CLAUDE.md): the condensed orientation written for AI coding assistants; also a good five-minute read for people.
+- [AGENTS.md](AGENTS.md): the longer version for contributors and coding agents: what must stay in sync, gotchas, safety rules.
 
 ## Contributing
 

@@ -1,7 +1,8 @@
 # Admin runbook
 
 Day-to-day and once-a-year operations for program directors and the tech team:
-the admin dashboard, data exports, the camp year rollover and test mode. The
+the admin dashboard, data exports, the camp year rollover and test mode.
+File paths in this document are for the tech team; directors can skip them. The
 registration flow itself is described in
 [architecture-registration.md](architecture-registration.md); deploying is in
 [deployment.md](deployment.md).
@@ -51,99 +52,116 @@ the current status filter.
 
 ## Camp year rollover
 
-Nothing about a camp year is hardcoded in the website any more. Two kinds of
-Firestore documents drive it, in both the prod (`lyf-v2`) and test
-(`lyf-v2-test`) databases:
+Nothing about a camp year is hardcoded in the website. Two kinds of Firestore
+documents drive it, and both exist in the production database (`lyf-v2`) and
+the test database (`lyf-v2-test`):
 
-- `config/site` — `currentCampYear` (what the registration page and home page
-  are for) and `preRegistrationCampYear` (what the pre-registration page
-  sells, normally `currentCampYear + 1`). Public read, never written from the
-  client.
-- `camps/{year}` — dates (`preRegistrationOpenDate`, `preRegistrationCloseDate`,
-  `earlyRegOpenDate`, `earlyRegEndDate`, `registrationOpenDate`,
-  `registrationLateDate`, `registrationCloseDate`, `infoSessionDate`,
-  `campStartDate`, `campEndDate`), fees, caps, campsite, the per-year images
-  (`infoSessionImageUrl` for the banner beside the registration Info step,
-  `emailHeaderImageUrl` for the hero image at the top of the registration,
-  waitlist and off-waitlist emails; both must be https URLs without embedded
-  credentials, the only kind the site's CSP lets an image load from, and
-  both fall back to the bundled images when empty), the Mailchimp audience
-  (`mailchimpListId`: the audience id that the year's registered and
-  pre-registered parents are added to, tagged `<year>Reg` / `<year>PreReg`
-  and `<year><Track>CampTrack`; the directors create a new audience per
-  year, and when the field is empty the functions fall back to the general
-  list and post a reminder to the registration error channel) and the display toggles (`showWaitlistHeaderBar`,
-  `showRemainingSpots`, `showWaitlistPosition`; missing means off). Public
-  read, so nothing personal may live here; configuration fields are written
-  only by the `manageCampYear` function, and `remainingSpots` only by the
-  registration functions.
-- `camps/{year}/private/bypass/emails/{email}` — one document per family
-  allowed to register after `registrationCloseDate`. A parent can read only
-  their own entry (so the list cannot be enumerated), admins can list them,
-  and only `manageCampYear` writes them. The Camp Year tab's bypass chips
-  edit this collection. The close date is enforced in two places: the
-  website hides the page, and `createRegistrationSession` refuses to create
-  a registration after the close unless the caller has an entry, so calling
-  the function directly does not get around it.
-
-The admin dashboard (`/admin`) and the parent profile page (`/user/profile`)
-also follow `config/site`: the dashboard's year picker starts on
-`currentCampYear` (admins can still pick a past year), and the profile page
-splits registrations into current and past around it. Both fall back to the
-calendar year, with a warning on the dashboard, only if `config/site` is
-missing.
+- `config/site` points at the years. `currentCampYear` is what the home page
+  and `/registration` are for. `preRegistrationCampYear` is what
+  `/preregistration` sells, normally the year after.
+- `camps/{year}` holds everything about one camp year. The fields are listed
+  in the next section.
 
 Both are edited from the admin dashboard's **Camp Year** tab, visible to
-`full_admin` and `program_admin` (the `manageCampYear` capability). Every
-write goes through the `manageCampYearV2` callable, which enforces the key
-whitelist, checks date ordering and appends to `adminAuditLog`.
+`full_admin` and `program_admin`. Every save goes through the
+`manageCampYearV2` function, which accepts only the known fields, checks that
+the dates are in order and records the change in `adminAuditLog`. Nothing in
+these documents is written from the browser directly, and `remainingSpots` is
+written only by the registration functions.
 
-### The yearly cycle (dashboard steps)
+Both documents are readable by anyone, signed in or not, so nothing personal
+may live in them. That is why the late-registration bypass list is a private
+subcollection (see below).
 
-Example: camp 2026 is the current year and camp 2027 is next.
+The dashboard and the parent profile page follow `config/site` too. The
+dashboard's year picker starts on `currentCampYear` (admins can still pick a
+past year), and the profile page splits registrations into current and past
+around it. If `config/site` is missing, both fall back to the calendar year
+and the dashboard shows a warning.
 
-1. **During camp 2026 (pre-registration opens):** in the Camp Year tab select
-   2026 and click **Create next year from selected**. This creates
+### What a camp year document holds
+
+| Group                    | Fields                                                                                                                                                                                                                   | Notes                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dates                    | `preRegistrationOpenDate`, `preRegistrationCloseDate`, `earlyRegOpenDate`, `earlyRegEndDate`, `registrationOpenDate`, `registrationLateDate`, `registrationCloseDate`, `infoSessionDate`, `campStartDate`, `campEndDate` | Pacific time. The function refuses a save whose dates are out of order.                                                                                                                                                                                                                                                                              |
+| Fees                     | `preRegistrationFee`, `registrationFee`, `registrationLateFee`, `shirtPrice`, `siblingDiscount`                                                                                                                          | In dollars.                                                                                                                                                                                                                                                                                                                                          |
+| Capacity                 | `campTotalSizeCap`, `campSizeCaps` (per track), `remainingSpots` (per track)                                                                                                                                             | `remainingSpots` counts down as campers are admitted and may go negative when directors admit over the cap. It is reset to the caps when a year is created from the previous one.                                                                                                                                                                    |
+| Name and place           | `name`, `campsite`, `campsiteAddress`                                                                                                                                                                                    | Shown on the registration pages and in emails.                                                                                                                                                                                                                                                                                                       |
+| Images                   | `infoSessionImageUrl`, `emailHeaderImageUrl`                                                                                                                                                                             | The banner beside the registration Info step, and the hero image at the top of the registration, waitlist and off-waitlist emails. Must be `https` URLs without embedded credentials (the only kind the site's CSP lets an image load from). Empty means the bundled image.                                                                          |
+| Mailchimp audience       | `mailchimpListId`                                                                                                                                                                                                        | The audience that the year's registered and pre-registered parents are added to, tagged `<year>Reg`, `<year>PreReg` and `<year><Track>CampTrack`. The directors create a new audience each year. While it is empty, parents go to the general list and every registration posts a reminder to the error channel.                                     |
+| Display toggles          | `showWaitlistHeaderBar`, `showRemainingSpots`, `showWaitlistPosition`                                                                                                                                                    | The waitlist bar above the registration flow, the spots-remaining lines on the Info step, and the waitlist position on the family profile. Missing means off.                                                                                                                                                                                        |
+| Late-registration bypass | `camps/{year}/private/bypass/emails/{email}`                                                                                                                                                                             | One document per family allowed to register after `registrationCloseDate`. A parent can read only their own entry, admins can list them, and only `manageCampYear` writes them (the tab's bypass chips). The close date is enforced both by the website and by `createRegistrationSession`, so calling the function directly does not get around it. |
+
+### The yearly cycle
+
+Example: camp 2026 is the current year and camp 2027 is next. Everything
+below happens in the Camp Year tab.
+
+**1. During camp 2026, when pre-registration opens**
+
+1. Select 2026 and click **Create next year from selected**. This creates
    `camps/2027` as a copy of 2026 with every date moved forward one calendar
-   year (Pacific time) and `remainingSpots` reset to the caps. Adjust any dates
-   or fees in the form, create the 2027 audience in Mailchimp and paste its
-   Audience ID into **Mailchimp audience ID** (the only field not copied
-   from 2026: until it is set, 2027 parents go to the general list and every
-   registration posts a reminder to the error channel), and **Save**. Then click **Set as pre-registration
-   year** so `/preregistration` sells 2027 — it opens and closes on 2027's
-   `preRegistrationOpenDate` / `preRegistrationCloseDate`.
-2. **After camp 2026 (registration for 2027 approaches):** select 2027 and
-   click **Set as current camp year**. The home page, `/registration` and the
-   info step now refer to 2027; registration opens for pre-registered families
-   at `earlyRegOpenDate`, for everyone at `registrationOpenDate`, and closes at
-   `registrationCloseDate`. Set `infoSessionDate` so the InfoStep sentence is
-   right, paste the new year's banner and email header image URLs into the
-   **Images** section (host them first, e.g. in Mailchimp's content studio),
-   and use the **Display toggles** switches for the waitlist header bar,
-   remaining-spots lines and profile waitlist position (all off since 2026).
-   Only the long notice copy in `InfoStep.tsx` is still edited in code.
-3. **Late registrations:** add the family's email to the bypass list on the
-   current year and **Save** — they can use `/registration` after the close
-   date without a deploy.
-4. Repeat from step 1 with 2027 as the source year.
+   year and `remainingSpots` reset to the caps.
+2. Adjust any dates or fees in the form.
+3. Create the 2027 audience in Mailchimp and paste its Audience ID into
+   **Mailchimp audience ID**. This is the one field that is not copied from 2026. Until it is set, 2027 parents go to the general list and every
+   registration posts a reminder to the error channel.
+4. **Save**, then click **Set as pre-registration year**. `/preregistration`
+   now sells 2027, opening and closing on 2027's `preRegistrationOpenDate`
+   and `preRegistrationCloseDate`.
+
+**2. After camp 2026, before registration for 2027 opens**
+
+1. Select 2027 and click **Set as current camp year**. The home page,
+   `/registration` and the Info step now refer to 2027. Registration opens
+   for pre-registered families at `earlyRegOpenDate`, for everyone at
+   `registrationOpenDate`, and closes at `registrationCloseDate`.
+2. Set `infoSessionDate` so the sentence on the Info step is right.
+3. Host the new year's banner and email header images (Mailchimp's content
+   studio works) and paste their URLs into the **Images** section.
+4. Use the **Display toggles** switches for the waitlist header bar, the
+   remaining-spots lines and the profile waitlist position. All three have
+   been off since 2026.
+5. The long notice text on the Info step is the one thing still edited in
+   code (`InfoStep.tsx`); ask the tech team for that change.
+
+**3. Late registrations.** Add the family's email to the bypass list on the
+current year and **Save**. They can use `/registration` after the close date
+without a deploy.
+
+**4. Next year**, repeat from step 1 with 2027 as the source year.
+
+### Rehearsing in test mode
 
 Flip the dashboard's test-data toggle to make the same changes in the test
 database. In test mode the tab also offers **Copy … from production** and
-**Copy site pointers from production**, which mirror a production camp year
+**Copy site pointers from production**. They mirror a production camp year
 (including its private bypass entries and remaining spots) or the
 `config/site` pointers into `lyf-v2-test`; the production database is never
-written by these. Scripts remain for bootstrapping: `scripts/src/resetCampYearInfo.ts`
-writes a `camps/{year}` document in the test database from a JSON file (the
-expected shape is in its header comment), and `scripts/seed-emulator.sh`
-seeds `config/site` plus two sample camp years into the emulator.
+written by these.
 
-### One-time rollout order (historical)
+Two scripts remain for bootstrapping a database that has nothing yet.
+`scripts/src/resetCampYearInfo.ts` writes a `camps/{year}` document in the
+test database from a JSON file (the expected shape is in its header comment),
+and `scripts/seed-emulator.sh` seeds `config/site` plus two sample camp years
+into the emulator.
 
-Kept for the record: this ordered the first deploy of the config-driven camp
-year (October 2026). A normal release needs none of it.
+## Test mode
 
-The old deploy mixed code and data; the first deploy of this version has to
-be ordered so no page sees a half-migrated state:
+The dashboard's test-data toggle (and the `isTestData` flag on callable
+payloads) routes everything to `lyf-v2-test`, the Stripe test keys and the
+test Slack channels, so a full registration or a rollover can be rehearsed
+without touching production. Functions have test twins bound to the test
+database (`handleTestStripeWebhookV2`, `*OnUpdateTestV2`). Config and data
+changes made in test mode stay in `lyf-v2-test`; only the admin roster is
+mirrored from production automatically.
+
+## Appendix: first rollout of the config-driven camp year (October 2026)
+
+Kept for the record. This ordered the first deploy of the version in which
+camp years became data; a normal release needs none of it. The old deploy
+mixed code and data, so the first deploy had to be ordered so that no page
+saw a half-migrated state:
 
 1. **Firestore rules** — `yarn deploy:firestore`. `camps/{year}` and `config/`
    become public-read / server-write (the old site keeps working: it only read
@@ -164,13 +182,3 @@ be ordered so no page sees a half-migrated state:
 5. **Grant `program_admin`** to the program directors who will run the
    rollover, via the Admin Management tab (or `grantAdminAccess` with
    `ADMIN_ROLE=program_admin` for the very first one).
-
-## Test mode
-
-The dashboard's test-data toggle (and the `isTestData` flag on callable
-payloads) routes everything to `lyf-v2-test`, the Stripe test keys and the
-test Slack channels, so a full registration or a rollover can be rehearsed
-without touching production. Functions have test twins bound to the test
-database (`handleTestStripeWebhookV2`, `*OnUpdateTestV2`). Config and data
-changes made in test mode stay in `lyf-v2-test`; only the admin roster is
-mirrored from production automatically.
