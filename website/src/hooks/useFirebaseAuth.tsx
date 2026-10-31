@@ -66,7 +66,7 @@ export default function useFirebaseAuth(): FirebaseAuthContext {
             setIsAdmin(isAdmin)
             setAdminRole(role)
           })
-        }).catch(() => console.log("Wrong email"))
+        }).catch((e) => console.error("Email link sign-in failed", e))
         .finally(() => setIsAuthLoading(false))
     }
 

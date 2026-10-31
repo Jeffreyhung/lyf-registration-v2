@@ -113,7 +113,7 @@ const columns: GridColDef[] = [
     headerName: "Status",
     renderCell: (
       params: GridRenderCellParams<
-        any,
+        ParentDashboardRow,
         [RegistrationStatus, number | null, CampTrack]
       >
     ) => {

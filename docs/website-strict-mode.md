@@ -126,17 +126,15 @@ a mechanical fix:
   `shouldShowOffWaitlistDialog` with `useMemo` instead of an effect.
 - `Table.tsx` 73: `setSnackbar` from context, stable in practice.
 
-**`@typescript-eslint/no-explicit-any` (warn).** Eight sites:
-`RegistrationDataContext.tsx` 42, 47, 52 (`newValue: any` on the edit
-actions: the reducer writes it into `Partial<>` records by string key, so a
-typed `keyof` per action is the fix), 276 and 378
-(`Record<string, any>` for legacy demographics), `Waitlist.tsx` 267 and
-`profile.tsx` 116 (`GridRenderCellParams<any, ...>`: the row type is
-known), `AssignmentsGroup.tsx` 42 (`useDrop<..., any, ...>` drop result).
+**`@typescript-eslint/no-explicit-any` (warn).** None left. The edit
+actions' `newValue` is `unknown` (the reducer writes it into `Partial<>`
+records by string key); legacy camper demographics are typed as
+`Demographics`; the grid cell params in `Waitlist.tsx` and `profile.tsx`
+name their row types; the `useDrop` drop result in `AssignmentsGroup.tsx`
+is `void`.
 
-**`no-console` (warn).** `AddCamper.tsx` 182, `RefundDialog.tsx` 255 and
-262, `useFirebaseAuth.tsx` 69 (`"Wrong email"` swallows the sign-in error)
-and `CreateTestData.tsx` 166 (progress output in an admin-only tool).
+**`no-console` (warn).** None left: caught errors go to `console.error`,
+and the `CreateTestData.tsx` deletion notice to `console.warn`.
 
 **`react/no-unescaped-entities` (off)** and **`react/prop-types` (off)**:
 prose apostrophes and TypeScript-typed props; nothing to work down.

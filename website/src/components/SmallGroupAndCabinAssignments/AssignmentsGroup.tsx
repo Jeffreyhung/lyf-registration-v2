@@ -39,7 +39,7 @@ export default function AssignmentsGroup({
 }: AssignmentsGroupProps) {
   const dispatch = React.useContext(SmallGroupDispatchContext)
   const [isOpen, setIsOpen] = React.useState(false)
-  const [{ isOver }, drop] = useDrop<PairingCamper, any, DragAndDropMonitor>({
+  const [{ isOver }, drop] = useDrop<PairingCamper, void, DragAndDropMonitor>({
     accept: "camper",
     drop: (c) => {
       if (c.groupId == group.id) return

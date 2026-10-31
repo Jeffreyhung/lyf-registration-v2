@@ -2,6 +2,7 @@ import React, { createContext } from "react"
 
 import {
   Camper,
+  Demographics,
   Family,
   Parent,
   RegistrationData as Registration2024Data,
@@ -39,17 +40,17 @@ export interface RegistrationBaseAction {
 export interface RegistrationEditAction extends RegistrationBaseAction {
   index: number
   keyToChange: string
-  newValue: any
+  newValue: unknown
 }
 
 export interface RegistrationEditFamilyAction extends RegistrationBaseAction {
   keyToChange: string
-  newValue: any
+  newValue: unknown
 }
 
 export interface RegistrationEditHouseholdAction extends RegistrationBaseAction {
   keyToChange: string
-  newValue: any
+  newValue: unknown
 }
 
 export type RegistrationAddAction = RegistrationBaseAction
@@ -326,7 +327,7 @@ export function registrationReducer(
       const { index, camper } = action as RegistrationPrefillCamperAction
       // Remove the document reference so it doesn't reference itself.
       // Also remove the registrations since Firebase has trouble parsing these.
-      const { ref, registrations, demographics, ...rest } = camper as typeof camper & { demographics?: Record<string, any> }
+      const { ref, registrations, demographics, ...rest } = camper as typeof camper & { demographics?: Demographics }
 
       // Update the camper
       const originalCamper = registrationState.campers[index]
@@ -428,7 +429,7 @@ export function registrationReducer(
           registrations,
           demographics,
           ...camperWithoutFirebaseTypes
-        } = matchingCamper as typeof matchingCamper & { demographics?: Record<string, any> }
+        } = matchingCamper as typeof matchingCamper & { demographics?: Demographics }
 
         // Be sure not to accidentally push any firebase types into this object. That messes with the upload later on.
         updatedCampers.push({

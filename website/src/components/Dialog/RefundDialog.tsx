@@ -251,19 +251,18 @@ export default function RefundDialog({
     await Promise.all(
       [...changesRef.current.refunds.entries()].map(async ([, metadata]) => {
         try {
-          const response = await issueStripeRefund({
+          await issueStripeRefund({
             stripeId: metadata.payment.stripeId,
             amount: metadata.amount * 100, // dollars -> cents
             isTestData: isTestData,
           })
-          console.log(response)
           await updateDoc(metadata.payment.ref, {
             balance:
               (metadata.payment.balance ?? metadata.payment.total!) -
               metadata.amount,
           })
         } catch (e) {
-          console.log(`error\n${e}`)
+          console.error("Refund failed", e)
         }
       })
     )
