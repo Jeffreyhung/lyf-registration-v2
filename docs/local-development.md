@@ -55,8 +55,8 @@ are git-ignored; never commit them, and never commit an Admin SDK key file
 | Command                                              | What it does                                                                                                                  |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `yarn typecheck`                                     | `build:packages`, then `tsc --noEmit` for `functions/` and the website.                                                       |
-| `yarn lint`                                          | `yarn workspace functions lint` (ESLint, correctness rules only) and the website `lint` script when present.                  |
-| `yarn test`                                          | Jest in `schemas/`, `functions/` and `small-group-pairing/`, plus the website `test` script when present.                     |
+| `yarn lint`                                          | `yarn workspace functions lint` (ESLint, correctness rules only). The website has no lint script yet.                         |
+| `yarn test`                                          | Jest in `schemas/`, `functions/` and `small-group-pairing/`. The website has no test script yet.                              |
 | `yarn format:check` / `yarn format`                  | Prettier with the root `.prettierrc`; `.prettierignore` excludes `functions/` and the areas not formatted yet.                |
 | `yarn workspace lyf-registration-website develop`    | Gatsby dev server at http://localhost:8000.                                                                                   |
 | `yarn emulators`                                     | `functions:isolate` (build + isolate + copy `functions/.env`), then `firebase emulators:start` from the root `firebase.json`. |

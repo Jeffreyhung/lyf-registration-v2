@@ -1,330 +1,152 @@
 # Registration architecture
 
-How a family gets from the registration page to a paid registration: the Gatsby
-front end in `website/src/components/Registration`, the `createRegistrationSession`
-Cloud Function and the Stripe checkout hand-off. For the admin side (dashboard,
-exports, camp year rollover) see [admin-runbook.md](admin-runbook.md).
+How a family gets from the registration page to a paid, active registration,
+and which invariants the code defends on the way. The admin side (dashboard,
+exports, camp year rollover) is in [admin-runbook.md](admin-runbook.md).
 
-The camp registration system is a multi-step checkout flow that handles parent/guardian information, camper details, demographics, and payment processing through Stripe. The system supports pre-registration, waitlists, sibling discounts, and camp credit.
-
-## Frontend Architecture
-
-### RegistrationFlow Component
-
-**Location:** `/website/src/components/Registration/RegistrationFlow.tsx`
-
-The main orchestrator for the entire registration process. It manages:
-
-**Data Loading & Access Control:**
-
-- Loads camp year information and family data (campers, parents, registrations, camp credit)
-- Implements time-based access control with early access for pre-registered campers
-- Access times come from `camps/{year}` (`earlyRegOpenDate` for pre-registered families, `registrationOpenDate` for everyone) via the `useCampSchedule` hook — see [Camp year rollover](admin-runbook.md#camp-year-rollover)
-
-**State Management:**
-
-- Uses React Context to provide registration data and dispatch functions throughout the flow
-- Implements a reducer pattern (`registrationReducer`) to handle all state changes
-- Action types include: AddParent, AddCamper, EditFamily, EditParent, EditCamper, EditDemographics, SetNumOfCampers, SetDonation, LoadFromCache, PrefillParent, PrefillFamily, LoadPendingPaymentRegistrations
-
-**Session Persistence:**
-
-- Saves registration state to browser's localStorage for session recovery
-- Detects URL query parameters to handle:
-  - `success`: Whether payment succeeded or failed
-  - `waitlist`: Whether any campers were waitlisted
-  - `continueFromWaitlist`: Resume registration after being moved off waitlist
-- Shows a confirmation dialog to continue from previous session
-- Validates that the same user and camp year are in the session
-
-**Registration Steps:**
-The flow consists of the following sequential steps:
-
-1. **InfoStep** - General camp information and waitlist status
-2. **ParentGuardianStep** - Parent/guardian contact information
-3. **SelectNumCampersStep** - Choose number of campers to register
-4. **CamperStep** (repeated per camper) - Individual camper details (name, birthday, grade, medical info, etc.)
-5. **DemographicsStep** (repeated per camper) - Camper demographics (ethnicity, birthplace, language fluency)
-6. **ReviewStep** - Review all information and proceed to checkout
-7. **ConfirmationScreen** - Final confirmation after successful registration
-
-### RegistrationDataContext
-
-**Location:** `/website/src/components/Registration/RegistrationDataContext.tsx`
-
-Provides centralized state management for the registration flow:
-
-**Data Structure:**
-
-```typescript
-{
-  campYear: number,
-  family: Family,
-  parents: Parent[],
-  campers: Camper[],
-  demographics: Demographics[],
-  donation: number
-}
+```
+website/src/components/Registration/*        functions/src/registration/*            Stripe
+─────────────────────────────────────        ────────────────────────────            ──────
+RegistrationFlow (steps, localStorage)
+  └─ ReviewStep ── callable ──────────────▶ createRegistrationSession
+                                             ├─ createOrUpdateRegistration (one transaction:
+                                             │    family/parents/campers/registrations +
+                                             │    admission decision + remainingSpots)
+                                             ├─ all waitlisted → return (no payment)
+                                             ├─ fully covered by camp credit → completeRegistration
+                                             └─ otherwise createStripeCheckoutSession ──▶ Checkout
+  ◀── redirect ?success=1[&waitlist=1] ─────────────────────────────────────────────────┘
+                                           handleStripeWebhook ◀── checkout.session.completed
+                                             └─ fulfillRegistration → payment doc, ACTIVE,
+                                                completeRegistration (email, Slack, spots, credit)
+                                           handleStripeWebhook ◀── checkout.session.expired
+                                             └─ releaseRegistrationHolds (spots back)
 ```
 
-**Key Reducer Actions:**
+Everything below is per camp year; prices, dates and caps come from
+`camps/{year}` ([admin-runbook.md](admin-runbook.md#camp-year-rollover)), and
+the `isTestData` flag routes the whole flow to `lyf-v2-test` and Stripe test
+mode.
 
-- `AddParent/AddCamper`: Add new parent or camper to the registration
-- `EditFamily/EditParent/EditCamper/EditDemographics`: Update specific fields
-- `SetNumOfCampers`: Dynamically adjust number of camper/demographic entries
-- `SetDonation`: Update donation amount
-- `LoadFromCache`: Restore registration state from localStorage
-- `PrefillParent/PrefillFamily/PrefillCamper`: Auto-populate fields from database
-- `LoadPendingPaymentRegistrations`: Load registrations that were moved off waitlist
+## Website
 
-All state changes are automatically persisted to localStorage (except ClearData action).
+`RegistrationFlow.tsx` owns the multi-step form and a reducer
+(`RegistrationDataContext.tsx`) whose state is mirrored to `localStorage` on
+every change, keyed by signed-in user and camp year, so a family can resume
+where they left off (a dialog offers to restore the previous session). Steps:
+Info → Parent/Guardian → number of campers → one Camper step and one
+Demographics step per camper → Family culture → Review → Confirmation.
 
-### ReviewStep Component
+- **Opening times** come from `useCampSchedule`: `earlyRegOpenDate` for
+  families with a pre-registration, `registrationOpenDate` for everyone,
+  closing at `registrationCloseDate` unless the family is on the bypass list.
+- **Query parameters** steer the flow after a redirect: `success=1` shows the
+  confirmation and clears the cache, `waitlist=1` tells the confirmation that
+  some campers were waitlisted, `continueFromWaitlist` reloads the campers'
+  existing registrations so a family moved off the waitlist can pay.
+- `ReviewStep.tsx` is the only place that calls the backend. It validates
+  required fields client-side, then calls `FUNCTION_NAMES.createRegistrationSession`
+  and acts on the response: `sessionId` → `stripe.redirectToCheckout`;
+  success without a session → confirmation screen (all waitlisted, or fully
+  covered by camp credit); error → snackbar with the lyf@tacl.org fallback.
+  Nothing about price or discounts is trusted from the client.
 
-**Location:** `/website/src/components/Registration/ReviewStep.tsx`
+## Backend architecture
 
-The final review and checkout step before payment processing:
+### createRegistrationSession (callable)
 
-**Features:**
+`functions/src/registration/createRegistrationSession.ts`. Deployed as
+`createRegistrationSessionV2`.
 
-- Displays summary of all parent, camper, and demographic information
-- Shows order summary with pricing breakdown
-- Allows optional donation entry
-- Validates all required fields before allowing checkout
-- Handles navigation back to specific steps for editing
+1. **Guards.** Signed-in caller required. The payload is parsed with
+   `validateRegistrationPayload` (strips Firestore leftovers, bounds and
+   enums); redirect URLs must match `ALLOWED_REDIRECT_ORIGINS`; a donation is
+   capped. `isTestData` and `forceWaitlist` are resolved against the caller's
+   role, not taken at face value. The camp year must exist and have a positive
+   price (otherwise a $0 registration would be "fully covered" and activated
+   for free), and `assertRegistrationOpen` re-applies the close date and the
+   bypass list because the callable is reachable without the website.
+2. **Writes + admission in one transaction** (`createOrUpdateRegistration.ts`).
+   Finds or creates the family by parent emails (first writer becomes
+   `createdBy`), upserts parents and campers (health and demographics go to
+   `campers/{id}/private/*`, never onto the camper document), then runs
+   `decideAdmissions` (`registrationUtils/capacity.ts`) against the camp's
+   `remainingSpots` read inside the same transaction: a camper is admitted as
+   `PENDING_PAYMENT` with `spotReserved: true` when their track had a spot at
+   the start of the request, otherwise `WAITLIST`; `forceWaitlist` waitlists
+   everyone; already paid or reserved registrations keep their status.
+   Siblings are compared against the starting count, so two siblings both get
+   in when one spot is left. The decrement is committed with the writes.
+3. **Waitlist.** Every waitlisted camper gets a Slack message and a waitlist
+   email. If all campers were waitlisted the call returns without a session
+   (or with a donation-only checkout session if a donation was entered).
+4. **Charges** (`computeRegistrationCharges`). Per admitted camper the price is
+   `campPrice`, minus `preRegistrationFee` if that camper pre-registered. The
+   sibling discount applies per _paid_ sibling (waitlisted campers do not
+   count, so a request padded with waitlisted siblings cannot discount the
+   paid ones to zero), then camp credit (`credits/{familyId}`), floored at
+   zero.
+5. **Fully covered** (financial aid): registrations go `ACTIVE` immediately
+   and `completeRegistration` runs (below); a donation, if any, gets its own
+   checkout session.
+6. **Checkout.** One Stripe line item per admitted camper carrying
+   `{familyRef, registrationRef, campYear, campTrack}` metadata, an optional
+   donation line, and a single discount coupon combining sibling discount and
+   credit. The session expires after `REGISTRATION_CHECKOUT_EXPIRY_MINUTES`
+   (45) so held spots are not tied up by abandoned checkouts. The response is
+   `{status, code, sessionId, isWaitlist}`; `402` means Stripe customer or
+   session creation failed (also reported to the error Slack channel).
 
-**Checkout Flow:**
+### Webhook: handleStripeWebhook
 
-1. Validates all required fields are completed
-2. Calls `createCheckoutSession()` which invokes the Firebase Cloud Function
-3. Handles three possible responses:
-   - **Waitlist only**: No payment needed, proceed to confirmation
-   - **Covered by camp credit**: No payment needed, proceed to confirmation with optional donation
-   - **Payment required**: Redirect to Stripe Checkout
+`functions/src/stripe/handleStripeWebhook.ts`, deployed twice:
+`handleStripeWebhookV2` (production keys, `lyf-v2`) and
+`handleTestStripeWebhookV2` (test keys, `lyf-v2-test`).
 
-**Error Handling:**
+- Rejects non-POST and bad signatures, then claims the event by
+  `create()`-ing `_processedEvents/{eventId}` so a redelivered or concurrent
+  event is a no-op (the collection is meant to carry a Firestore TTL policy on
+  `expiresAt`; the gcloud command is in the handler). Sessions not tagged with
+  this app's `metadata.app` are ignored.
+- `checkout.session.completed` / `async_payment_succeeded` →
+  `fulfillRegistration`: writes a `payments` document, links it to each
+  registration from the line-item metadata and sets the status to `ACTIVE`
+  (`PROCESSING_PAYMENT` when Stripe reports the payment as still processing),
+  then `completeRegistration`.
+- `checkout.session.expired` → `releaseRegistrationHolds`: for each line item
+  still `PENDING_PAYMENT` with `spotReserved`, gives the spot back and clears
+  the flag. The status stays `PENDING_PAYMENT` so the family's next attempt is
+  re-evaluated against capacity and the website can resume it.
 
-- Shows user-friendly error messages via Snackbar
-- Provides fallback contact information (lyf@tacl.org)
-- Validates donation input (must be non-negative number)
+### completeRegistration
 
-## Backend Architecture
+`functions/src/registration/fullfillRegistration.ts`, shared by the
+credit-covered path and the webhook: confirmation email per camper
+(MJML template), Slack message to the registration channel, Mailchimp
+subscription, `remainingSpots` decrement for registrations that did not
+already hold a spot, and `credits/{familyId}.amountRemaining` decrement by the
+credit used. Spot arithmetic goes through `applySpotDelta`, which floors at
+zero.
 
-### createRegistrationSession Cloud Function
+### Related callables
 
-**Location:** `/functions/src/registration/createRegistrationSession.ts`
+- `createPreRegistrationSession` – deposit checkout for next year; marks the
+  registration `isPreRegistered`, which the full registration later credits.
+- `moveCampersOffWaitlist` (admin) – sets `PENDING_PAYMENT` + `spotReserved`,
+  decrements spots and emails the family; the profile page's off-waitlist
+  dialog then sends them to `/registration?continueFromWaitlist=1`.
+- `issueStripeRefund` (admin) – refunds a payment and records it.
 
-The main server-side function that processes registration submissions and creates Stripe checkout sessions.
+## Invariants worth keeping
 
-**Request Payload:**
-
-```typescript
-{
-  campYear: number,
-  parents: Parent[],
-  campers: Camper[],
-  donation: number,
-  successUrl: string,
-  cancelUrl: string,
-  isTestData?: boolean,
-  forceWaitlist?: boolean
-}
-```
-
-**Processing Flow:**
-
-1. **Authentication & Validation**
-   - Verifies user is signed in (requires Firebase auth token)
-   - Returns 401 error if not authenticated
-
-2. **Camp Data Retrieval**
-   - Fetches camp year data from Firestore
-   - Gets pricing: `campPrice`, `preRegistrationFee`, `siblingDiscount`
-   - Retrieves `remainingSpots` by camp track (YOUNGER/OLDER)
-
-3. **Database Updates** (via `createOrUpdateRegistration`)
-   - Creates or updates Family document
-   - Creates or updates Parent documents
-   - Creates or updates Camper documents
-   - Creates or updates Registration documents with appropriate status:
-     - `WAITLIST`: If `forceWaitlist` is true OR remaining spots <= 0
-     - `PENDING_PAYMENT`: If spots available
-   - Determines camp track based on camper's grade
-   - Associates all documents via references
-
-4. **Waitlist Handling**
-   - Separates campers into `waitlistedCampers` and `registeredCampers`
-   - For waitlisted campers:
-     - Sends Slack notification to registration channel
-     - Sends waitlist email to parent
-   - If all campers are waitlisted:
-     - Returns early with success (no payment needed)
-     - If donation > 0, creates donation-only checkout session
-
-5. **Registration Cost Calculation**
-   - Base cost per camper: `campPrice`
-   - Subtract pre-registration fee if applicable: `campPrice - preRegistrationFee`
-   - Apply sibling discount: `siblingDiscount * (numCampers - 1)`
-   - Retrieve and apply camp credit (financial aid)
-   - Create Stripe line items for each registered camper
-
-6. **Financial Aid Fast Path**
-   - If total cost <= camp credit available:
-     - Updates all registrations to `ACTIVE` status
-     - Completes registration immediately (via `completeRegistration`)
-     - Decrements camp track remaining spots
-     - Returns success without Stripe session
-     - If donation > 0, creates donation-only checkout session
-
-7. **Stripe Checkout Session Creation**
-   - Gets or creates Stripe customer ID for parent
-   - Creates line items array:
-     - One line item per registered camper
-     - Optional donation line item
-   - Applies discount coupon if applicable (sibling + camp credit)
-   - Metadata attached to each line item:
-     ```typescript
-     {
-       familyRef: string,
-       registrationRef: string,
-       campYear: string,
-       campTrack: string
-     }
-     ```
-   - Configures success/cancel URLs with waitlist flag if needed
-   - Returns Stripe session ID for frontend redirect
-
-**Response:**
-
-```typescript
-{
-  status: "success" | "error",
-  code: 200 | 401 | 402,
-  sessionId?: string | null,
-  isWaitlist?: boolean,
-  message?: string
-}
-```
-
-**Error Handling:**
-
-- Logs errors to Firebase Functions logger
-- Sends error notifications to Slack channel
-- Returns user-friendly error messages
-- Error codes:
-  - `401`: Not authenticated
-  - `402`: Failed to create Stripe customer or checkout session
-
-### createOrUpdateRegistration Helper
-
-**Location:** `/functions/src/registration/createOrUpdateRegistration.ts`
-
-Helper function that manages database document creation and updates:
-
-**Operations:**
-
-1. **Family Management**
-   - Finds existing family by parent emails or creates new one
-   - Merges family data including emails array
-   - Returns family document reference
-
-2. **Parent Management**
-   - Creates or updates parent documents under family
-   - Ensures all parent data is persisted
-   - Returns array of parent document references
-
-3. **Camper Management**
-   - Creates or updates camper documents under family
-   - Stores camper details: name, birthdate, gender, dietary restrictions, medical conditions
-   - Embeds demographics information within camper document
-   - Returns camper document reference
-
-4. **Registration Management**
-   - Finds or creates registration document for camper/camp year pair
-   - Determines registration status based on:
-     - `forceWaitlist` flag
-     - Remaining spots for camp track
-     - Existing registration status (respects PENDING_PAYMENT if already set)
-   - Stores registration details: grade, shirt size, cabin preference, waiver info
-   - Links registration to camper via array union
-   - Returns registration reference and status
-
-**Return Value:**
-
-```typescript
-{
-  familyRef: DocumentReference<Family>,
-  parentRefs: DocumentReference<Parent>[],
-  camperAndStatuses: Array<{
-    camperName: string,
-    campTrack: CampTrack,
-    isWaitlisted: boolean,
-    status: RegistrationStatus,
-    registrationRef: DocumentReference<Registration>
-  }>
-}
-```
-
-## Payment Processing Flow
-
-1. **Stripe Checkout Session Creation**
-   - User clicks "Checkout" in ReviewStep
-   - Frontend calls `createRegistrationSession` Cloud Function
-   - Backend creates Stripe session with line items and metadata
-   - Returns session ID to frontend
-
-2. **Stripe Checkout Redirect**
-   - Frontend redirects user to Stripe-hosted checkout page
-   - User enters payment information on Stripe's secure platform
-   - Stripe processes payment
-
-3. **Webhook Fulfillment** (handled by separate webhook handler)
-   - Stripe sends webhook event on payment success
-   - Backend webhook handler:
-     - Validates webhook signature
-     - Updates registration status to `ACTIVE`
-     - Records payment information
-     - Decrements remaining spots
-     - Sends confirmation email
-     - Sends Slack notification
-
-4. **Success Redirect**
-   - User redirected back to site with `?success=1` parameter
-   - ConfirmationScreen displays success message
-   - Registration data cleared from localStorage
-
-## Key Features
-
-**Pre-Registration:**
-
-- Early registrants pay a deposit (pre-registration fee)
-- Can register earlier than general registration
-- Receive discount on final registration cost
-
-**Waitlist System:**
-
-- Automatic waitlist placement when camp track is full
-- Email notifications sent to parents
-- Ability to continue registration if moved off waitlist via `continueFromWaitlist` URL param
-- Separate processing for waitlisted vs. registered campers
-
-**Discounts & Credits:**
-
-- **Sibling Discount**: Applied per additional camper in same family
-- **Camp Credit**: Financial aid applied automatically, can cover full cost
-- Discounts calculated server-side (not trusted from client)
-- Combined into single Stripe discount coupon
-
-**Session Management:**
-
-- Auto-save to localStorage on every state change
-- Resume capability for incomplete registrations
-- User/camp year validation prevents cross-contamination
-- Query parameter handling for various flow states
-
-**Data Validation:**
-
-- Client-side validation of required fields
-- Server-side authentication checks
-- Schema validation via `lyf-registration-schemas` package
-- Error handling with user-friendly messages
+- Capacity is decided and decremented in the same transaction as the
+  registration write; never read `remainingSpots` outside one.
+- The client never supplies a price, discount or status; the website only
+  chooses campers and a donation amount.
+- Health and demographics never leave `campers/{id}/private/*`; registration
+  documents carry only the profile fields the admin grid needs.
+- Every mutating path is idempotent against Stripe retries
+  (`_processedEvents`) and against repeat calls from the website (merge
+  writes, status rules in `decideAdmissions`).
+- Test mode is a database and key switch, not different code: anything that
+  works in `lyf-v2-test` with Stripe test cards is what production will do.

@@ -13,15 +13,15 @@ happens on forks and lands through pull requests against `main`. Merging to
 
 ## Workspace map
 
-| Dir                      | Package                    | Notes                                                                                                     |
-| ------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `website/`               | `lyf-registration-website` | Gatsby 5, React 18, MUI 7, Firebase web SDK 10, Stripe.js, Sentry. TS `strict` is off. GitHub Pages.      |
-| `functions/`             | `functions`                | Cloud Functions 2nd gen, Node 22, codebase `v2`. Entry `src/index.ts`, shared clients `src/utils.ts`.     |
-| `schemas/`               | `lyf-registration-schemas` | Shared types, zod validators, `ROLE_CAPABILITIES`, `FUNCTION_NAMES`. Built to `dist/`.                    |
-| `small-group-pairing/`   | `small-group-pairing`      | Pure TS pairing algorithm. Built to `dist/`.                                                              |
-| `scripts/`               | `lyf-registration-scripts` | Admin SDK maintenance scripts (ADC auth, dry-run by default). `src/archive/` is history, not built.       |
-| `firestore-rules-tests/` | `firestore-rules-tests`    | Emulator tests for `firestore.rules`.                                                                     |
-| `tools/`, `docs/`        |                            | Root helper scripts; long-form docs (architecture, admin runbook, deployment, local development, legacy). |
+| Dir                      | Package                    | Notes                                                                                                 |
+| ------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `website/`               | `lyf-registration-website` | Gatsby 5, React 18, MUI 7, Firebase web SDK 10, Stripe.js, Sentry. TS `strict` is off. GitHub Pages.  |
+| `functions/`             | `functions`                | Cloud Functions 2nd gen, Node 22, codebase `v2`. Entry `src/index.ts`, shared clients `src/utils.ts`. |
+| `schemas/`               | `lyf-registration-schemas` | Shared types, zod validators, `ROLE_CAPABILITIES`, `FUNCTION_NAMES`. Built to `dist/`.                |
+| `small-group-pairing/`   | `small-group-pairing`      | Pure TS pairing algorithm. Built to `dist/`.                                                          |
+| `scripts/`               | `lyf-registration-scripts` | Admin SDK maintenance scripts (ADC auth, dry-run by default). `src/archive/` is history, not built.   |
+| `firestore-rules-tests/` | `firestore-rules-tests`    | Emulator tests for `firestore.rules`.                                                                 |
+| `docs/`                  |                            | Long-form docs: architecture, admin runbook, deployment, local development, legacy.                   |
 
 ## Commands and their order
 
@@ -29,8 +29,8 @@ happens on forks and lands through pull requests against `main`. Merging to
 yarn install            # root only; never `yarn add` inside a workspace folder
 yarn build:packages     # schemas + small-group-pairing dist/ FIRST: functions, website, scripts import them
 yarn typecheck          # build:packages, then tsc for functions and website
-yarn lint               # ESLint in functions/ (+ website lint when present)
-yarn test               # jest: schemas, functions (test/unit), small-group-pairing (+ website when present)
+yarn lint               # ESLint in functions/ (the website has no lint script yet)
+yarn test               # jest: schemas, functions (test/unit), small-group-pairing
 yarn format:check       # prettier, scope defined by .prettierignore
 yarn workspace functions test            # builds schemas itself, then jest
 yarn workspace firestore-rules-tests test:emulator   # needs Java
