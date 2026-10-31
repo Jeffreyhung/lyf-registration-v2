@@ -944,6 +944,16 @@ const buildRegistrationPayload = (u: UnknownKeys) => {
     ...camperHealthShape("read"),
     ...registrationShape("read", embedded),
     grade: gradeSchema.optional(),
+    // The website's "attended camp before?" radio used to send the radio's
+    // string value. Registration state saved in localStorage and pending
+    // payment registrations written before the fix still carry "true" /
+    // "false", so normalize those two strings to the boolean they meant.
+    isReturning: z
+      .preprocess(
+        (v) => (v === "true" ? true : v === "false" ? false : v),
+        z.boolean()
+      )
+      .optional(),
   })
   const parentPayload = obj(embedded, {
     ...parentShape("read"),
