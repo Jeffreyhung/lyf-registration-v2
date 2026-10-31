@@ -55,12 +55,16 @@ const SCHEMA_VERSION = 2
 const BATCH_LIMIT = 400
 
 if (SOURCE_DB === TARGET_DB) {
-  console.error(`SOURCE_DB and TARGET_DB are both "${SOURCE_DB}" — refusing to run.`)
+  console.error(
+    `SOURCE_DB and TARGET_DB are both "${SOURCE_DB}" — refusing to run.`
+  )
   process.exit(1)
 }
 
 if (ADMINS_FROM_DB === TARGET_DB) {
-  console.error(`ADMINS_FROM_DB and TARGET_DB are both "${TARGET_DB}" — refusing to run.`)
+  console.error(
+    `ADMINS_FROM_DB and TARGET_DB are both "${TARGET_DB}" — refusing to run.`
+  )
   process.exit(1)
 }
 
@@ -81,7 +85,8 @@ const plannedPaths: Record<string, Set<string>> = {}
 const warnings: string[] = []
 const referencedPaths = new Set<string>()
 
-const bump = (map: Record<string, number>, key: string) => (map[key] = (map[key] ?? 0) + 1)
+const bump = (map: Record<string, number>, key: string) =>
+  (map[key] = (map[key] ?? 0) + 1)
 const warn = (msg: string) => warnings.push(msg)
 
 /** Collection-group key for counting: "families/parents", "camps/registrations", ... */
@@ -94,14 +99,24 @@ function groupKey(path: string): string {
 const normalizeEmail = (e: string) => e.trim().toLowerCase()
 const normalizeEmails = (emails: unknown): string[] =>
   Array.isArray(emails)
-    ? [...new Set(emails.filter((e): e is string => typeof e === "string").map(normalizeEmail))]
+    ? [
+        ...new Set(
+          emails
+            .filter((e): e is string => typeof e === "string")
+            .map(normalizeEmail)
+        ),
+      ]
     : []
 
 const isNonEmpty = (v: unknown) =>
   v !== undefined &&
   v !== null &&
   !(typeof v === "string" && v.trim() === "") &&
-  !(typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0)
+  !(
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    Object.keys(v as object).length === 0
+  )
 
 // ---------------------------------------------------------------------------
 // Writer: batches merges, or just counts in dry-run
@@ -139,10 +154,12 @@ function rewrite(value: unknown): unknown {
     return target.doc(value.path)
   }
   if (Array.isArray(value)) return value.map(rewrite)
-  if (value === null || value instanceof Timestamp || value instanceof GeoPoint) return value
+  if (value === null || value instanceof Timestamp || value instanceof GeoPoint)
+    return value
   if (typeof value === "object" && (value as object).constructor === Object) {
     const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = rewrite(v)
+    for (const [k, v] of Object.entries(value as Record<string, unknown>))
+      out[k] = rewrite(v)
     return out
   }
   return value
@@ -152,13 +169,19 @@ function rewrite(value: unknown): unknown {
 // Generic copy (used for anything without a specific transform)
 // ---------------------------------------------------------------------------
 
-async function copySubcollections(sourceDoc: DocumentReference, targetDoc: DocumentReference) {
+async function copySubcollections(
+  sourceDoc: DocumentReference,
+  targetDoc: DocumentReference
+) {
   for (const sub of await sourceDoc.listCollections()) {
     await copyCollection(sub, targetDoc.collection(sub.id))
   }
 }
 
-async function copyCollection(from: CollectionReference, to: CollectionReference) {
+async function copyCollection(
+  from: CollectionReference,
+  to: CollectionReference
+) {
   const snap = await from.get()
   for (const doc of snap.docs) {
     bump(sourceCounts, groupKey(doc.ref.path))
@@ -201,9 +224,16 @@ async function migrateFamilies() {
     for (const parent of parents.docs) {
       bump(sourceCounts, "families/parents")
       const pdata = parent.data()
-      const email = normalizeEmail(typeof pdata.email === "string" ? pdata.email : parent.id)
-      const targetParent = targetFamily.collection("parents").doc(normalizeEmail(parent.id))
-      await writer.set(targetParent, {...(rewrite(pdata) as Record<string, unknown>), email})
+      const email = normalizeEmail(
+        typeof pdata.email === "string" ? pdata.email : parent.id
+      )
+      const targetParent = targetFamily
+        .collection("parents")
+        .doc(normalizeEmail(parent.id))
+      await writer.set(targetParent, {
+        ...(rewrite(pdata) as Record<string, unknown>),
+        email,
+      })
       await copySubcollections(parent.ref, targetParent)
     }
 
@@ -211,7 +241,10 @@ async function migrateFamilies() {
     const campers = await family.ref.collection("campers").get()
     for (const camper of campers.docs) {
       bump(sourceCounts, "families/campers")
-      await migrateCamper(camper, targetFamily.collection("campers").doc(camper.id))
+      await migrateCamper(
+        camper,
+        targetFamily.collection("campers").doc(camper.id)
+      )
     }
 
     // anything else under the family (none expected) is copied verbatim
@@ -223,7 +256,10 @@ async function migrateFamilies() {
   }
 }
 
-async function migrateCamper(camper: DocumentSnapshot, targetCamper: DocumentReference) {
+async function migrateCamper(
+  camper: DocumentSnapshot,
+  targetCamper: DocumentReference
+) {
   const data = camper.data() ?? {}
   const {medicalConditions, dietAndFoodAllergies, demographics, ...rest} = data
 
@@ -242,15 +278,20 @@ async function migrateCamper(camper: DocumentSnapshot, targetCamper: DocumentRef
 
   const health: Record<string, unknown> = {...(sourceHealth.data() ?? {})}
   for (const field of HEALTH_FIELDS) {
-    const legacy = field === "medicalConditions" ? medicalConditions : dietAndFoodAllergies
-    if (!isNonEmpty(health[field]) && legacy !== undefined) health[field] = legacy
+    const legacy =
+      field === "medicalConditions" ? medicalConditions : dietAndFoodAllergies
+    if (!isNonEmpty(health[field]) && legacy !== undefined)
+      health[field] = legacy
   }
   if (Object.keys(health).length > 0) {
     await writer.set(privateRef.doc("health"), health)
   }
 
   const demo: Record<string, unknown> = {
-    ...((isNonEmpty(demographics) ? demographics : {}) as Record<string, unknown>),
+    ...((isNonEmpty(demographics) ? demographics : {}) as Record<
+      string,
+      unknown
+    >),
     ...(sourceDemographics.data() ?? {}),
   }
   if (Object.keys(demo).length > 0) {
@@ -259,7 +300,8 @@ async function migrateCamper(camper: DocumentSnapshot, targetCamper: DocumentRef
   }
 
   for (const sub of await camper.ref.listCollections()) {
-    if (sub.id !== "private") await copyCollection(sub, targetCamper.collection(sub.id))
+    if (sub.id !== "private")
+      await copyCollection(sub, targetCamper.collection(sub.id))
   }
 }
 
@@ -273,21 +315,31 @@ async function migrateCamps() {
   for (const camp of camps.docs) {
     bump(sourceCounts, "camps")
     const targetCamp = target.collection("camps").doc(camp.id)
-    await writer.set(targetCamp, rewrite(camp.data()) as Record<string, unknown>)
+    await writer.set(
+      targetCamp,
+      rewrite(camp.data()) as Record<string, unknown>
+    )
 
     const registrations = await camp.ref.collection("registrations").get()
     for (const reg of registrations.docs) {
       bump(sourceCounts, "camps/registrations")
-      await migrateRegistration(reg, targetCamp.collection("registrations").doc(reg.id))
+      await migrateRegistration(
+        reg,
+        targetCamp.collection("registrations").doc(reg.id)
+      )
     }
 
     for (const sub of await camp.ref.listCollections()) {
-      if (sub.id !== "registrations") await copyCollection(sub, targetCamp.collection(sub.id))
+      if (sub.id !== "registrations")
+        await copyCollection(sub, targetCamp.collection(sub.id))
     }
   }
 }
 
-async function migrateRegistration(reg: DocumentSnapshot, targetReg: DocumentReference) {
+async function migrateRegistration(
+  reg: DocumentSnapshot,
+  targetReg: DocumentReference
+) {
   const data = reg.data() ?? {}
   const {demographics, ...rest} = data
   const out: Record<string, unknown> = {
@@ -295,7 +347,8 @@ async function migrateRegistration(reg: DocumentSnapshot, targetReg: DocumentRef
     schemaVersion: SCHEMA_VERSION,
   }
 
-  const camperRef = data.camper instanceof DocumentReference ? data.camper : null
+  const camperRef =
+    data.camper instanceof DocumentReference ? data.camper : null
   if (!camperRef) {
     warn(`registration ${reg.ref.path} has no camper ref; familyEmails not set`)
   } else {
@@ -305,7 +358,9 @@ async function migrateRegistration(reg: DocumentSnapshot, targetReg: DocumentRef
     if (emails) {
       out.familyEmails = emails
     } else {
-      warn(`registration ${reg.ref.path} -> family ${familyId} not found; familyEmails not set`)
+      warn(
+        `registration ${reg.ref.path} -> family ${familyId} not found; familyEmails not set`
+      )
     }
 
     // Legacy per-registration demographics: keep the data, but on the camper
@@ -313,7 +368,10 @@ async function migrateRegistration(reg: DocumentSnapshot, targetReg: DocumentRef
       const targetCamperPath = camperRef.path
       if (!campersWithDemographics.has(targetCamperPath)) {
         await writer.set(
-          target.doc(targetCamperPath).collection("private").doc("demographics"),
+          target
+            .doc(targetCamperPath)
+            .collection("private")
+            .doc("demographics"),
           demographics as Record<string, unknown>
         )
         campersWithDemographics.add(targetCamperPath)
@@ -348,7 +406,10 @@ async function migrateAdmins() {
     const roster = await adminsSource.collection("admins").get()
     for (const doc of roster.docs) {
       bump(sourceCounts, "admins")
-      entries.set(normalizeEmail(doc.id), rewrite(doc.data()) as Record<string, unknown>)
+      entries.set(
+        normalizeEmail(doc.id),
+        rewrite(doc.data()) as Record<string, unknown>
+      )
     }
   } else {
     // Existing admin docs in the source keep their role (if valid)
@@ -450,14 +511,25 @@ async function targetCounts(): Promise<Record<string, number>> {
 
 function printTable(rows: string[][]) {
   const cols = rows[0].length
-  const widths = Array.from({length: cols}, (_, i) => Math.max(...rows.map((r) => r[i].length)))
-  for (const r of rows) console.log("  " + r.map((c, i) => c.padEnd(widths[i])).join("   ").trimEnd())
+  const widths = Array.from({length: cols}, (_, i) =>
+    Math.max(...rows.map((r) => r[i].length))
+  )
+  for (const r of rows)
+    console.log(
+      "  " +
+        r
+          .map((c, i) => c.padEnd(widths[i]))
+          .join("   ")
+          .trimEnd()
+    )
 }
 
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log(`${APPLY ? "APPLY" : "DRY RUN"}: ${SOURCE_DB} -> ${TARGET_DB} (project ${app.options.projectId})\n`)
+  console.log(
+    `${APPLY ? "APPLY" : "DRY RUN"}: ${SOURCE_DB} -> ${TARGET_DB} (project ${app.options.projectId})\n`
+  )
 
   console.log("families / parents / campers")
   await migrateFamilies()
@@ -475,24 +547,44 @@ async function main() {
   console.log(`\nSummary (${APPLY ? "written" : "would write"}):`)
   const tgt = APPLY ? await targetCounts() : null
   const rows: [string, string, string, string][] = [
-    ["collection group", "source", "distinct target docs", APPLY ? "target now" : ""],
+    [
+      "collection group",
+      "source",
+      "distinct target docs",
+      APPLY ? "target now" : "",
+    ],
   ]
   const merged: string[] = []
   for (const group of Object.keys(sourceCounts).sort()) {
     const planned = plannedPaths[group]?.size ?? 0
     if (planned < sourceCounts[group]) {
-      merged.push(`${group}: ${sourceCounts[group]} source docs -> ${planned} (IDs normalized to the same path)`)
+      merged.push(
+        `${group}: ${sourceCounts[group]} source docs -> ${planned} (IDs normalized to the same path)`
+      )
     }
-    rows.push([group, String(sourceCounts[group]), String(planned), tgt ? String(tgt[group]) : ""])
+    rows.push([
+      group,
+      String(sourceCounts[group]),
+      String(planned),
+      tgt ? String(tgt[group]) : "",
+    ])
   }
   for (const [k, v] of Object.entries(writeCounts)) {
-    if (!(k in sourceCounts)) rows.push([k, "-", String(plannedPaths[k]?.size ?? v), tgt && plannedPaths[k] ? String(tgt[k] ?? "") : ""])
+    if (!(k in sourceCounts))
+      rows.push([
+        k,
+        "-",
+        String(plannedPaths[k]?.size ?? v),
+        tgt && plannedPaths[k] ? String(tgt[k] ?? "") : "",
+      ])
   }
   printTable(rows)
   merged.forEach((m) => console.log(`  ~ merged: ${m}`))
 
   if (tgt) {
-    const short = Object.keys(sourceCounts).filter((g) => tgt[g] < (plannedPaths[g]?.size ?? 0))
+    const short = Object.keys(sourceCounts).filter(
+      (g) => tgt[g] < (plannedPaths[g]?.size ?? 0)
+    )
     if (short.length) {
       console.log(`\n✗ target is missing docs in: ${short.join(", ")}`)
     } else {
@@ -500,17 +592,23 @@ async function main() {
     }
   }
 
-  console.log(`\nReferences: ${referencedPaths.size} rewritten, ${dangling.length} dangling`)
+  console.log(
+    `\nReferences: ${referencedPaths.size} rewritten, ${dangling.length} dangling`
+  )
   dangling.slice(0, 20).forEach((p) => console.log(`  dangling: ${p}`))
   if (dangling.length > 20) console.log(`  … and ${dangling.length - 20} more`)
 
   if (warnings.length) {
     console.log(`\nWarnings (${warnings.length}):`)
     warnings.slice(0, 30).forEach((w) => console.log(`  ! ${w}`))
-    if (warnings.length > 30) console.log(`  … and ${warnings.length - 30} more`)
+    if (warnings.length > 30)
+      console.log(`  … and ${warnings.length - 30} more`)
   }
 
-  if (!APPLY) console.log("\nDry run complete. Re-run with APPLY=1 to write to the target.")
+  if (!APPLY)
+    console.log(
+      "\nDry run complete. Re-run with APPLY=1 to write to the target."
+    )
   process.exit(dangling.length > 0 ? 2 : 0)
 }
 

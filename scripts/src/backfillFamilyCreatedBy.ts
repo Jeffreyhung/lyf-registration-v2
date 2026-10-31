@@ -43,7 +43,9 @@ async function main() {
       continue
     }
 
-    const emails = normalizeEmails(Array.isArray(data.emails) ? data.emails : [])
+    const emails = normalizeEmails(
+      Array.isArray(data.emails) ? data.emails : []
+    )
 
     if (emails.length === 0) {
       noEmails.push(familyDoc.id)
@@ -56,7 +58,9 @@ async function main() {
     }
 
     const [owner] = emails
-    console.log(`${apply ? "Setting" : "Would set"} createdBy=${owner} on families/${familyDoc.id}`)
+    console.log(
+      `${apply ? "Setting" : "Would set"} createdBy=${owner} on families/${familyDoc.id}`
+    )
     if (apply) {
       await familyDoc.ref.update({createdBy: owner})
     }
@@ -65,7 +69,9 @@ async function main() {
 
   console.log(`\nFamilies: ${families.size}`)
   console.log(`Already had createdBy: ${alreadySet}`)
-  console.log(`${apply ? "Backfilled" : "Would backfill"} (single email): ${backfilled}`)
+  console.log(
+    `${apply ? "Backfilled" : "Would backfill"} (single email): ${backfilled}`
+  )
 
   if (noEmails.length > 0) {
     console.log(`\nNo emails listed (left alone): ${noEmails.length}`)
@@ -73,7 +79,9 @@ async function main() {
   }
 
   if (needsReview.length > 0) {
-    console.log(`\nMultiple emails, no creator on record (left alone, review manually): ${needsReview.length}`)
+    console.log(
+      `\nMultiple emails, no creator on record (left alone, review manually): ${needsReview.length}`
+    )
     needsReview.forEach((line) => console.log(`  ${line}`))
   }
 

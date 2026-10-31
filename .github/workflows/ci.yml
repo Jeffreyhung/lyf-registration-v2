@@ -2,7 +2,8 @@ name: CI
 
 # Runs on every pull request and on pushes to main. The Firestore rules suite
 # needs the emulator (and a JRE) and only matters when the rules change, so it
-# stays in its own path-filtered workflow (test-firestore-rules.yml).
+# stays in its own path-filtered workflow (test-firestore-rules.yml). Static
+# analysis is in codeql.yml.
 
 on:
   push:
@@ -18,8 +19,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  format:
+    name: Formatting (prettier --check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      # functions/ is excluded: it is linted (functions job) and kept in its
+      # Google style by convention, not by a formatter. .prettierignore also
+      # still lists the workspaces that have not been formatted yet; remove a
+      # line there once that area is clean.
+      - name: Check formatting
+        run: yarn format:check
+
   schemas:
-    name: Schemas (build + unit tests)
+    name: Schemas + scripts (build + unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +50,10 @@ jobs:
         run: yarn workspace lyf-registration-schemas build
       - name: Unit tests
         run: yarn workspace lyf-registration-schemas test
+      # The admin scripts import the schemas package; building them here keeps
+      # them from rotting silently (they are not deployed anywhere).
+      - name: Build admin scripts
+        run: yarn workspace lyf-registration-scripts build
 
   functions:
     name: Functions (lint + unit tests + type-check)
@@ -68,7 +90,7 @@ jobs:
         run: yarn workspace small-group-pairing test
 
   website:
-    name: Website (type-check)
+    name: Website (type-check + lint + unit tests)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -80,8 +102,27 @@ jobs:
       # The website's tsconfig references both local packages; they must be
       # built for their declarations to resolve.
       - name: Build local workspace packages
-        run: |
-          yarn workspace lyf-registration-schemas build
-          yarn workspace small-group-pairing build
+        run: yarn build:packages
       - name: Type-check
         run: yarn workspace lyf-registration-website typecheck
+      - name: Lint
+        run: yarn workspace lyf-registration-website lint
+      # The unit tests import lyf-registration-schemas, so they also need the
+      # packages built above.
+      - name: Unit tests
+        run: yarn workspace lyf-registration-website test
+
+  audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # Non-blocking: `yarn audit` exits non-zero whenever an advisory matches,
+      # and transitive advisories in gatsby/firebase-tools are rarely
+      # actionable the same day. Read the step log; Dependabot opens the fix PRs.
+      - name: yarn audit (runtime dependencies, high and critical)
+        run: yarn audit --groups dependencies --level high
+        continue-on-error: true

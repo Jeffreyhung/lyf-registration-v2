@@ -8,8 +8,12 @@
   "scripts": {
     "postinstall": "husky",
     "compile": "tsc --build --force tsconfig.json",
+    "build:packages": "yarn workspace lyf-registration-schemas build && yarn workspace small-group-pairing build",
+    "lint": "yarn workspace functions lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "yarn workspace lyf-registration-schemas test && yarn workspace functions test && yarn workspace small-group-pairing test",
-    "typecheck": "yarn workspace lyf-registration-schemas build && yarn workspace small-group-pairing build && yarn --cwd functions tsc --noEmit -p tsconfig.json && yarn workspace lyf-registration-website typecheck",
+    "typecheck": "yarn build:packages && yarn --cwd functions tsc --noEmit -p tsconfig.json && yarn workspace lyf-registration-website typecheck",
     "functions:isolate": "yarn workspace lyf-registration-schemas build && yarn --cwd functions run build && yarn --cwd functions run isolate && cp functions/.env functions/isolate/.env",
     "emulators": "yarn functions:isolate && firebase emulators:start",
     "deploy:functions": "firebase deploy --only functions:v2 --project lyf-registration",
@@ -25,11 +29,11 @@
   ],
   "devDependencies": {
     "husky": "^9.1.7",
-    "lint-staged": "^16.2.7"
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.4.2"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "prettier --check --ignore-unknown"
-    ]
+    "functions/**/*.{js,mjs,cjs,ts,mts,cts}": "yarn --cwd functions eslint",
+    "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts,json,md,yml,yaml,css,html}": "prettier --check --ignore-unknown"
   }
 }

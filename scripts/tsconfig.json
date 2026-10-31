@@ -16,5 +16,7 @@
     "types": ["node"]
   },
   "compileOnSave": true,
-  "include": ["src"]
+  "include": ["src"],
+  // Historical one-off scripts; kept for reference, not built (see README.md).
+  "exclude": ["src/archive"]
 }

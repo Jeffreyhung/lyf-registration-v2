@@ -27,16 +27,16 @@ host, look in the v1 repo first — both sites report to the same Sentry project
 Yarn 1 workspaces, TypeScript project references, Node 22 (CI); local Node
 may be newer because `.yarnrc` sets `--ignore-engines`.
 
-| Workspace | Package name | What lives there |
-| --- | --- | --- |
-| `schemas/` | `lyf-registration-schemas` | Shared Firestore document types, callable payload types, zod validators, `ROLE_CAPABILITIES`, `FUNCTION_NAMES`, `normalizeEmail`, `CURRENT_SCHEMA_VERSION`. Everything else imports from its `dist/`. |
-| `functions/` | `functions` | Cloud Functions v2: callables (`createRegistrationSession`, `createPreRegistrationSession`, `moveCampersOffWaitlist`, `issueStripeRefund`, `manageAdmin`, `manageCampYear`), Stripe webhooks, Firestore triggers (`replicateAdminsToTest`, `syncFamilyEmails*`, `syncCamperProfile*`), MJML email templates. Unit tests in `functions/test/unit/`. |
-| `website/` | `lyf-registration-website` | Gatsby 5 + React 18 + MUI site. Pages: `/`, `/registration`, `/preregistration`, `/login`, `/admin`, `/user/profile`. Path aliases `@components/*`, `@hooks/*`, `@utils/*`. |
-| `firestore-rules-tests/` | `firestore-rules-tests` | Role × collection matrix for `firestore.rules`, run against the Firestore emulator. |
-| `small-group-pairing/` | `small-group-pairing` | Pure TS pairing algorithm used by the admin dashboard. |
-| `scripts/` | `lyf-registration-scripts` | One-off Admin SDK migrations, seeding and stats (`scripts/src/*.ts`). Exports moved to the dashboard; see `scripts/run.sh`. |
-| `migration/` | — | 2023 Python import of the legacy camp data. Historical; do not touch. |
-| `docs/` | — | Design notes and assessments (e.g. Firestore → Cloud SQL assessment). |
+| Workspace                | Package name               | What lives there                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------ | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemas/`               | `lyf-registration-schemas` | Shared Firestore document types, callable payload types, zod validators, `ROLE_CAPABILITIES`, `FUNCTION_NAMES`, `normalizeEmail`, `CURRENT_SCHEMA_VERSION`. Everything else imports from its `dist/`.                                                                                                                                              |
+| `functions/`             | `functions`                | Cloud Functions v2: callables (`createRegistrationSession`, `createPreRegistrationSession`, `moveCampersOffWaitlist`, `issueStripeRefund`, `manageAdmin`, `manageCampYear`), Stripe webhooks, Firestore triggers (`replicateAdminsToTest`, `syncFamilyEmails*`, `syncCamperProfile*`), MJML email templates. Unit tests in `functions/test/unit/`. |
+| `website/`               | `lyf-registration-website` | Gatsby 5 + React 18 + MUI site. Pages: `/`, `/registration`, `/preregistration`, `/login`, `/admin`, `/user/profile`. Path aliases `@components/*`, `@hooks/*`, `@utils/*`.                                                                                                                                                                        |
+| `firestore-rules-tests/` | `firestore-rules-tests`    | Role × collection matrix for `firestore.rules`, run against the Firestore emulator.                                                                                                                                                                                                                                                                |
+| `small-group-pairing/`   | `small-group-pairing`      | Pure TS pairing algorithm used by the admin dashboard.                                                                                                                                                                                                                                                                                             |
+| `scripts/`               | `lyf-registration-scripts` | One-off Admin SDK migrations, seeding and stats (`scripts/src/*.ts`). Exports moved to the dashboard; see `scripts/run.sh`.                                                                                                                                                                                                                        |
+| `migration/`             | —                          | 2023 Python import of the legacy camp data. Historical; do not touch.                                                                                                                                                                                                                                                                              |
+| `docs/`                  | —                          | Design notes and assessments (e.g. Firestore → Cloud SQL assessment).                                                                                                                                                                                                                                                                              |
 
 Root files that matter: `firestore.rules` and `firestore.indexes.json` (deployed
 to **both** named databases per `firebase.json`), `firebase.json` (functions
@@ -53,18 +53,18 @@ cp website/.env.example website/.env
 Build order matters: `schemas` and `small-group-pairing` must be built before
 anything that imports them type-checks.
 
-| Task | Command |
-| --- | --- |
-| Build shared packages | `yarn workspace lyf-registration-schemas build` then `yarn workspace small-group-pairing build` |
-| Type-check everything (what CI checks) | `yarn typecheck` (root) |
-| All unit tests | `yarn test` (root) — schemas, functions, small-group-pairing |
-| One workspace's tests | `yarn workspace functions test` (builds schemas first), `yarn workspace lyf-registration-schemas test`, `yarn workspace small-group-pairing test` |
-| Functions lint | `yarn workspace functions lint` (`lint-fix` to autofix) |
-| Rules tests | `yarn workspace firestore-rules-tests test:emulator` (needs Java for the emulator) |
-| Website dev server | `cd website && yarn develop` → http://localhost:8000 ; add `GATSBY_USE_EMULATORS=true` to point at local emulators |
-| Website production build | `yarn workspace lyf-registration-website build` |
-| Emulators (functions + firestore + auth) | `yarn emulators` (root; runs `functions:isolate` first), then `scripts/seed-emulator.sh` to seed `config/site`, sample camp years and admin docs |
-| Admin SDK script | `cd scripts && yarn build && node lib/<name>.js` with Application Default Credentials for a `tacl.org` account that has access to the project (the service-account key `scripts/run.sh` references is not checked in) |
+| Task                                     | Command                                                                                                                                                                                                               |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build shared packages                    | `yarn workspace lyf-registration-schemas build` then `yarn workspace small-group-pairing build`                                                                                                                       |
+| Type-check everything (what CI checks)   | `yarn typecheck` (root)                                                                                                                                                                                               |
+| All unit tests                           | `yarn test` (root) — schemas, functions, small-group-pairing                                                                                                                                                          |
+| One workspace's tests                    | `yarn workspace functions test` (builds schemas first), `yarn workspace lyf-registration-schemas test`, `yarn workspace small-group-pairing test`                                                                     |
+| Functions lint                           | `yarn workspace functions lint` (`lint-fix` to autofix)                                                                                                                                                               |
+| Rules tests                              | `yarn workspace firestore-rules-tests test:emulator` (needs Java for the emulator)                                                                                                                                    |
+| Website dev server                       | `cd website && yarn develop` → http://localhost:8000 ; add `GATSBY_USE_EMULATORS=true` to point at local emulators                                                                                                    |
+| Website production build                 | `yarn workspace lyf-registration-website build`                                                                                                                                                                       |
+| Emulators (functions + firestore + auth) | `yarn emulators` (root; runs `functions:isolate` first), then `scripts/seed-emulator.sh` to seed `config/site`, sample camp years and admin docs                                                                      |
+| Admin SDK script                         | `cd scripts && yarn build && node lib/<name>.js` with Application Default Credentials for a `tacl.org` account that has access to the project (the service-account key `scripts/run.sh` references is not checked in) |
 
 There is **no pre-commit hook** in this repository (the root `package.json`
 carries a lint-staged config, but no `.husky/pre-commit` is committed), so run
@@ -162,7 +162,7 @@ Each workspace has its own conventions; match the file you are in.
   you change, with that workspace's `.prettierrc`.
 - TypeScript is strict in `functions/`; the website's tsconfig is looser but
   CI type-checks it, so keep it clean. Avoid `any` in new code.
-- Comments explain *why* (constraints, history, invariants), as the existing
+- Comments explain _why_ (constraints, history, invariants), as the existing
   code does. Keep file-top comments that document cross-file invariants up to
   date when you move things.
 - Website imports use the `@components/`, `@hooks/`, `@utils/` aliases.

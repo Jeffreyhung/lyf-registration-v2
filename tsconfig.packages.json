@@ -1,13 +1,13 @@
 {
-    "compilerOptions": {
-        "moduleResolution": "node",
+  "compilerOptions": {
+    "moduleResolution": "node",
 
-        "declaration": true,
-        "declarationMap": true,
-        "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
 
-        "importHelpers": true,
-        "composite": true,
-        "target": "ESNext"
-    }
+    "importHelpers": true,
+    "composite": true,
+    "target": "ESNext"
+  }
 }

@@ -12,18 +12,18 @@ cd website && npx tsc --noEmit --strictNullChecks | grep -c "error TS"
 
 ## Flags that are on
 
-| Flag | Errors before | What it took |
-| --- | ---: | --- |
-| `noFallthroughCasesInSwitch` | 0 | nothing |
-| `strictBindCallApply` | 0 | nothing |
-| `noImplicitThis` | 0 | nothing |
-| `alwaysStrict` | 0 | nothing |
-| `strictFunctionTypes` | 2 | `CancelStatusDialog` is generic over its row type instead of accepting the base `RowWithStatusAndNotes` and being handed `RegDashboardRow` callbacks |
-| `useUnknownInCatchVariables` | 2 | `e instanceof Error ? e.message : String(e)` in the two small-group catch blocks |
-| `noImplicitReturns` | 7 | explicit `return undefined` on the early-exit branch of effects that otherwise return a cleanup |
-| `noUnusedParameters` | 8 | `_event`-style names for ignored MUI callback arguments; dropped unused `index` parameters |
-| `noImplicitAny` | 17 | `src/types/modules.d.ts` declares `file-saver` and `@nodeguy/server-date`; typed accumulators in `SmallGroupAssignments`; `createEmptyRegistrationData` returns `RegistrationData`; `keyof ParentDashboardRow` for the editable-column loop in `profile.tsx` |
-| `noUnusedLocals` | 70 | unused imports and locals removed (an empty `CamperProfile` stub and an unused camp-credit `useDocumentData` subscription in `CampCreditTab` went with them) |
+| Flag                         | Errors before | What it took                                                                                                                                                                                                                                                 |
+| ---------------------------- | ------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `noFallthroughCasesInSwitch` |             0 | nothing                                                                                                                                                                                                                                                      |
+| `strictBindCallApply`        |             0 | nothing                                                                                                                                                                                                                                                      |
+| `noImplicitThis`             |             0 | nothing                                                                                                                                                                                                                                                      |
+| `alwaysStrict`               |             0 | nothing                                                                                                                                                                                                                                                      |
+| `strictFunctionTypes`        |             2 | `CancelStatusDialog` is generic over its row type instead of accepting the base `RowWithStatusAndNotes` and being handed `RegDashboardRow` callbacks                                                                                                         |
+| `useUnknownInCatchVariables` |             2 | `e instanceof Error ? e.message : String(e)` in the two small-group catch blocks                                                                                                                                                                             |
+| `noImplicitReturns`          |             7 | explicit `return undefined` on the early-exit branch of effects that otherwise return a cleanup                                                                                                                                                              |
+| `noUnusedParameters`         |             8 | `_event`-style names for ignored MUI callback arguments; dropped unused `index` parameters                                                                                                                                                                   |
+| `noImplicitAny`              |            17 | `src/types/modules.d.ts` declares `file-saver` and `@nodeguy/server-date`; typed accumulators in `SmallGroupAssignments`; `createEmptyRegistrationData` returns `RegistrationData`; `keyof ParentDashboardRow` for the editable-column loop in `profile.tsx` |
+| `noUnusedLocals`             |            70 | unused imports and locals removed (an empty `CamperProfile` stub and an unused camp-credit `useDocumentData` subscription in `CampCreditTab` went with them)                                                                                                 |
 
 The same pass replaced every `@ts-ignore` with `@ts-expect-error`. Fourteen
 of them were suppressing nothing under the current flags and were deleted
@@ -34,48 +34,48 @@ directive should come back only when it actually suppresses something.
 
 ## Flags that are off
 
-| Flag | Errors | Why it is off |
-| --- | ---: | --- |
-| `strictNullChecks` | 156 | see below |
-| `strictPropertyInitialization` | n/a | TS5052: requires `strictNullChecks` |
-| `strict` | 174 | the union of the above; everything else in the family is already on |
-| `noPropertyAccessFromIndexSignature` | 31 | outside `strict`; mostly `process.env.X` and record lookups, a style choice rather than a safety one |
-| `exactOptionalPropertyTypes` | 1 | outside `strict`; the count is only meaningful once `strictNullChecks` is on, since `undefined` is erased without it |
-| `noUncheckedIndexedAccess` | 0 | same caveat: it adds `undefined` to index results, which this config erases; re-measure after `strictNullChecks` |
+| Flag                                 | Errors | Why it is off                                                                                                        |
+| ------------------------------------ | -----: | -------------------------------------------------------------------------------------------------------------------- |
+| `strictNullChecks`                   |    156 | see below                                                                                                            |
+| `strictPropertyInitialization`       |    n/a | TS5052: requires `strictNullChecks`                                                                                  |
+| `strict`                             |    174 | the union of the above; everything else in the family is already on                                                  |
+| `noPropertyAccessFromIndexSignature` |     31 | outside `strict`; mostly `process.env.X` and record lookups, a style choice rather than a safety one                 |
+| `exactOptionalPropertyTypes`         |      1 | outside `strict`; the count is only meaningful once `strictNullChecks` is on, since `undefined` is erased without it |
+| `noUncheckedIndexedAccess`           |      0 | same caveat: it adds `undefined` to index results, which this config erases; re-measure after `strictNullChecks`     |
 
 ### strictNullChecks: 156 errors in 33 files
 
 By error code:
 
-| Code | Count | Meaning |
-| --- | ---: | --- |
-| TS18048 | 65 | `x` is possibly `undefined` (optional fields on the `Partial<...>` schema types read without a guard) |
-| TS2322 | 42 | not assignable, almost all `useState<T>(null)` / `createContext<T>(null)` without `\| null` |
-| TS2345 | 24 | possibly-undefined argument passed to a function expecting a value |
-| TS18047 | 14 | `x` is possibly `null` |
-| TS7053 | 5 | implicit `any` from indexing with a possibly-undefined key |
-| other | 6 | TS2538, TS2769, TS2488, TS2339 |
+| Code    | Count | Meaning                                                                                               |
+| ------- | ----: | ----------------------------------------------------------------------------------------------------- |
+| TS18048 |    65 | `x` is possibly `undefined` (optional fields on the `Partial<...>` schema types read without a guard) |
+| TS2322  |    42 | not assignable, almost all `useState<T>(null)` / `createContext<T>(null)` without `\| null`           |
+| TS2345  |    24 | possibly-undefined argument passed to a function expecting a value                                    |
+| TS18047 |    14 | `x` is possibly `null`                                                                                |
+| TS7053  |     5 | implicit `any` from indexing with a possibly-undefined key                                            |
+| other   |     6 | TS2538, TS2769, TS2488, TS2339                                                                        |
 
 Top files:
 
-| File | Errors |
-| --- | ---: |
-| `src/hooks/useRegistrations.tsx` | 34 |
-| `src/components/Registration/ReviewStep.tsx` | 17 |
-| `src/pages/user/profile.tsx` | 16 |
-| `src/components/Registration/RegistrationFlow.tsx` | 13 |
-| `src/components/SmallGroupAndCabinAssignments/SmallGroupContext.ts` | 10 |
-| `src/components/SmallGroupAndCabinAssignments/SmallGroupAssignmentsV2.tsx` | 8 |
-| `src/components/Admin/SmallGroupAssignments.tsx` | 7 |
-| `src/components/Inputs/FormCheckboxGroup.tsx` | 5 |
-| `src/hooks/useFamilyData.tsx` | 4 |
-| `src/components/Registration/RegistrationDataContext.tsx` | 4 |
-| `src/components/CheckoutFlow/CheckoutFlow.tsx` | 4 |
-| `src/components/Admin/Waitlist.tsx` | 4 |
-| `src/components/Admin/RegistrationDashboard.tsx` | 4 |
-| `src/components/Registration/ReviewStepOrderSummaryItems.tsx` | 3 |
-| `src/components/Registration/CamperStep.tsx` | 3 |
-| 18 further files | 1-2 each |
+| File                                                                       |   Errors |
+| -------------------------------------------------------------------------- | -------: |
+| `src/hooks/useRegistrations.tsx`                                           |       34 |
+| `src/components/Registration/ReviewStep.tsx`                               |       17 |
+| `src/pages/user/profile.tsx`                                               |       16 |
+| `src/components/Registration/RegistrationFlow.tsx`                         |       13 |
+| `src/components/SmallGroupAndCabinAssignments/SmallGroupContext.ts`        |       10 |
+| `src/components/SmallGroupAndCabinAssignments/SmallGroupAssignmentsV2.tsx` |        8 |
+| `src/components/Admin/SmallGroupAssignments.tsx`                           |        7 |
+| `src/components/Inputs/FormCheckboxGroup.tsx`                              |        5 |
+| `src/hooks/useFamilyData.tsx`                                              |        4 |
+| `src/components/Registration/RegistrationDataContext.tsx`                  |        4 |
+| `src/components/CheckoutFlow/CheckoutFlow.tsx`                             |        4 |
+| `src/components/Admin/Waitlist.tsx`                                        |        4 |
+| `src/components/Admin/RegistrationDashboard.tsx`                           |        4 |
+| `src/components/Registration/ReviewStepOrderSummaryItems.tsx`              |        3 |
+| `src/components/Registration/CamperStep.tsx`                               |        3 |
+| 18 further files                                                           | 1-2 each |
 
 ### Suggested path
 

@@ -36,15 +36,15 @@ expected to change the plan says "verify with tsc".
 
 ## 1. Version table
 
-| Package | In `package.json` | Installed | Latest (2026-10-30) | Node floor | Notes |
-| --- | --- | --- | --- | --- | --- |
-| firebase-functions | ^5.0.1 | 5.1.1 | 7.4.0 | >=18 | peer `firebase-admin ^11.10 \|\| ^12 \|\| ^13 \|\| ^14`; depends on express ^5.2 |
-| firebase-admin | ^12.2.0 | 12.7.0 | 14.5.0 | >=22 | 13.x floor is Node 18 if 22 is a problem locally |
-| stripe | ^14.8.0 | 14.25.0 | 23.1.0 | >=20 | pins API `2026-10-28.endive`; `apiVersion` is typed as that literal |
-| firebase-tools (dev) | ^13.11.4 | 13.35.1 | 15.34.2 | >=20 | emulators need Java 21 from 15.0 |
-| firebase-functions-test (dev) | 3.3.0 | 3.3.0 | check | | not imported anywhere; peer range stops at admin 12 |
-| typescript (dev) | ~5.8.3 | 5.8.3 | | | firebase-functions 7 targets ES2022, same as `functions/tsconfig.json` |
-| express (transitive) | | 4.22.1 | 5.x via functions 7 | | only `Response` is imported, see 2.3 |
+| Package                       | In `package.json` | Installed | Latest (2026-10-30) | Node floor | Notes                                                                            |
+| ----------------------------- | ----------------- | --------- | ------------------- | ---------- | -------------------------------------------------------------------------------- |
+| firebase-functions            | ^5.0.1            | 5.1.1     | 7.4.0               | >=18       | peer `firebase-admin ^11.10 \|\| ^12 \|\| ^13 \|\| ^14`; depends on express ^5.2 |
+| firebase-admin                | ^12.2.0           | 12.7.0    | 14.5.0              | >=22       | 13.x floor is Node 18 if 22 is a problem locally                                 |
+| stripe                        | ^14.8.0           | 14.25.0   | 23.1.0              | >=20       | pins API `2026-10-28.endive`; `apiVersion` is typed as that literal              |
+| firebase-tools (dev)          | ^13.11.4          | 13.35.1   | 15.34.2             | >=20       | emulators need Java 21 from 15.0                                                 |
+| firebase-functions-test (dev) | 3.3.0             | 3.3.0     | check               |            | not imported anywhere; peer range stops at admin 12                              |
+| typescript (dev)              | ~5.8.3            | 5.8.3     |                     |            | firebase-functions 7 targets ES2022, same as `functions/tsconfig.json`           |
+| express (transitive)          |                   | 4.22.1    | 5.x via functions 7 |            | only `Response` is imported, see 2.3                                             |
 
 ## 2. firebase-functions 5 → 7 (with firebase-admin 12 → 14 and firebase-tools 13 → 15)
 
@@ -129,21 +129,21 @@ compile-time exposure is the express types.
 
 ### 3.1 Every Stripe surface this code touches
 
-| Call / field | Where | Status in 2026-10-28.endive |
-| --- | --- | --- |
-| `new Stripe(key, {apiVersion})` | `utils.ts` | `apiVersion` must be the SDK's own version string (typed as `LatestApiVersion`) |
-| `stripe.webhooks.constructEvent(rawBody, sig, secret)` | `handleStripeWebhook.ts` | unchanged (snapshot events). 21.x throws if a thin-event parser is used on a snapshot payload, which we never do |
-| `event.id`, `event.type`, `event.data.object` | `handleStripeWebhook.ts` | unchanged |
-| events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired` | `handleStripeWebhook.ts` | unchanged; `checkout.session.async_payment_failed` is still unhandled (a follow-up, not part of the upgrade) |
-| `checkout.sessions.retrieve(id, {expand: ["line_items.data.price.product", "payment_intent.payment_method"]})` | `handleStripeWebhook.ts`, `issueStripeRefund.ts` | unchanged |
-| `checkout.sessions.create({line_items[].price_data{currency, product_data{name, metadata}, unit_amount}, mode, metadata, success_url, cancel_url, customer, payment_intent_data.description, discounts[{coupon}], expires_at})` | `createStripeCheckoutSession.ts` | unchanged. `payment_method_types` was removed from this call in endive; it only appears here as a comment, delete the comment |
-| `Session.id/metadata/amount_total/customer_email/customer_details.{email,name}/payment_status/payment_intent/customer/line_items/total_details.amount_discount` | `fullfillRegistration.ts`, `fulfillPreRegistrations.ts`, `releaseRegistrationHolds.ts`, `handleStripeWebhook.ts` | unchanged types (`metadata: Metadata \| null`, `customer_details.email: string \| null`, ...), all already read with `?.`/`??` |
-| `LineItem.description`, `.amount_total`, `.amount_subtotal`, `.price.product` (expanded `Product.metadata`) | `fullfillRegistration.ts`, `fulfillPreRegistrations.ts`, `releaseRegistrationHolds.ts` | **`description` is `string \| null` since 2024-09-30.acacia** (was `string`). Four `item.description.includes(...)` calls stop compiling |
-| `PaymentIntent.id`, `.payment_method` (expanded `PaymentMethod.type`) | both fulfil paths | unchanged |
-| `customers.create({name, email})` | `getStripeCustomerId.ts` | unchanged. (The singular `coupon`/`promotion_code` params were removed from Customer create in basil; we never passed them) |
-| `coupons.create({amount_off, currency, name, duration: "once"})` | `createStripeCheckoutSession.ts` | unchanged. basil removed `amount_off` + `duration: "forever"` coupons (reinstated in 2026-01-28.clover); `once` was never affected |
-| `refunds.create({amount, payment_intent})` | `issueStripeRefund.ts` | unchanged |
-| `Stripe.Metadata` (type of `LineItem.metadata`) | `createStripeCheckoutSession.ts`, `createRegistrationSession.ts`, `createPreRegistrationSession.ts` | still `{[name: string]: string}` in `shared.d.ts`; verify with tsc that the `Stripe.Metadata` namespace path resolves after the v22 typings refactor (else `import type {Metadata} from "stripe"` equivalents) |
+| Call / field                                                                                                                                                                                                                    | Where                                                                                                            | Status in 2026-10-28.endive                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new Stripe(key, {apiVersion})`                                                                                                                                                                                                 | `utils.ts`                                                                                                       | `apiVersion` must be the SDK's own version string (typed as `LatestApiVersion`)                                                                                                                                |
+| `stripe.webhooks.constructEvent(rawBody, sig, secret)`                                                                                                                                                                          | `handleStripeWebhook.ts`                                                                                         | unchanged (snapshot events). 21.x throws if a thin-event parser is used on a snapshot payload, which we never do                                                                                               |
+| `event.id`, `event.type`, `event.data.object`                                                                                                                                                                                   | `handleStripeWebhook.ts`                                                                                         | unchanged                                                                                                                                                                                                      |
+| events `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`                                                                                                                     | `handleStripeWebhook.ts`                                                                                         | unchanged; `checkout.session.async_payment_failed` is still unhandled (a follow-up, not part of the upgrade)                                                                                                   |
+| `checkout.sessions.retrieve(id, {expand: ["line_items.data.price.product", "payment_intent.payment_method"]})`                                                                                                                  | `handleStripeWebhook.ts`, `issueStripeRefund.ts`                                                                 | unchanged                                                                                                                                                                                                      |
+| `checkout.sessions.create({line_items[].price_data{currency, product_data{name, metadata}, unit_amount}, mode, metadata, success_url, cancel_url, customer, payment_intent_data.description, discounts[{coupon}], expires_at})` | `createStripeCheckoutSession.ts`                                                                                 | unchanged. `payment_method_types` was removed from this call in endive; it only appears here as a comment, delete the comment                                                                                  |
+| `Session.id/metadata/amount_total/customer_email/customer_details.{email,name}/payment_status/payment_intent/customer/line_items/total_details.amount_discount`                                                                 | `fullfillRegistration.ts`, `fulfillPreRegistrations.ts`, `releaseRegistrationHolds.ts`, `handleStripeWebhook.ts` | unchanged types (`metadata: Metadata \| null`, `customer_details.email: string \| null`, ...), all already read with `?.`/`??`                                                                                 |
+| `LineItem.description`, `.amount_total`, `.amount_subtotal`, `.price.product` (expanded `Product.metadata`)                                                                                                                     | `fullfillRegistration.ts`, `fulfillPreRegistrations.ts`, `releaseRegistrationHolds.ts`                           | **`description` is `string \| null` since 2024-09-30.acacia** (was `string`). Four `item.description.includes(...)` calls stop compiling                                                                       |
+| `PaymentIntent.id`, `.payment_method` (expanded `PaymentMethod.type`)                                                                                                                                                           | both fulfil paths                                                                                                | unchanged                                                                                                                                                                                                      |
+| `customers.create({name, email})`                                                                                                                                                                                               | `getStripeCustomerId.ts`                                                                                         | unchanged. (The singular `coupon`/`promotion_code` params were removed from Customer create in basil; we never passed them)                                                                                    |
+| `coupons.create({amount_off, currency, name, duration: "once"})`                                                                                                                                                                | `createStripeCheckoutSession.ts`                                                                                 | unchanged. basil removed `amount_off` + `duration: "forever"` coupons (reinstated in 2026-01-28.clover); `once` was never affected                                                                             |
+| `refunds.create({amount, payment_intent})`                                                                                                                                                                                      | `issueStripeRefund.ts`                                                                                           | unchanged                                                                                                                                                                                                      |
+| `Stripe.Metadata` (type of `LineItem.metadata`)                                                                                                                                                                                 | `createStripeCheckoutSession.ts`, `createRegistrationSession.ts`, `createPreRegistrationSession.ts`              | still `{[name: string]: string}` in `shared.d.ts`; verify with tsc that the `Stripe.Metadata` namespace path resolves after the v22 typings refactor (else `import type {Metadata} from "stripe"` equivalents) |
 
 API-version changes between the pin and endive that were checked and do **not**
 touch this code: 2024-04-10 (PaymentIntents default to `automatic_async`
@@ -185,13 +185,20 @@ removal, tax calculation errors).
      apiVersion: "2026-10-28.endive", // must equal the SDK's pinned version
      maxNetworkRetries: 2,
      timeout: 20_000, // ms; the default 80 s outlives a 60 s function
-   } as const satisfies Stripe.StripeConfig;
-   export const stripe = new Stripe(process.env.STRIPE_API_KEY as string, STRIPE_OPTIONS);
-   export const testStripe = new Stripe(process.env.STRIPE_TEST_API_KEY as string, STRIPE_OPTIONS);
+   } as const satisfies Stripe.StripeConfig
+   export const stripe = new Stripe(
+     process.env.STRIPE_API_KEY as string,
+     STRIPE_OPTIONS
+   )
+   export const testStripe = new Stripe(
+     process.env.STRIPE_TEST_API_KEY as string,
+     STRIPE_OPTIONS
+   )
    ```
 
    `tsc` is the check that the literal matches: `apiVersion` is typed as the
    SDK's exact version.
+
 4. `LineItem.description` is nullable. In `fullfillRegistration.ts` (two
    `.includes("Donation")` / `.includes("Registration")` filters and
    `registrationDescriptions.push(item.description)`) and

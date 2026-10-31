@@ -6,7 +6,7 @@ name: Deploy to Firebase
 # deploy-website.yml (GitHub Pages).
 #
 # Auth is Workload Identity Federation — no service-account key is stored in
-# GitHub. See README "Deployment" for the one-time GCP setup.
+# GitHub. See docs/deployment.md for the one-time GCP setup.
 
 on:
   push:

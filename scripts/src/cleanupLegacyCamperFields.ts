@@ -75,23 +75,32 @@ async function cleanupCampers() {
       }
       if (Object.keys(healthBackfill).length > 0) {
         bump("healthBackfilled")
-        console.log(`  backfill health  ${camperDoc.ref.path}: ${Object.keys(healthBackfill)}`)
-        if (APPLY) await privateRef.doc("health").set(healthBackfill, {merge: true})
+        console.log(
+          `  backfill health  ${camperDoc.ref.path}: ${Object.keys(healthBackfill)}`
+        )
+        if (APPLY)
+          await privateRef.doc("health").set(healthBackfill, {merge: true})
       }
 
       if (isNonEmpty(legacyDemographics) && !isNonEmpty(demoSnap.data())) {
         bump("demographicsBackfilled")
         console.log(`  backfill demographics  ${camperDoc.ref.path}`)
-        if (APPLY) await privateRef.doc("demographics").set(legacyDemographics, {merge: true})
+        if (APPLY)
+          await privateRef
+            .doc("demographics")
+            .set(legacyDemographics, {merge: true})
       }
 
       // 2. Strip the legacy fields
       const update: Record<string, unknown> = {schemaVersion: SCHEMA_VERSION}
-      for (const f of Object.keys(legacyHealth)) update[f] = admin.firestore.FieldValue.delete()
+      for (const f of Object.keys(legacyHealth))
+        update[f] = admin.firestore.FieldValue.delete()
       if (legacyDemographics !== undefined) {
         update.demographics = admin.firestore.FieldValue.delete()
       }
-      console.log(`  strip  ${camperDoc.ref.path}: ${Object.keys(update).filter((k) => k !== "schemaVersion")}`)
+      console.log(
+        `  strip  ${camperDoc.ref.path}: ${Object.keys(update).filter((k) => k !== "schemaVersion")}`
+      )
       if (APPLY) await camperDoc.ref.update(update)
       bump("campersCleaned")
     }
@@ -109,13 +118,17 @@ async function cleanupRegistrations() {
       if (data.demographics === undefined) continue
       bump("registrationsWithLegacyDemographics")
 
-      const camperRef = data.camper as admin.firestore.DocumentReference | undefined
+      const camperRef = data.camper as
+        | admin.firestore.DocumentReference
+        | undefined
       if (camperRef && isNonEmpty(data.demographics)) {
         const demoRef = camperRef.collection("private").doc("demographics")
         const demoSnap = await demoRef.get()
         if (!isNonEmpty(demoSnap.data())) {
           bump("registrationDemographicsMovedToCamper")
-          console.log(`  move demographics  ${regDoc.ref.path} -> ${demoRef.path}`)
+          console.log(
+            `  move demographics  ${regDoc.ref.path} -> ${demoRef.path}`
+          )
           if (APPLY) await demoRef.set(data.demographics, {merge: true})
         }
       }
@@ -133,7 +146,11 @@ async function cleanupRegistrations() {
 }
 
 async function main() {
-  console.log(APPLY ? "APPLY mode — writing changes\n" : "DRY RUN — no writes (set APPLY=1 to apply)\n")
+  console.log(
+    APPLY
+      ? "APPLY mode — writing changes\n"
+      : "DRY RUN — no writes (set APPLY=1 to apply)\n"
+  )
 
   console.log("Step 1: Campers")
   await cleanupCampers()
@@ -143,7 +160,10 @@ async function main() {
 
   console.log("\nSummary:")
   for (const [k, v] of Object.entries(counts)) console.log(`  ${k}: ${v}`)
-  if (!APPLY) console.log("\nDry run complete. Re-run with APPLY=1 to make these changes.")
+  if (!APPLY)
+    console.log(
+      "\nDry run complete. Re-run with APPLY=1 to make these changes."
+    )
   process.exit(0)
 }
 

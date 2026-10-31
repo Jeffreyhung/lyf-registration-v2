@@ -1,0 +1,31 @@
+# Dependencies, build outputs and generated files
+node_modules/
+**/dist/
+functions/lib/
+scripts/lib/
+functions/isolate/
+website/.cache/
+website/public/
+website/src/gatsby-types.d.ts
+*.tsbuildinfo
+yarn.lock
+.firebase/
+# Compiled test output committed next to its source
+small-group-pairing/tests/**/*.js
+small-group-pairing/tests/**/*.d.ts
+small-group-pairing/tests/**/*.map
+
+# functions/ is written Google-style by convention and is linted, not
+# formatted (`yarn workspace functions lint`); never run prettier there.
+functions/
+
+# Historical one-off scripts kept for reference only.
+scripts/src/archive/
+
+# Not formatted yet. Format each area in its own PR (`yarn prettier --write
+# <area>`), then delete its line here so `yarn format:check` and the pre-commit
+# hook start covering it.
+website/
+schemas/
+small-group-pairing/
+firestore-rules-tests/
