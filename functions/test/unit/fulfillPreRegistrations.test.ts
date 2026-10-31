@@ -153,10 +153,14 @@ describe("a paid pre-registration", () => {
     expect(mockSlackCamp).toHaveBeenCalledWith("LYF Camp 2027 Pre-Registration: Mei Lin", true);
     expect(mockSlackCamp).toHaveBeenCalledWith("LYF Camp 2027 Pre-Registration: Kai Lin", true);
     expect(mockAddParentsToMailchimp).toHaveBeenCalledTimes(1);
-    const [regType, parents, campYear] = mockAddParentsToMailchimp.mock.calls[0];
+    const [mailchimpDb, regType, parents, campYear, tracks, isTestData] =
+      mockAddParentsToMailchimp.mock.calls[0];
+    expect(mailchimpDb).toBe(db.as());
     expect(regType).toBe("PreReg");
     expect(parents.path).toBe(`${FAMILY}/parents`);
     expect(campYear).toBe("2027");
+    expect(tracks).toEqual([]);
+    expect(isTestData).toBe(true);
     expect(db.read(REGISTRATIONS, "c2")).toMatchObject({grade: 10, amountPaid: 500});
   });
 

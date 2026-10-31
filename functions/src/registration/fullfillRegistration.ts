@@ -158,10 +158,12 @@ export async function completeRegistration(
     "parents"
   );
   await addParentsToMailchimpList(
+    db,
     RegistrationType.Registration,
     parentCollectionRef,
     campYear,
-    Array.from(campTrackSpots.keys()) as CampTrack[]
+    Array.from(campTrackSpots.keys()) as CampTrack[],
+    isTestData
   );
 
   // Update the remaining spots. A registration that already holds a spot

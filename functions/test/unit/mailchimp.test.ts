@@ -30,10 +30,10 @@ import {
   addMailchimpTags,
   addMailchimpUserToMailingList,
   addParentsToMailchimpList,
-  getMailchimpList,
+  getMailchimpListForCampYear,
   getMailchimpTag,
   getMailchimpTagForCampTrack,
-  MailchimpList,
+  MAILCHIMP_GENERAL_LIST_ID,
   mailchimpSubscriberHash,
   removeMailchimpTagForCampYear,
   removeMailchimpTags,
@@ -45,6 +45,16 @@ const EMAIL = "Ada@Example.com";
 // Computed independently of the module under test.
 const md5 = (s: string) => createHash("md5").update(s).digest("hex");
 const HASH = md5("ada@example.com");
+
+// The per-year audience, as the directors configure it in the Camp Year tab.
+const LIST_2026 = "be387aca9f";
+
+/** A database whose camps/2026 names its audience and whose camps/2027 does not. */
+function campsDb() {
+  return new FakeFirestore()
+    .seed("camps", "2026", {name: "LYF Camp 2026", mailchimpListId: LIST_2026})
+    .seed("camps", "2027", {name: "LYF Camp 2027"});
+}
 
 describe("mailchimpSubscriberHash", () => {
   it("is the MD5 hex digest of the lowercased email (Mailchimp's subscriber hash)", () => {
@@ -62,23 +72,40 @@ beforeEach(() => {
   mockCaptureException.mockReset();
 });
 
-describe("list and tag naming", () => {
-  it("maps both registration types onto the registered list", () => {
-    expect(getMailchimpList(RegistrationType.Registration)).toBe(
-      MailchimpList.REGISTERED
-    );
-    expect(getMailchimpList(RegistrationType.PreRegistration)).toBe(
-      MailchimpList.PRE_REG
-    );
-    expect(MailchimpList.PRE_REG).toBe(MailchimpList.REGISTERED);
+describe("getMailchimpListForCampYear", () => {
+  it("uses the audience configured on camps/{year}", async () => {
+    await expect(getMailchimpListForCampYear(campsDb().as(), "2026")).resolves.toEqual({
+      listId: LIST_2026,
+      configured: true,
+    });
   });
 
-  it("falls back to the general list for an unknown type", () => {
-    expect(getMailchimpList("other" as RegistrationType)).toBe(
-      MailchimpList.GENERAL
-    );
+  it("falls back to the general list when the year has no audience", async () => {
+    await expect(getMailchimpListForCampYear(campsDb().as(), "2027")).resolves.toEqual({
+      listId: MAILCHIMP_GENERAL_LIST_ID,
+      configured: false,
+    });
   });
 
+  it("falls back to the general list when the year does not exist", async () => {
+    await expect(getMailchimpListForCampYear(campsDb().as(), "2030")).resolves.toEqual({
+      listId: MAILCHIMP_GENERAL_LIST_ID,
+      configured: false,
+    });
+  });
+
+  it("ignores a value that is not an audience id rather than building a bad API URL", async () => {
+    const db = new FakeFirestore().seed("camps", "2026", {
+      mailchimpListId: "https://us7.admin.mailchimp.com/lists/",
+    });
+    await expect(getMailchimpListForCampYear(db.as(), "2026")).resolves.toEqual({
+      listId: MAILCHIMP_GENERAL_LIST_ID,
+      configured: false,
+    });
+  });
+});
+
+describe("tag naming", () => {
   it("builds the camp year tag from the year and registration type", () => {
     expect(getMailchimpTag("2026", RegistrationType.Registration)).toBe("2026Reg");
     expect(getMailchimpTag("2026", RegistrationType.PreRegistration)).toBe(
@@ -100,7 +127,7 @@ describe("subscribeEmailToGeneralMailingList", () => {
     subscribeEmailToGeneralMailingList(EMAIL, "Ada", "Lovelace");
     await Promise.resolve();
 
-    expect(mockLists.addListMember).toHaveBeenCalledWith(MailchimpList.GENERAL, {
+    expect(mockLists.addListMember).toHaveBeenCalledWith(MAILCHIMP_GENERAL_LIST_ID, {
       merge_fields: {FNAME: "Ada", LNAME: "Lovelace"},
       email_address: "ada@example.com",
       status: "subscribed",
@@ -118,44 +145,44 @@ describe("subscribeEmailToGeneralMailingList", () => {
 });
 
 describe("tag management", () => {
-  it("activates tags on the hashed, lowercased member of the right list", async () => {
-    await addMailchimpTags(EMAIL, ["2026Reg", "2026YoungerCampTrack"], RegistrationType.Registration);
+  it("activates tags on the hashed, lowercased member of the given list", async () => {
+    await addMailchimpTags(LIST_2026, EMAIL, ["2026Reg", "2026YoungerCampTrack"]);
 
-    expect(mockLists.updateListMemberTags).toHaveBeenCalledWith(
-      MailchimpList.REGISTERED,
-      HASH,
-      {
-        tags: [
-          {name: "2026Reg", status: "active"},
-          {name: "2026YoungerCampTrack", status: "active"},
-        ],
-      }
-    );
+    expect(mockLists.updateListMemberTags).toHaveBeenCalledWith(LIST_2026, HASH, {
+      tags: [
+        {name: "2026Reg", status: "active"},
+        {name: "2026YoungerCampTrack", status: "active"},
+      ],
+    });
   });
 
   it("deactivates tags on removal", async () => {
-    await removeMailchimpTags(EMAIL, ["2026Reg"], RegistrationType.Registration);
+    await removeMailchimpTags(LIST_2026, EMAIL, ["2026Reg"]);
 
-    expect(mockLists.updateListMemberTags).toHaveBeenCalledWith(
-      MailchimpList.REGISTERED,
-      HASH,
-      {tags: [{name: "2026Reg", status: "inactive"}]}
-    );
+    expect(mockLists.updateListMemberTags).toHaveBeenCalledWith(LIST_2026, HASH, {
+      tags: [{name: "2026Reg", status: "inactive"}],
+    });
   });
 
-  it("derives the camp year tag for add and remove", async () => {
-    await addMailchimpTagForCampYear(EMAIL, 2026, RegistrationType.PreRegistration);
-    expect(mockLists.updateListMemberTags).toHaveBeenLastCalledWith(
-      MailchimpList.PRE_REG,
-      HASH,
-      {tags: [{name: "2026PreReg", status: "active"}]}
-    );
+  it("derives the camp year tag and the year's list for add and remove", async () => {
+    const db = campsDb().as();
 
-    await removeMailchimpTagForCampYear(EMAIL, 2026, RegistrationType.PreRegistration);
+    await addMailchimpTagForCampYear(db, EMAIL, 2026, RegistrationType.PreRegistration);
+    expect(mockLists.updateListMemberTags).toHaveBeenLastCalledWith(LIST_2026, HASH, {
+      tags: [{name: "2026PreReg", status: "active"}],
+    });
+
+    await removeMailchimpTagForCampYear(db, EMAIL, 2026, RegistrationType.PreRegistration);
+    expect(mockLists.updateListMemberTags).toHaveBeenLastCalledWith(LIST_2026, HASH, {
+      tags: [{name: "2026PreReg", status: "inactive"}],
+    });
+
+    // An unconfigured year tags the member on the general list.
+    await addMailchimpTagForCampYear(db, EMAIL, 2027, RegistrationType.Registration);
     expect(mockLists.updateListMemberTags).toHaveBeenLastCalledWith(
-      MailchimpList.PRE_REG,
+      MAILCHIMP_GENERAL_LIST_ID,
       HASH,
-      {tags: [{name: "2026PreReg", status: "inactive"}]}
+      {tags: [{name: "2027Reg", status: "active"}]}
     );
   });
 });
@@ -164,18 +191,14 @@ describe("addMailchimpUserToMailingList", () => {
   it("upserts the member as subscribed", async () => {
     mockLists.setListMember.mockResolvedValue({status: "subscribed"});
 
-    await addMailchimpUserToMailingList(EMAIL, "Ada", "Lovelace", RegistrationType.Registration);
+    await addMailchimpUserToMailingList(LIST_2026, EMAIL, "Ada", "Lovelace");
 
-    expect(mockLists.setListMember).toHaveBeenCalledWith(
-      MailchimpList.REGISTERED,
-      HASH,
-      {
-        email_address: EMAIL,
-        merge_fields: {FNAME: "Ada", LNAME: "Lovelace"},
-        status_if_new: "subscribed",
-        status: "subscribed",
-      }
-    );
+    expect(mockLists.setListMember).toHaveBeenCalledWith(LIST_2026, HASH, {
+      email_address: EMAIL,
+      merge_fields: {FNAME: "Ada", LNAME: "Lovelace"},
+      status_if_new: "subscribed",
+      status: "subscribed",
+    });
   });
 
   it("reports a Mailchimp failure to Sentry instead of failing the registration", async () => {
@@ -183,16 +206,17 @@ describe("addMailchimpUserToMailingList", () => {
     mockLists.setListMember.mockRejectedValue(failure);
 
     await expect(
-      addMailchimpUserToMailingList(EMAIL, "Ada", "Lovelace", RegistrationType.Registration)
+      addMailchimpUserToMailingList(LIST_2026, EMAIL, "Ada", "Lovelace")
     ).resolves.toBeUndefined();
     expect(mockCaptureException).toHaveBeenCalledWith(failure);
   });
 });
 
 describe("addParentsToMailchimpList", () => {
-  function parentsCollection() {
-    const PARENTS = "families/fam/parents";
-    const db = new FakeFirestore()
+  const PARENTS = "families/fam/parents";
+
+  function setup() {
+    return campsDb()
       .seed(PARENTS, "ada@example.com", {
         email: "Ada@Example.com",
         firstName: "Ada",
@@ -207,26 +231,28 @@ describe("addParentsToMailchimpList", () => {
         firstName: "Grace",
         lastName: "Hopper",
       });
-    return db.collection(PARENTS).as();
   }
 
-  it("subscribes and tags every parent that has an email and a full name", async () => {
+  it("subscribes and tags every parent that has an email and a full name on the year's list", async () => {
     mockLists.setListMember.mockResolvedValue({status: "subscribed"});
     mockLists.updateListMemberTags.mockResolvedValue({});
+    const db = setup();
 
     await addParentsToMailchimpList(
+      db.as(),
       RegistrationType.Registration,
-      parentsCollection(),
+      db.collection(PARENTS).as(),
       "2026",
       [CampTrack.YOUNGER, CampTrack.OLDER]
     );
 
     const subscribed = mockLists.setListMember.mock.calls.map((c) => c[1]).sort();
     expect(subscribed).toEqual([md5("ada@example.com"), md5("grace@example.com")].sort());
+    expect(mockLists.setListMember.mock.calls.map((c) => c[0])).toEqual([LIST_2026, LIST_2026]);
 
     expect(mockLists.updateListMemberTags).toHaveBeenCalledTimes(2);
     expect(mockLists.updateListMemberTags).toHaveBeenCalledWith(
-      MailchimpList.REGISTERED,
+      LIST_2026,
       md5("ada@example.com"),
       {
         tags: [
@@ -237,38 +263,61 @@ describe("addParentsToMailchimpList", () => {
       }
     );
     expect(mockSlackError).not.toHaveBeenCalled();
+    expect(mockCaptureException).not.toHaveBeenCalled();
   });
 
-  it("only tags the camp year when no tracks are given", async () => {
+  it("uses the general list and reminds the directors when the year has no audience", async () => {
     mockLists.setListMember.mockResolvedValue({status: "subscribed"});
     mockLists.updateListMemberTags.mockResolvedValue({});
+    const db = setup();
 
     await addParentsToMailchimpList(
+      db.as(),
       RegistrationType.PreRegistration,
-      parentsCollection(),
-      "2026"
+      db.collection(PARENTS).as(),
+      "2027",
+      [],
+      true
     );
 
+    expect(mockLists.setListMember.mock.calls.map((c) => c[0])).toEqual([
+      MAILCHIMP_GENERAL_LIST_ID,
+      MAILCHIMP_GENERAL_LIST_ID,
+    ]);
     expect(mockLists.updateListMemberTags).toHaveBeenCalledWith(
-      MailchimpList.PRE_REG,
+      MAILCHIMP_GENERAL_LIST_ID,
       md5("grace@example.com"),
-      {tags: [{name: "2026PreReg", status: "active"}]}
+      {tags: [{name: "2027PreReg", status: "active"}]}
     );
+    // One reminder per fulfilment, to the test channel, and nothing in Sentry.
+    expect(mockSlackError).toHaveBeenCalledTimes(1);
+    expect(mockSlackError).toHaveBeenCalledWith(
+      expect.stringContaining("camps/2027 has no Mailchimp audience configured"),
+      true
+    );
+    expect(mockCaptureException).not.toHaveBeenCalled();
   });
 
   it("reports tagging failures to Sentry and Slack without rejecting", async () => {
     mockLists.setListMember.mockResolvedValue({status: "subscribed"});
     const failure = new Error("tag failed");
     mockLists.updateListMemberTags.mockRejectedValue(failure);
+    const db = setup();
 
     await expect(
-      addParentsToMailchimpList(RegistrationType.Registration, parentsCollection(), "2026")
+      addParentsToMailchimpList(
+        db.as(),
+        RegistrationType.Registration,
+        db.collection(PARENTS).as(),
+        "2026"
+      )
     ).resolves.toBeUndefined();
 
     expect(mockCaptureException).toHaveBeenCalledWith(failure);
     expect(mockSlackError).toHaveBeenCalledTimes(2);
     expect(mockSlackError).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to add tags to user ada@example.com: 2026Reg")
+      expect.stringContaining(`Failed to add tags to user ada@example.com in list ${LIST_2026}: 2026Reg`),
+      false
     );
   });
 });

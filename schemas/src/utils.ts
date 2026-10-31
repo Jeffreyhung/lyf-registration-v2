@@ -43,6 +43,19 @@ export const MAX_IMAGE_URL_LENGTH = 2048
  * length. Trim before calling; an empty string is not allowed (callers treat
  * empty as "unset" themselves).
  */
+/**
+ * Mailchimp audience ("list") ids are short lowercase hex strings such as
+ * "2bd94e4a2c" (Audience → Settings → Audience name and defaults). The id
+ * is pasted into the Camp Year tab and then used in Mailchimp API URLs, so
+ * only that shape is stored. Trim before calling; an empty string is not
+ * allowed (callers treat empty as "unset" themselves).
+ */
+export const MAILCHIMP_LIST_ID_PATTERN = /^[a-z0-9]{6,32}$/
+
+export function isMailchimpListId(value: unknown): value is string {
+  return typeof value === "string" && MAILCHIMP_LIST_ID_PATTERN.test(value)
+}
+
 export function isAllowedImageUrl(value: unknown): value is string {
   if (typeof value !== "string") return false
   if (value.length === 0 || value.length > MAX_IMAGE_URL_LENGTH) return false
