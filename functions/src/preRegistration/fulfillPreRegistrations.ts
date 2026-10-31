@@ -19,7 +19,11 @@ import {
 } from "../slack/slackChannelWebhooks";
 import {addParentsToMailchimpList} from "../utils/mailchimp";
 import {RegistrationType} from "../utils";
-import {isPreRegistrationLineItem} from "../stripe/lineItems";
+import {
+  isPreRegistrationLineItem,
+  lineItemMetadata,
+  splitLineItems,
+} from "../stripe/lineItems";
 
 /**
  * Complete the Stripe webhook event that let us know a pre-registration succeeded.
@@ -51,12 +55,23 @@ export async function fulfillPreRegistrations(
 
   // Classified by the metadata we stamped on each product, not by the product
   // name: the name carries the camper's name, which the parent controls.
-  const lineItemsWithoutDonation = lineItems.data.filter(
+  // A donation-only session (no campers) is legitimate, but more than one
+  // unclassified item means the products lost their metadata, and treating
+  // them as the donation would record the payment with no pre-registration.
+  const {ours: lineItemsWithoutDonation, others} = splitLineItems(
+    lineItems.data,
     isPreRegistrationLineItem
   );
-  const donation = lineItems.data.find(
-    (item) => !isPreRegistrationLineItem(item)
-  )?.amount_total;
+  if (others.length > 1) {
+    logger.error(
+      `${others.length} line items without pre-registration metadata on ${sessionMessage}`
+    );
+    sendMessageToRegistrationErrorMessages(
+      `${others.length} line items without pre-registration metadata on ${sessionMessage}`
+    );
+    return;
+  }
+  const donation = others[0]?.amount_total;
 
   // Add a payment to our Stripe database
   const paymentIntent = checkoutSession.payment_intent as Stripe.PaymentIntent;
@@ -97,17 +112,8 @@ export async function fulfillPreRegistrations(
   // Pre-Register the campers
   await Promise.all(
     lineItemsWithoutDonation.map(async (item, index) => {
-      const product = item.price?.product as Stripe.Product;
-      const metadata = product?.metadata as PreRegistrationLineItemMetadata;
-
-      if (!metadata) {
-        logger.error("No metadata found on line item: ", item);
-        sendMessageToRegistrationErrorMessages(
-          `No metadata found on line item with index ${index} on ${sessionMessage}`
-        );
-        return;
-      }
-
+      // Present: isPreRegistrationLineItem selected the item on this metadata.
+      const metadata = lineItemMetadata(item) as PreRegistrationLineItemMetadata;
       const {campYear, camperName, camperRefString, currentGradeString} =
         metadata;
 

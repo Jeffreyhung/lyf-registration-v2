@@ -4,6 +4,7 @@ import {
   isPreRegistrationLineItem,
   isRegistrationLineItem,
   lineItemMetadata,
+  splitLineItems,
 } from "../../src/stripe/lineItems";
 
 /** A line item as the webhook sees it after expanding line_items.data.price.product. */
@@ -98,5 +99,38 @@ describe("isRegistrationLineItem / isPreRegistrationLineItem", () => {
     expect(
       isRegistrationLineItem(lineItem("Registration: Ada", {registrationRef: ""}))
     ).toBe(false);
+  });
+});
+
+describe("splitLineItems", () => {
+  it("keeps the stamped items in order and sets the donation apart", () => {
+    const second = lineItem("Registration: Bo", {registrationRef: "camps/2026/registrations/cam2"});
+    const {ours, others} = splitLineItems(
+      [registration, donation, second],
+      isRegistrationLineItem
+    );
+    expect(ours).toEqual([registration, second]);
+    expect(others).toEqual([donation]);
+  });
+
+  it("returns no others for a session without a donation, and only others for a donation-only one", () => {
+    expect(splitLineItems([preRegistration], isPreRegistrationLineItem)).toEqual({
+      ours: [preRegistration],
+      others: [],
+    });
+    expect(splitLineItems([donation], isPreRegistrationLineItem)).toEqual({
+      ours: [],
+      others: [donation],
+    });
+  });
+
+  it("surfaces every item as 'other' when the products came back without metadata", () => {
+    const unexpanded = [
+      lineItem("Registration: Ada", {registrationRef: "camps/2026/registrations/cam1"}, "id"),
+      lineItem("Donation", {}, "id"),
+    ];
+    const {ours, others} = splitLineItems(unexpanded, isRegistrationLineItem);
+    expect(ours).toEqual([]);
+    expect(others).toHaveLength(2);
   });
 });

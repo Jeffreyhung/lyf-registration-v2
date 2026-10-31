@@ -556,9 +556,11 @@ describe("field shapes on parent writes", () => {
     await assertFails(setDoc(doc(as(PARENT), CAMPER_HEALTH), { medicalConditions: ["asthma"] }, { merge: true }))
     await assertFails(setDoc(doc(as(PARENT), CAMPER_HEALTH), { dietAndFoodAllergies: "x".repeat(5001) }, { merge: true }))
     await assertSucceeds(setDoc(doc(as(PARENT), CAMPER_HEALTH), { medicalConditions: null }, { merge: true }))
-    await assertSucceeds(
-      setDoc(doc(as(PARENT), `${FAMILY}/campers/cam1/private/health`), { dietAndFoodAllergies: "peanuts" }, { merge: true })
-    )
+    // A brand-new health document (the add-camper dialog's write) takes the
+    // create branch of writtenKeys(): every key is checked, nothing is merged.
+    const newHealth = `${FAMILY}/campers/newcam/private/health`
+    await assertFails(setDoc(doc(as(PARENT), newHealth), { dietAndFoodAllergies: "peanuts", medicalConditions: 1 }))
+    await assertSucceeds(setDoc(doc(as(PARENT), newHealth), { dietAndFoodAllergies: "peanuts", medicalConditions: null }))
   })
 
   test("family address: strings and a household map only", async () => {
