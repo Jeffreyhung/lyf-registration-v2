@@ -191,6 +191,8 @@ describe("createPreRegistrationSession", () => {
   it.each([
     ["mismatched camper lists", {...payload, camperRefsToPreRegister: []}, /camperRefsToPreRegister/],
     ["a collection path instead of a document path", {...payload, camperRefsToPreRegister: ["families/fam1/campers"]}, /camperRefsToPreRegister\[0\]/],
+    ["a document path that is not a camper", {...payload, camperRefsToPreRegister: ["admins/root@example.com"]}, /camper document path/],
+    ["a parent document path", {...payload, camperRefsToPreRegister: ["families/fam1/parents/pat@example.com"]}, /camper document path/],
     ["a grade out of range", {...payload, camperCurrentGrades: [99]}, /camperCurrentGrades\[0\]/],
     ["a malformed email", {...payload, email: "pat"}, /email/],
     ["an unknown key", {...payload, coupon: "FREE"}, /coupon/],
@@ -207,6 +209,24 @@ describe("createPreRegistrationSession", () => {
       createPreRegistrationSession.run(request(payload, "someone-else@example.com")),
       "permission-denied",
       /does not match/
+    );
+  });
+
+  it("refuses a camper in a family the caller is not listed in", async () => {
+    mockState.db.seed("families", "fam1", {emails: ["other@example.com"]});
+    await expectHttpsError(
+      createPreRegistrationSession.run(request(payload)),
+      "permission-denied",
+      /pre-register this camper/
+    );
+  });
+
+  it("refuses a camper path that does not exist, before anything reaches Stripe", async () => {
+    mockState.db.seed("families", "fam1", {emails: [PARENT]});
+    await expectHttpsError(
+      createPreRegistrationSession.run(request(payload)),
+      "not-found",
+      /camper1/
     );
   });
 });

@@ -35,6 +35,11 @@ import {addParentsToMailchimpList} from "../utils/mailchimp";
 import {RegistrationType} from "../utils";
 import {getRegistrationAndCamperInfo} from "../registrationUtils/getRegistrationAndCamperInfo";
 import {sendRegistrationEmail} from "../registrationUtils/sendRegistrationEmail";
+import {
+  isRegistrationLineItem,
+  lineItemMetadata,
+  splitLineItems,
+} from "../stripe/lineItems";
 
 /**
  * Small helper to calculate the discounts used while early-returning if we don't need to get the firestore object
@@ -245,12 +250,24 @@ export async function fulfillRegistration(
     return;
   }
 
-  const donation = lineItems.data.find((item) =>
-    item.description.includes("Donation")
-  )?.amount_total;
-  const registrationLineItems = lineItems.data.filter((item) =>
-    item.description.includes("Registration")
+  // Classified by the metadata we stamped on each product, not by the product
+  // name: the name carries the camper's name, which the parent controls.
+  // The only item without registration metadata is the donation; a second
+  // one means the products lost their metadata (see splitLineItems).
+  const {ours: registrationLineItems, others} = splitLineItems(
+    lineItems.data,
+    isRegistrationLineItem
   );
+  if (others.length > 1) {
+    logger.error(
+      `${others.length} line items without registration metadata on ${sessionMessage}`
+    );
+    sendMessageToRegistrationErrorMessages(
+      `${others.length} line items without registration metadata on ${sessionMessage}`
+    );
+    return;
+  }
+  const donation = others[0]?.amount_total;
   const paymentIntent = checkoutSession.payment_intent as Stripe.PaymentIntent;
   const paymentMethod = (paymentIntent.payment_method as Stripe.PaymentMethod)
     .type;
@@ -265,14 +282,8 @@ export async function fulfillRegistration(
   const campTrackSpotsToSubtract = new Map<string, number>();
   await Promise.all(
     registrationLineItems.map(async (item) => {
-      const product = item.price?.product as Stripe.Product;
-      const metadata = product?.metadata as RegistrationLineItemMetadata;
-
-      if (!metadata) {
-        logger.error("No metadata found on line item: ", item);
-        return;
-      }
-
+      // Present: isRegistrationLineItem selected the item on this metadata.
+      const metadata = lineItemMetadata(item) as RegistrationLineItemMetadata;
       logger.debug("Processing registration line item metadata", metadata);
 
       const registrationRef = db.doc(metadata.registrationRef);
