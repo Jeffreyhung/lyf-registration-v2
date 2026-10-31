@@ -32,6 +32,11 @@ import {
   RegistrationDispatchContext,
   RegistrationActionType,
   createEmptyRegistrationData,
+  REGISTRATION_STORAGE_KEY,
+  clearSavedRegistration,
+  readSavedRegistrationSession,
+  saveRegistrationStep,
+  SavedRegistrationSession,
 } from "./RegistrationDataContext"
 import AuthContext from "@components/Auth/AuthContext"
 import ProdContext from "@components/ProdContext"
@@ -46,6 +51,70 @@ import InfoStep from "./InfoStep"
 
 type RegistrationFlowProps = {
   campYear: number
+}
+
+// Step layout for a given number of campers: Info, Parent, number of
+// campers, then a Camper and a Demographics step per camper, Family/Household,
+// Review and Checkout. Shared by the stepper and the resume dialog so both
+// name the same step for the same index.
+function registrationSteps(numCampers: number) {
+  const camperAndDemographicsEndIndex = numCampers * 2 + 2
+  const titles = [
+    { stepIndex: 0, title: "Info" },
+    { stepIndex: 1, title: "Parent" },
+    {
+      stepIndex: 3,
+      endIndex: camperAndDemographicsEndIndex,
+      title: "Camper",
+    },
+    {
+      stepIndex: camperAndDemographicsEndIndex + 1,
+      title: "Family/Household",
+    },
+    {
+      stepIndex: camperAndDemographicsEndIndex + 2,
+      title: "Review",
+    },
+    {
+      stepIndex: camperAndDemographicsEndIndex + 3,
+      title: "Checkout",
+    },
+  ]
+  return { reviewStepIndex: camperAndDemographicsEndIndex + 2, titles }
+}
+
+function stepTitleAt(numCampers: number, index: number) {
+  // Step 2 (number of campers) has no label of its own; it belongs to Camper.
+  if (index === 2) {
+    return "Camper"
+  }
+  const { titles } = registrationSteps(numCampers)
+  const match = titles.find(
+    ({ stepIndex, endIndex }) =>
+      index >= stepIndex && index <= (endIndex ?? stepIndex)
+  )
+  return match?.title ?? "Review"
+}
+
+// One sentence on what "Continue" would bring back, so the family can tell
+// whether it is the registration they remember.
+function describeSavedSession({ data, step }: SavedRegistrationSession) {
+  const parent = data.parents?.[0]
+  const parentName = [parent?.firstName, parent?.lastName]
+    .filter(Boolean)
+    .join(" ")
+  const camperNames = (data.campers ?? [])
+    .map((c) => [c.firstName, c.lastName].filter(Boolean).join(" "))
+    .filter(Boolean)
+  const numCampers = data.campers?.length ?? 0
+  const campers = `${numCampers} camper${numCampers === 1 ? "" : "s"}${
+    camperNames.length > 0 ? ` (${camperNames.join(", ")})` : ""
+  }`
+  const who = parentName ? `${parentName}'s registration` : "A registration"
+  return `${who} with ${campers} was saved on this device, last on the ${stepTitleAt(
+    numCampers,
+    step
+  )} step.`
 }
 
 export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
@@ -115,7 +184,19 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   })
 
   const [isWaitlistConfirmed, setIsWaitlistConfirmed] = React.useState(true)
-  const camperAndDemographicsEndIndex = registrationData.campers.length * 2 + 2
+  const { reviewStepIndex, titles: checkoutStepTitles } = registrationSteps(
+    registrationData.campers.length
+  )
+
+  // The step lives here rather than inside CheckoutFlow so a saved session can
+  // be restored to the step it was left on. Every change is persisted next to
+  // the form data; nothing is written until the family actually navigates, so
+  // the step from the previous visit survives until they answer the dialog.
+  const [activeStep, setActiveStep] = React.useState(0)
+  const handleActiveStepChange = React.useCallback((step: number) => {
+    setActiveStep(step)
+    saveRegistrationStep(step)
+  }, [])
 
   // "Is this your family?" dialog. Whichever path needed the answer stashes
   // what to do next here, and handleFamilyDecision runs it.
@@ -170,13 +251,28 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
   }
 
   const [alertOpen, setAlertOpen] = React.useState(false)
+  const [savedSession, setSavedSession] =
+    React.useState<SavedRegistrationSession | null>(null)
   const handleNoContinue = () => {
-    window.localStorage.removeItem("registration")
+    clearSavedRegistration()
     setAlertOpen(false)
-    prefillFromServer()
+    // With the cache gone, the family-data effect below prefills as soon as
+    // the data is in; prefilling now would write a new cache that makes that
+    // effect skip the server's parent and family info.
+    if (!loading) {
+      prefillFromServer()
+    }
   }
   const handleYesContinue = () => {
     dispatch({ type: RegistrationActionType.LoadFromCache })
+    if (savedSession) {
+      // The restored data decides how many steps exist; never jump past its
+      // Review step.
+      const { reviewStepIndex: restoredReviewStep } = registrationSteps(
+        savedSession.data.campers.length
+      )
+      handleActiveStepChange(Math.min(savedSession.step, restoredReviewStep))
+    }
     setAlertOpen(false)
   }
 
@@ -192,7 +288,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
     if (!isUserSame || !isCampYearSame) {
       // We have a different user signed in so delete the existing registration and continue without
       // loading the saved registration.
-      window.localStorage.removeItem("registration")
+      clearSavedRegistration()
       return
     }
 
@@ -201,7 +297,7 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
     if (urlSearchParams.has("success")) {
       if (parseInt(urlSearchParams.get("success"))) {
         // If we succeeded, then we should clear the registration data.
-        window.localStorage.removeItem("registration")
+        clearSavedRegistration()
         setIsWaitlistConfirmed(
           urlSearchParams.has("waitlist")
             ? parseInt(urlSearchParams.get("waitlist")) == 1
@@ -215,12 +311,23 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
       // If we're continuing from the waitlist, then we should load the registration data from the existing camper and registration info. We'll
       // do that action outside this block. But we also want to skip past the existing load from cache screen.
     } else {
-      // If success isn't a parameter then this is a new flow.
-      // If we have a registration in local storage, then show an alert asking if they want to continue.
-      setAlertOpen(
-        window && window.localStorage.getItem("registration") != null
-      )
+      // If success isn't a parameter then this is a new flow. Offer to
+      // continue a session that got past the Info step; anything else in the
+      // cache (an automatic prefill, an older format) is dropped so the
+      // family-data effect prefills from the server as for a first visit.
+      const session = readSavedRegistrationSession()
+      if (session) {
+        setSavedSession(session)
+        setAlertOpen(true)
+      } else {
+        clearSavedRegistration()
+      }
     }
+    // Mount-only by design: it reads the URL and the cache for the user and
+    // camp year the flow was mounted with, and the page remounts the flow on
+    // sign-in and on the Test Data toggle. Listing user.email and campYear
+    // would re-ask the resume question and reload the cache mid-flow.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Listen for changes to the first load of family data.
@@ -257,13 +364,18 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
       return
     }
 
-    // If we already have something in local storage, we'll use that
-    if (window && window.localStorage.getItem("registration") != null) {
+    // A cache still present here is a session the family is being asked
+    // about, or chose to continue: leave it alone.
+    if (window.localStorage.getItem(REGISTRATION_STORAGE_KEY) != null) {
       return
     }
 
     // Otherwise, prefill the signed in parent's and family's info
     prefillFromServer()
+    // Runs once, when the family data first finishes loading. Listing
+    // familyData or the prefill helpers would prefill again, over whatever the
+    // family has typed, on every later snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading])
 
   return (
@@ -275,28 +387,10 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
         )}
         <CheckoutFlow
           title=""
-          checkoutStepTitles={[
-            { stepIndex: 0, title: "Info" },
-            { stepIndex: 1, title: "Parent" },
-            {
-              stepIndex: 3,
-              endIndex: camperAndDemographicsEndIndex,
-              title: "Camper",
-            },
-            {
-              stepIndex: camperAndDemographicsEndIndex + 1,
-              title: "Family/Household",
-            },
-            {
-              stepIndex: camperAndDemographicsEndIndex + 2,
-              title: "Review",
-            },
-            {
-              stepIndex: camperAndDemographicsEndIndex + 3,
-              title: "Checkout",
-            },
-          ]}
-          reviewStepIndex={camperAndDemographicsEndIndex + 2}
+          checkoutStepTitles={checkoutStepTitles}
+          reviewStepIndex={reviewStepIndex}
+          activeStep={activeStep}
+          onActiveStepChange={handleActiveStepChange}
           loading={loading || schedule.loading}
           canAccess={canAccess}
           blockedComponent={
@@ -403,10 +497,17 @@ export default function RegistrationFlow({ campYear }: RegistrationFlowProps) {
           <DialogTitle id="alert-dialog-title">
             Continue from your previous session?
           </DialogTitle>
+          <DialogContent>
+            <DialogContentText id="alert-dialog-description">
+              {savedSession ? `${describeSavedSession(savedSession)} ` : ""}
+              Continue picks up on that step with everything you entered;
+              starting over discards it.
+            </DialogContentText>
+          </DialogContent>
           <DialogActions>
-            <Button onClick={handleNoContinue}>No</Button>
+            <Button onClick={handleNoContinue}>Start over</Button>
             <Button onClick={handleYesContinue} autoFocus>
-              Yes
+              Continue
             </Button>
           </DialogActions>
         </Dialog>

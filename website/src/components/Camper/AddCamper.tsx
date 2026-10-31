@@ -179,7 +179,7 @@ export default function AddCamper({
         severity: "success",
       })
     } catch (error) {
-      console.log(error)
+      console.error(error)
       setError("Unable to add new camper. Please try again later.")
     }
 

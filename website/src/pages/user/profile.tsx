@@ -113,7 +113,7 @@ const columns: GridColDef[] = [
     headerName: "Status",
     renderCell: (
       params: GridRenderCellParams<
-        any,
+        ParentDashboardRow,
         [RegistrationStatus, number | null, CampTrack]
       >
     ) => {
@@ -278,7 +278,7 @@ const ProfilePage: React.FC<PageProps> = () => {
 
   React.useEffect(() => {
     setShouldShowOffWaitlistDialog(pendingPaymentRows.length > 0)
-  }, [curRows])
+  }, [pendingPaymentRows])
 
   const [columnVisibilityModel, setColumnVisibilityModel] =
     React.useState<GridColumnVisibilityModel>({

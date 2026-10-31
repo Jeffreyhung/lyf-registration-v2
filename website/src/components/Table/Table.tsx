@@ -68,9 +68,12 @@ export default function Table<T extends TableValidRow>({
   const { setSnackbar } = React.useContext(SnackbarAlertContext)
 
   // Handle editing cell contents
-  const handleProcessRowUpdateError = React.useCallback((error: Error) => {
-    setSnackbar({ children: error.message, severity: "error" })
-  }, [])
+  const handleProcessRowUpdateError = React.useCallback(
+    (error: Error) => {
+      setSnackbar({ children: error.message, severity: "error" })
+    },
+    [setSnackbar]
+  )
   const processRowUpdate = updateRow
     ? async (newRow: GridRowModel<T>, oldRow: GridRowModel<T>) => {
         if (!newRow.index) {

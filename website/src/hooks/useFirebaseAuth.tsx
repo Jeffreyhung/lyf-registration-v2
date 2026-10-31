@@ -50,7 +50,9 @@ export default function useFirebaseAuth(): FirebaseAuthContext {
 
   React.useEffect(() => {
     let email = window.localStorage.getItem("emailForSignIn")
-    if (!isSignedIn && isSignInWithEmailLink(firebaseAuth, window.location.href)) {
+    // Runs once on mount, before the auth observer has reported anything, so
+    // nobody is signed in yet.
+    if (isSignInWithEmailLink(firebaseAuth, window.location.href)) {
       setIsAuthLoading(true)
       if (!email) {
         email = window.prompt("Please provide your email for confirmation")
@@ -66,7 +68,7 @@ export default function useFirebaseAuth(): FirebaseAuthContext {
             setIsAdmin(isAdmin)
             setAdminRole(role)
           })
-        }).catch(() => console.log("Wrong email"))
+        }).catch((e) => console.error("Email link sign-in failed", e))
         .finally(() => setIsAuthLoading(false))
     }
 

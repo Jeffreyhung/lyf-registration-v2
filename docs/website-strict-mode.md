@@ -108,35 +108,27 @@ Top files:
 These are deliberate and each has a one-line reason in the config. The
 inventories below are what they currently cover, so they can be worked down.
 
-**`react-hooks/exhaustive-deps` (warn).** Seven effects still omit
-dependencies. Two were fixed in the same PR because they were real staleness
-bugs (`TimeGated` ignored a later change of `forceHide`; `useBoop` ignored
-`timing`). The rest are mount-once by design and need a decision rather than
-a mechanical fix:
+**`react-hooks/exhaustive-deps` (warn).** Two effects omit dependencies on
+purpose and carry an inline disable with the reason: the load-from-cache and
+prefill effects in `RegistrationFlow.tsx`, which must run once per mount, not
+whenever `familyData` re-renders. (Converting their "already done" checks
+into refs and listing the deps would let the disables go.) Everything else
+lists its dependencies: `useFamilyData` memoises `waitlistPosition` so the
+listener effects can depend on it, `useFirebaseAuth` dropped a dead
+`!isSignedIn` check from its mount effect, `profile.tsx` keys the
+off-waitlist dialog on `pendingPaymentRows`, and `Table.tsx` lists
+`setSnackbar`. Two earlier ones were real staleness bugs (`TimeGated`
+ignored a later change of `forceHide`; `useBoop` ignored `timing`).
 
-- `RegistrationFlow.tsx` 227 and 270: load-from-cache and prefill effects
-  that must run once per sign-in, not whenever `familyData` re-renders.
-  Convert the "already done" checks into refs, then list the deps.
-- `useFamilyData.tsx` 286 and 338: listener setup keyed on `familyDocs`;
-  the missing deps are stable props. Owned by the performance work.
-- `useFirebaseAuth.tsx` 84: the auth observer; adding `isSignedIn` would
-  re-register it on every sign-in.
-- `profile.tsx` 260: depends on `curRows`, a fresh array every render, so
-  it already runs more often than the lint suggests; derive
-  `shouldShowOffWaitlistDialog` with `useMemo` instead of an effect.
-- `Table.tsx` 73: `setSnackbar` from context, stable in practice.
+**`@typescript-eslint/no-explicit-any` (warn).** None left. The edit
+actions' `newValue` is `unknown` (the reducer writes it into `Partial<>`
+records by string key); legacy camper demographics are typed as
+`Demographics`; the grid cell params in `Waitlist.tsx` and `profile.tsx`
+name their row types; the `useDrop` drop result in `AssignmentsGroup.tsx`
+is `void`.
 
-**`@typescript-eslint/no-explicit-any` (warn).** Eight sites:
-`RegistrationDataContext.tsx` 42, 47, 52 (`newValue: any` on the edit
-actions: the reducer writes it into `Partial<>` records by string key, so a
-typed `keyof` per action is the fix), 276 and 378
-(`Record<string, any>` for legacy demographics), `Waitlist.tsx` 267 and
-`profile.tsx` 116 (`GridRenderCellParams<any, ...>`: the row type is
-known), `AssignmentsGroup.tsx` 42 (`useDrop<..., any, ...>` drop result).
-
-**`no-console` (warn).** `AddCamper.tsx` 182, `RefundDialog.tsx` 255 and
-262, `useFirebaseAuth.tsx` 69 (`"Wrong email"` swallows the sign-in error)
-and `CreateTestData.tsx` 166 (progress output in an admin-only tool).
+**`no-console` (warn).** None left: caught errors go to `console.error`,
+and the `CreateTestData.tsx` deletion notice to `console.warn`.
 
 **`react/no-unescaped-entities` (off)** and **`react/prop-types` (off)**:
 prose apostrophes and TypeScript-typed props; nothing to work down.

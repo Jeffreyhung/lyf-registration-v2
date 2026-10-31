@@ -163,7 +163,7 @@ async function deleteTestFamily(
 ) {
   const { familyRef } = await getFamilyRefs(firestore, email, campYear, 0)
 
-  console.log(`Deleting ${familyRef.id}`)
+  console.warn(`Deleting ${familyRef.id}`)
   const deleteBatch = writeBatch(firestore)
 
   const parentsQuery = query(collection(firestore, `${familyRef.path}/parents`))

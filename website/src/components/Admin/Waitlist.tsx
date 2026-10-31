@@ -276,7 +276,7 @@ export default function Waitlist({ data, loading, campYear }: WaitlistProps) {
         flex: 1,
         ...DataGridColumnAlign,
         valueFormatter: addressValueFormatter,
-        renderCell: (params: GridRenderCellParams<any, [Family]>) => {
+        renderCell: (params: GridRenderCellParams<WaitlistRow, [Family]>) => {
           const [family] = params.value
           return (
             <Stack

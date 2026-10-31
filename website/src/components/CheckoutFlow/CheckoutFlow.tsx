@@ -30,6 +30,13 @@ type CheckoutFlowProps = {
   completionScreen: React.ReactNode
   skipToCompletionScreen: boolean
   reviewStepIndex?: number
+  /**
+   * Controlled mode: the parent owns the active step and is told about every
+   * change (RegistrationFlow uses this to restore a saved session). Omit both
+   * to let the flow keep the step itself.
+   */
+  activeStep?: number
+  onActiveStepChange?: (step: number) => void
 }
 
 export default function CheckoutFlow({
@@ -42,9 +49,28 @@ export default function CheckoutFlow({
   completionScreen,
   skipToCompletionScreen,
   reviewStepIndex,
+  activeStep: controlledStep,
+  onActiveStepChange,
 }: CheckoutFlowProps) {
-  const [activeStep, setActiveStep] = React.useState(
+  const isControlled = controlledStep !== undefined
+  const [uncontrolledStep, setUncontrolledStep] = React.useState(
     skipToCompletionScreen ? Number.MAX_VALUE : 0
+  )
+  const activeStep = isControlled ? controlledStep : uncontrolledStep
+  // Steps navigate with functional updates (step + 1); resolve them against
+  // the latest value so the controlled and uncontrolled paths behave alike.
+  const activeStepRef = React.useRef(activeStep)
+  activeStepRef.current = activeStep
+  const setActiveStep = React.useCallback(
+    (update: React.SetStateAction<number>) => {
+      const next =
+        typeof update === "function" ? update(activeStepRef.current) : update
+      if (!isControlled) {
+        setUncontrolledStep(next)
+      }
+      onActiveStepChange?.(next)
+    },
+    [isControlled, onActiveStepChange]
   )
   const isCompletionScreen =
     skipToCompletionScreen || activeStep >= checkoutSteps.length
@@ -70,11 +96,12 @@ export default function CheckoutFlow({
       // Continue from waitlist should bring us directly to the review step.
       setActiveStep(reviewStepIndex)
     }
-  }, [reviewStepIndex])
+    // setActiveStep is stable unless the parent swaps its callback.
+  }, [reviewStepIndex, setActiveStep])
 
   const contextValue = React.useMemo(
     () => ({ activeStep, setActiveStep }),
-    [activeStep]
+    [activeStep, setActiveStep]
   )
 
   return (

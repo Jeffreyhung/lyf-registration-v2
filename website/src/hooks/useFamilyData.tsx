@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useCollectionOnce } from "react-firebase-hooks/firestore"
 import {
   collection,
@@ -117,26 +117,29 @@ export default function useFamilyData({
   )
 
   /* Helper for querying waitlist position of a registration */
-  const waitlistPosition = async (
-    r: DocumentIdWithType<Registration>
-  ): Promise<number | null> => {
-    return !(
-      includeWaitlistPosition &&
-      r.status === RegistrationStatus.WAITLIST &&
-      r.ref.parent.parent.id === campYear
-    )
-      ? null
-      : (
-          await getCountFromServer(
-            query(
-              collection(firestore, r.ref.parent.path),
-              where("status", "==", RegistrationStatus.WAITLIST),
-              where("campTrack", "==", r.campTrack),
-              where("waitlistTime", "<=", r.waitlistTime ?? null)
+  // Memoised so the listener effects below can list it as a dependency
+  // without re-subscribing on every render.
+  const waitlistPosition = useCallback(
+    async (r: DocumentIdWithType<Registration>): Promise<number | null> => {
+      return !(
+        includeWaitlistPosition &&
+        r.status === RegistrationStatus.WAITLIST &&
+        r.ref.parent.parent.id === campYear
+      )
+        ? null
+        : (
+            await getCountFromServer(
+              query(
+                collection(firestore, r.ref.parent.path),
+                where("status", "==", RegistrationStatus.WAITLIST),
+                where("campTrack", "==", r.campTrack),
+                where("waitlistTime", "<=", r.waitlistTime ?? null)
+              )
             )
-          )
-        ).data().count
-  }
+          ).data().count
+    },
+    [includeWaitlistPosition, campYear, firestore]
+  )
 
   // When the familyDocs loads, we can set family.
   useEffect(() => {
@@ -302,7 +305,16 @@ export default function useFamilyData({
       unsubscribeCampersCollectionListener()
       unsubscribeParentsCollectionListener()
     }
-  }, [familyDocs, familyDocsLoading])
+  }, [
+    familyDocs,
+    familyDocsLoading,
+    firestore,
+    includeCampers,
+    includeParents,
+    includeRegistrations,
+    user?.email,
+    waitlistPosition,
+  ])
 
   useEffect(() => {
     if (camperRegistrationLoading) {
@@ -368,7 +380,13 @@ export default function useFamilyData({
       )
     )
     return () => unsubscribes.forEach((unsubscribe) => unsubscribe())
-  }, [campers, camperRegistrationLoading])
+  }, [
+    campers,
+    camperRegistrationLoading,
+    campYear,
+    firestore,
+    waitlistPosition,
+  ])
 
   // The arrays are derived from the maps only when they change, so callers
   // can memoise their own derived rows on `familyData.campers` etc. instead

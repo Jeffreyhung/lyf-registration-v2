@@ -32,8 +32,11 @@ mode.
 
 `RegistrationFlow.tsx` owns the multi-step form and a reducer
 (`RegistrationDataContext.tsx`) whose state is mirrored to `localStorage` on
-every change, keyed by signed-in user and camp year, so a family can resume
-where they left off (a dialog offers to restore the previous session). Steps:
+every change, together with the step reached, keyed by signed-in user and camp
+year, so a family can resume where they left off: a dialog describes the saved
+session and "Continue" restores both the data and the step. It is only offered
+for a visit that got past the Info step, since the automatic prefill from the
+server already writes the cache. Steps:
 Info → Parent/Guardian → number of campers → one Camper step and one
 Demographics step per camper → Family culture → Review → Confirmation.
 
