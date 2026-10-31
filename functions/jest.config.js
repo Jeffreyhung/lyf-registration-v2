@@ -5,6 +5,8 @@ module.exports = {
   // Unit tests live under test/unit; test/*.js are the emulator smoke scripts.
   testMatch: ["<rootDir>/test/unit/**/*.test.ts"],
   setupFiles: ["<rootDir>/test/unit/setup.ts"],
+  // Compiles src/emailTemplates/*.mjml -> .html once per run (see the file).
+  globalSetup: "<rootDir>/test/unit/globalSetup.js",
   transform: {
     "^.+\\.tsx?$": ["ts-jest", {tsconfig: "<rootDir>/tsconfig.test.json"}],
   },

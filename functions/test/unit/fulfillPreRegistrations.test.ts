@@ -257,7 +257,9 @@ describe("bad input", () => {
     expect(db.all(REGISTRATIONS)).toEqual([]);
   });
 
-  it("skips a line item without metadata, reports it, and still handles the others", async () => {
+  // Items are classified by the metadata stamped on the product, and a session
+  // this app creates has at most one item without it: the donation.
+  it("treats a lone item without metadata as the donation and still handles the others", async () => {
     const db = setup();
     const noMetadata = {
       description: "LYF Camp 2027 Pre-Registration: Nobody",
@@ -268,13 +270,30 @@ describe("bad input", () => {
 
     await fulfillPreRegistrations(db.as(), session([noMetadata, preRegItem("c2", "Kai Lin", "9")]), false);
 
-    expect(mockSlackError).toHaveBeenCalledWith(
-      expect.stringMatching(/No metadata found on line item with index 0/)
-    );
+    expect(mockSlackError).not.toHaveBeenCalled();
     expect(db.read(REGISTRATIONS, "c2")).toBeDefined();
     expect(db.all(REGISTRATIONS)).toHaveLength(1);
-    // The payment still records every non-donation item.
-    expect((db.read("payments", "pi_pre_1") as Payment).items).toHaveLength(2);
+    const payment = db.read("payments", "pi_pre_1") as Payment;
+    expect(payment.donation).toBe(500);
+    expect(payment.items).toHaveLength(1);
+  });
+
+  it("stops and reports when more than one item lacks metadata (products not expanded)", async () => {
+    const db = setup();
+    const unexpanded = (camperName: string) => ({
+      description: `LYF Camp 2027 Pre-Registration: ${camperName}`,
+      amount_total: 50000,
+      amount_subtotal: 50000,
+      price: {product: "prod_123"},
+    });
+
+    await fulfillPreRegistrations(db.as(), session([unexpanded("Mei Lin"), unexpanded("Kai Lin")]), false);
+
+    expect(mockSlackError).toHaveBeenCalledWith(
+      expect.stringMatching(/2 line items without pre-registration metadata on session cs_pre_1/)
+    );
+    expect(db.all("payments")).toEqual([]);
+    expect(db.all(REGISTRATIONS)).toEqual([]);
   });
 
   it("skips a line item with an empty camp year and reports it", async () => {

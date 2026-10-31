@@ -1,20 +1,9 @@
 import * as Mustache from "mustache";
-import {readFileSync} from "fs";
-import mjml2html from "mjml";
-import {resolve} from "path";
 import {Firestore} from "firebase-admin/firestore";
 
 import {REGISTRATION_EMAIL, emailTransport, sanitizeForEmailHeader} from "../utils";
 import {getEmailHeaderImageUrl} from "./emailHeaderImage";
-
-const mjmlTemplate = readFileSync(
-  resolve(__dirname, "../emailTemplates/waitlistTemplate.mjml"),
-  "utf-8"
-);
-
-const htmlTemplate = mjml2html(mjmlTemplate, {
-  minify: true, // Making it smaller to save on email file size
-}).html;
+import {loadEmailTemplate} from "./emailTemplates";
 
 /**
  * Send the waitlist confirmation email.
@@ -31,7 +20,7 @@ export async function sendWaitlistEmail(
   campTrack: string,
   camperName: string
 ) {
-  const htmlBody = Mustache.render(htmlTemplate, {
+  const htmlBody = Mustache.render(loadEmailTemplate("waitlistTemplate"), {
     campYear: campYear,
     emailHeaderImageUrl: await getEmailHeaderImageUrl(db, campYear),
     campTrack: campTrack,

@@ -1,6 +1,5 @@
 // src/utils.ts opens Firestore, Stripe and SMTP clients at import time.
 // Replace those with inert stubs so the pure helpers can be exercised.
-jest.mock("dotenv", () => ({config: jest.fn()}));
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn((databaseId: string) => ({databaseId})),
 }));

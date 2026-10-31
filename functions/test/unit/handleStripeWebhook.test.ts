@@ -495,7 +495,9 @@ describe("failures during fulfilment", () => {
 
     expect(first.statusCode).toBe(500);
     expect(mockCaptureException).toHaveBeenCalledTimes(1);
-    expect(mockSlackError).toHaveBeenCalledWith("Failed to handle an event");
+    expect(mockSlackError).toHaveBeenCalledWith(
+      "Failed to handle Stripe event evt_fail (checkout.session.completed); see Sentry"
+    );
     // Design: the claim is deleted on failure so the event is NOT marked processed.
     expect(mockState.prodDb.read(PROCESSED, "evt_fail")).toBeUndefined();
 

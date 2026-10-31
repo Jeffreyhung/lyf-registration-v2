@@ -31,9 +31,6 @@ jest.mock("../../src/utils", () => ({
   combineNames: (names: string[]) => names.join(" and "),
   sanitizeForEmailHeader: (value: string) => value.replace(/[\r\n]/g, " ").trim(),
 }));
-jest.mock("@slack/client", () => ({
-  IncomingWebhook: jest.fn().mockImplementation(() => ({send: jest.fn()})),
-}));
 jest.mock("@mailchimp/mailchimp_marketing", () => ({
   __esModule: true,
   default: {setConfig: jest.fn(), lists: {}},
@@ -52,9 +49,16 @@ const SITE = "https://lyf-registration.tacl.org/registration";
 const request = (data: unknown, email: string | null = PARENT) =>
   callableRequest(data, email);
 
+// Slack notifications go out through fetch; never let a test reach the network.
+const mockFetch = jest.fn();
+beforeAll(() => {
+  global.fetch = mockFetch as unknown as typeof fetch;
+});
+
 beforeEach(() => {
   mockState.db = new FakeFirestore();
   mockSendMail.mockReset().mockResolvedValue({accepted: true});
+  mockFetch.mockReset().mockResolvedValue({ok: true, status: 200, text: async () => "ok"});
 });
 
 // Shaped like what ReviewStep sends, including the Firestore leftovers the
