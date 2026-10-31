@@ -207,9 +207,12 @@ export async function fulfillPreRegistrations(
         parentCollectionRef
       ) {
         await addParentsToMailchimpList(
+          db,
           RegistrationType.PreRegistration,
           parentCollectionRef,
-          campYear
+          campYear,
+          [],
+          isTestData
         );
       }
     })

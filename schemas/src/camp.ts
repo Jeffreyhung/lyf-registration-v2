@@ -70,6 +70,12 @@ export type CampYear = Partial<{
   // Hero image at the top of the registration / waitlist / off-waitlist
   // emails (http(s) URL). Unset or empty falls back to the template's image.
   emailHeaderImageUrl: string
+  // Mailchimp audience ("list") that this year's registered and
+  // pre-registered parents are added to, tagged with the camp year and
+  // track. The directors create a new audience per camp year, so the id
+  // lives here rather than in code. Unset or empty falls back to the
+  // permanent general audience (see functions/src/utils/mailchimp.ts).
+  mailchimpListId: string
 
   // Display toggles, flipped from the Camp Year tab. Missing means false.
   showWaitlistHeaderBar: boolean /* Waitlist bar above the registration flow */

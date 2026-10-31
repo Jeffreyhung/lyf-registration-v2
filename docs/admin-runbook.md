@@ -67,7 +67,12 @@ Firestore documents drive it, in both the prod (`lyf-v2`) and test
   `emailHeaderImageUrl` for the hero image at the top of the registration,
   waitlist and off-waitlist emails; both must be https URLs without embedded
   credentials, the only kind the site's CSP lets an image load from, and
-  both fall back to the bundled images when empty) and the display toggles (`showWaitlistHeaderBar`,
+  both fall back to the bundled images when empty), the Mailchimp audience
+  (`mailchimpListId`: the audience id that the year's registered and
+  pre-registered parents are added to, tagged `<year>Reg` / `<year>PreReg`
+  and `<year><Track>CampTrack`; the directors create a new audience per
+  year, and when the field is empty the functions fall back to the general
+  list and post a reminder to the registration error channel) and the display toggles (`showWaitlistHeaderBar`,
   `showRemainingSpots`, `showWaitlistPosition`; missing means off). Public
   read, so nothing personal may live here; configuration fields are written
   only by the `manageCampYear` function, and `remainingSpots` only by the
@@ -101,7 +106,10 @@ Example: camp 2026 is the current year and camp 2027 is next.
    2026 and click **Create next year from selected**. This creates
    `camps/2027` as a copy of 2026 with every date moved forward one calendar
    year (Pacific time) and `remainingSpots` reset to the caps. Adjust any dates
-   or fees in the form and **Save**. Then click **Set as pre-registration
+   or fees in the form, create the 2027 audience in Mailchimp and paste its
+   Audience ID into **Mailchimp audience ID** (the only field not copied
+   from 2026: until it is set, 2027 parents go to the general list and every
+   registration posts a reminder to the error channel), and **Save**. Then click **Set as pre-registration
    year** so `/preregistration` sells 2027 — it opens and closes on 2027's
    `preRegistrationOpenDate` / `preRegistrationCloseDate`.
 2. **After camp 2026 (registration for 2027 approaches):** select 2027 and

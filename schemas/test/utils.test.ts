@@ -6,10 +6,32 @@ import {
   getCampTracksFromCamp,
   getRegistrationPrice,
   isAllowedImageUrl,
+  isMailchimpListId,
   MAX_IMAGE_URL_LENGTH,
   normalizeEmail,
   normalizeEmails,
 } from "../src/utils"
+
+describe("isMailchimpListId", () => {
+  it("accepts a Mailchimp audience id", () => {
+    expect(isMailchimpListId("2bd94e4a2c")).toBe(true)
+    expect(isMailchimpListId("be387aca9f")).toBe(true)
+  })
+
+  it.each([
+    ["empty", ""],
+    ["too short", "abc"],
+    ["uppercase", "2BD94E4A2C"],
+    ["untrimmed", " 2bd94e4a2c"],
+    ["a URL", "https://us7.admin.mailchimp.com/lists/"],
+    ["path characters", "2bd94e4a2c/members"],
+    ["too long", "a".repeat(33)],
+    ["not a string", 42],
+    ["null", null],
+  ])("rejects %s", (_label, value) => {
+    expect(isMailchimpListId(value)).toBe(false)
+  })
+})
 
 describe("isAllowedImageUrl", () => {
   it("accepts an absolute https URL", () => {

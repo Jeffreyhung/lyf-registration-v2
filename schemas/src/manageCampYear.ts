@@ -39,12 +39,16 @@ export const CAMP_YEAR_IMAGE_URL_KEYS = [
   "emailHeaderImageUrl",
 ] as const
 
-/** Free-text fields (the image URLs are validated more strictly). */
+/**
+ * Free-text fields (the image URLs and the Mailchimp audience id are
+ * validated more strictly: see isAllowedImageUrl / isMailchimpListId).
+ */
 export const CAMP_YEAR_TEXT_KEYS = [
   "name",
   "campsite",
   "campsiteAddress",
   ...CAMP_YEAR_IMAGE_URL_KEYS,
+  "mailchimpListId",
 ] as const
 
 /**

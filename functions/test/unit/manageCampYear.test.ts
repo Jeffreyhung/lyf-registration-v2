@@ -45,6 +45,8 @@ function camp2026() {
     registrationCloseDate: ts("2026-06-15T17:00:00.000Z"),
     campStartDate: ts("2026-07-10T16:00:00.000Z"),
     campEndDate: ts("2026-07-14T16:00:00.000Z"),
+    // Each year has its own audience; a new year must not inherit this.
+    mailchimpListId: "be387aca9f",
     // Legacy field that must never be copied onto a public document.
     registrationBypassEmails: ["legacy@example.com"],
   };
@@ -185,7 +187,7 @@ describe("updateYear", () => {
 });
 
 describe("createYear", () => {
-  it("copies the source year with dates shifted, fresh spots, a default name and no legacy bypass field", async () => {
+  it("copies the source year with dates shifted, fresh spots, a default name and neither the bypass field nor the Mailchimp audience", async () => {
     const result = await manageCampYear.run(
       request({
         action: "createYear",
@@ -205,6 +207,7 @@ describe("createYear", () => {
       remainingSpots: {Younger: 40, Older: 30},
     });
     expect(camp).not.toHaveProperty("registrationBypassEmails");
+    expect(camp).not.toHaveProperty("mailchimpListId");
     expect(iso(camp.registrationOpenDate)).toBe("2027-03-01T17:00:00.000Z");
     expect(iso(camp.campStartDate)).toBe("2027-07-10T16:00:00.000Z");
     expect(mockState.prodDb.all("camps/2027/private/bypass/emails").map((d) => d.id)).toEqual(["late@example.com"]);
@@ -214,6 +217,14 @@ describe("createYear", () => {
       before: null,
       after: {name: "LYF Camp 2027", registrationBypassEmails: ["late@example.com"]},
     });
+  });
+
+  it("takes the new year's Mailchimp audience from the overrides", async () => {
+    await manageCampYear.run(
+      request({action: "createYear", year: 2027, sourceYear: 2026, overrides: {mailchimpListId: "58dc9a95e9"}})
+    );
+
+    expect(mockState.prodDb.read("camps", "2027")).toMatchObject({mailchimpListId: "58dc9a95e9"});
   });
 
   it("lets campSizeCaps overrides drive the fresh remainingSpots", async () => {

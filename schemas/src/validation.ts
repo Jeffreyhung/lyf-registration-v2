@@ -558,6 +558,7 @@ const campYearShape = <F extends Flavour>(f: F) => ({
   // Per-year images and display toggles (set from the Camp Year tab).
   infoSessionImageUrl: field(f, z.string()),
   emailHeaderImageUrl: field(f, z.string()),
+  mailchimpListId: field(f, z.string()),
   showWaitlistHeaderBar: field(f, z.boolean()),
   showRemainingSpots: field(f, z.boolean()),
   showWaitlistPosition: field(f, z.boolean()),
