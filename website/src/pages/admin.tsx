@@ -35,6 +35,7 @@ import { Capability, roleHasCapability } from "lyf-registration-schemas"
 import AuthContext from "@components/Auth/AuthContext"
 import { LinkButton } from "@components/Button"
 import { ProdContext } from "@components/ProdContext"
+import { SectionErrorBoundary } from "@components/ErrorBoundary"
 // The sections every admin opens first share the registrations grid and load
 // with the page. Imported by path rather than through the @components/Admin
 // barrel so webpack does not also pull the barrel's other sections in.
@@ -466,11 +467,18 @@ const AdminPage: React.FC = () => {
         </Typography>
       )}
       {activeSection && (
-        <React.Suspense
-          fallback={<LinearProgress aria-label="Loading section" />}
+        // Keyed on the section so an error in one section is cleared by
+        // navigating to another, rather than sticking until a reload.
+        <SectionErrorBoundary
+          key={activeSection.id}
+          label={`the ${activeSection.label} section`}
         >
-          {renderSection(activeSection.id)}
-        </React.Suspense>
+          <React.Suspense
+            fallback={<LinearProgress aria-label="Loading section" />}
+          >
+            {renderSection(activeSection.id)}
+          </React.Suspense>
+        </SectionErrorBoundary>
       )}
     </Box>
   )
