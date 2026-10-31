@@ -22,8 +22,11 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
+  serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from "firebase/firestore"
 
 // ---- Fixtures ----
@@ -460,5 +463,110 @@ describe("server-only and unknown collections", () => {
     await assertFails(setDoc(doc(as(FULL), "brandNew/doc"), { a: 1 }))
     await assertFails(setDoc(doc(as(PROGRAM_ADMIN), "brandNew/doc"), { a: 1 }))
     await assertFails(setDoc(doc(as(PARENT), "brandNew/doc"), { a: 1 }))
+  })
+})
+
+// ---- Enumeration, anonymous tokens, privilege fields ----
+
+describe("enumeration and identity edge cases", () => {
+  test("a parent cannot list every registration or every family, only their own", async () => {
+    await assertFails(getDocs(collection(as(PARENT), `${CAMP}/registrations`)))
+    await assertSucceeds(
+      getDocs(
+        query(collection(as(PARENT), `${CAMP}/registrations`), where("familyEmails", "array-contains", PARENT))
+      )
+    )
+    await assertFails(getDocs(collection(as(PARENT), "families")))
+    await assertSucceeds(
+      getDocs(query(collection(as(PARENT), "families"), where("emails", "array-contains", PARENT)))
+    )
+    await assertFails(getDocs(collection(as(PARENT), `${OTHER_FAMILY}/campers`)))
+    await assertFails(getDocs(collection(as(null), `${CAMP}/registrations`)))
+  })
+
+  test("a signed-in account without an email claim is treated like an anonymous visitor", async () => {
+    const noEmail = testEnv.authenticatedContext("uid-without-email").firestore()
+    await assertSucceeds(getDoc(doc(noEmail, CAMP)))
+    await assertSucceeds(getDoc(doc(noEmail, SITE_CONFIG)))
+    await assertFails(getDoc(doc(noEmail, FAMILY)))
+    await assertFails(getDoc(doc(noEmail, REGISTRATION)))
+    await assertFails(getDoc(doc(noEmail, `admins/${FULL}`)))
+    await assertFails(getDocs(collection(noEmail, "families")))
+  })
+
+  test("parents cannot grant themselves established membership, a spot, or a payment", async () => {
+    await assertFails(updateDoc(doc(as(PARENT), FAMILY), { confirmedEmails: [PARENT] }))
+    await assertFails(updateDoc(doc(as(PARENT), FAMILY), { createdBy: PARENT }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { spotReserved: true }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { amountPaid: 1000 }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { grade: 12, campTrack: "Older" }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { isPreRegistered: true }))
+    await assertFails(
+      setDoc(doc(as(PARENT), `${CAMP}/registrations/mine`), { familyEmails: [PARENT], status: "Active" })
+    )
+    await assertFails(deleteDoc(doc(as(PARENT), REGISTRATION)))
+  })
+})
+
+// ---- Field shapes on parent writes ----
+
+describe("field shapes on parent writes", () => {
+  const profile = { firstName: "New", lastName: "Kid", birthDate: "2015-01-01", gender: ["Female"], registrations: [] }
+
+  test("registration: wrong types and oversize values are rejected; normal values and nulls pass", async () => {
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { shirtSize: { big: true } }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { shirtSize: "x".repeat(51) }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { additionalNotes: "x".repeat(5001) }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { isCheckedOut: "yes" }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { checkedOutTime: "now" }))
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { nameOfParentCheckedOut: ["P"] }))
+    await assertSucceeds(updateDoc(doc(as(PARENT), REGISTRATION), { shirtSize: "L", additionalNotes: null }))
+    await assertSucceeds(
+      updateDoc(doc(as(PARENT), REGISTRATION), {
+        isCheckedOut: true,
+        nameOfParentCheckedOut: "P",
+        checkedOutTime: serverTimestamp(),
+      })
+    )
+  })
+
+  test("a legacy value in an untouched field does not block an unrelated edit", async () => {
+    await testEnv.withSecurityRulesDisabled((ctx) =>
+      updateDoc(doc(ctx.firestore(), REGISTRATION), { shirtSize: 42 })
+    )
+    await assertSucceeds(updateDoc(doc(as(PARENT), REGISTRATION), { additionalNotes: "fine" }))
+    // ...but touching the field itself has to make it well-formed.
+    await assertFails(updateDoc(doc(as(PARENT), REGISTRATION), { shirtSize: 43 }))
+    await assertSucceeds(updateDoc(doc(as(PARENT), REGISTRATION), { shirtSize: "M" }))
+  })
+
+  test("camper profile: types are enforced on create and update", async () => {
+    const campers = collection(as(PARENT), `${FAMILY}/campers`)
+    await assertFails(addDoc(campers, { ...profile, gender: "Female" }))
+    await assertFails(addDoc(campers, { ...profile, firstName: { first: "New" } }))
+    await assertFails(addDoc(campers, { ...profile, firstName: "x".repeat(201) }))
+    await assertFails(addDoc(campers, { ...profile, returning: "yes" }))
+    await assertSucceeds(addDoc(campers, { ...profile, preferredName: null, returning: false }))
+    await assertFails(updateDoc(doc(as(PARENT), CAMPER), { gender: "Male" }))
+    await assertFails(updateDoc(doc(as(PARENT), CAMPER), { birthDate: 20150101 }))
+    await assertSucceeds(updateDoc(doc(as(PARENT), CAMPER), { preferredName: null, pronouns: "they/them" }))
+  })
+
+  test("health: text or null only", async () => {
+    await assertFails(setDoc(doc(as(PARENT), CAMPER_HEALTH), { medicalConditions: ["asthma"] }, { merge: true }))
+    await assertFails(setDoc(doc(as(PARENT), CAMPER_HEALTH), { dietAndFoodAllergies: "x".repeat(5001) }, { merge: true }))
+    await assertSucceeds(setDoc(doc(as(PARENT), CAMPER_HEALTH), { medicalConditions: null }, { merge: true }))
+    // A brand-new health document (the add-camper dialog's write) takes the
+    // create branch of writtenKeys(): every key is checked, nothing is merged.
+    const newHealth = `${FAMILY}/campers/newcam/private/health`
+    await assertFails(setDoc(doc(as(PARENT), newHealth), { dietAndFoodAllergies: "peanuts", medicalConditions: 1 }))
+    await assertSucceeds(setDoc(doc(as(PARENT), newHealth), { dietAndFoodAllergies: "peanuts", medicalConditions: null }))
+  })
+
+  test("family address: strings and a household map only", async () => {
+    await assertFails(updateDoc(doc(as(PARENT), FAMILY), { street: 12 }))
+    await assertFails(updateDoc(doc(as(PARENT), FAMILY), { zip: "x".repeat(51) }))
+    await assertFails(updateDoc(doc(as(PARENT), FAMILY), { household: "Mandarin" }))
+    await assertSucceeds(updateDoc(doc(as(PARENT), FAMILY), { household: { language: "Mandarin" }, suite: null }))
   })
 })

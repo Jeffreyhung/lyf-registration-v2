@@ -4,6 +4,7 @@ const ERROR_URL = "https://hooks.slack.test/services/errors";
 const mockFetch = jest.fn();
 
 import {
+  escapeSlackText,
   sendMessageToRegistrationErrorMessages,
   sendMessageToRegistrationForCampChannel,
 } from "../../src/slack/slackChannelWebhooks";
@@ -16,6 +17,24 @@ beforeEach(() => {
   mockFetch.mockReset().mockResolvedValue({ok: true, status: 200, text: async () => "ok"});
   process.env.SLACK_REGISTRATION_WEBHOOK = CAMP_URL;
   process.env.SLACK_ERROR_WEBHOOK = ERROR_URL;
+});
+
+describe("escapeSlackText", () => {
+  it("leaves ordinary text alone", () => {
+    expect(escapeSlackText("LYF Camp 2026 Waitlist: Ada Lovelace")).toBe(
+      "LYF Camp 2026 Waitlist: Ada Lovelace"
+    );
+  });
+
+  it("neutralises mentions, links and entities a camper name could carry", () => {
+    expect(escapeSlackText("Waitlist: <!channel> Ada")).toBe(
+      "Waitlist: &lt;!channel&gt; Ada"
+    );
+    expect(escapeSlackText("<https://evil.example|Click here>")).toBe(
+      "&lt;https://evil.example|Click here&gt;"
+    );
+    expect(escapeSlackText("Tom & Jerry")).toBe("Tom &amp; Jerry");
+  });
 });
 
 describe.each([
@@ -35,6 +54,16 @@ describe.each([
     expect(mockFetch).toHaveBeenLastCalledWith(
       url,
       expect.objectContaining({body: JSON.stringify({text: "Another"})})
+    );
+  });
+
+  it("escapes Slack markup before posting", async () => {
+    await send("New registration: <!here> Ada & Co");
+    expect(mockFetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        body: JSON.stringify({text: "New registration: &lt;!here&gt; Ada &amp; Co"}),
+      })
     );
   });
 

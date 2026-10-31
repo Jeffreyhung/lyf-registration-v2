@@ -122,11 +122,9 @@ async function updateAndGetParents(
   familyRef: DocumentReference<Family>,
   parentsPayload: Parent[]
 ): Promise<DocumentReference<Parent>[]> {
-  // Promise.all keeps the payload order, so parentRefs[0] is always the
-  // signed-in parent (createRegistrationSession attaches the Stripe customer
-  // to it). Pushing onto an array from inside the callbacks ordered the refs
-  // by write completion instead, which could hand a co-parent's document to
-  // getStripeCustomerId.
+  // The refs are returned in payload order: callers match them back to the
+  // parents by index (to find the signed-in parent). Pushing from inside the
+  // async callbacks would order them by write completion instead.
   return Promise.all(
     parentsPayload.map(async (parent) => {
       const parentRef = await findOrCreateParent(familyRef, parent);

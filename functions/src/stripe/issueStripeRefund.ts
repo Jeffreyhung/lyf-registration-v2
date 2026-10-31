@@ -30,7 +30,14 @@ export const issueStripeRefund = onCall<IssueStripeRefundRequest>(
   withSentryCallable("issueStripeRefund", async (request) => {
     await assertAdmin(request, "managePayments");
 
-    const {stripeId, amount} = request.data;
+    // Not routed through a schemas validator (no document is written), so the
+    // three fields are checked by hand. A missing body must not become an
+    // "internal" error, and the test-data switch is honoured only when it is
+    // literally true.
+    const data = (request.data ?? {}) as Partial<IssueStripeRefundRequest>;
+    const {stripeId} = data;
+    const amount = data.amount as number;
+    const isTestData = data.isTestData === true;
     validateDollarAmount(amount, "amount", 100_000_00);
 
     if (
@@ -44,7 +51,7 @@ export const issueStripeRefund = onCall<IssueStripeRefundRequest>(
     }
 
     try {
-      const stripe = getStripe(!request.data.isTestData);
+      const stripe = getStripe(!isTestData);
       let paymentIntent = null;
       if (stripeId.startsWith("pi_")) {
         paymentIntent = stripeId;

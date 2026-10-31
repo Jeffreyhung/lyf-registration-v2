@@ -31,6 +31,22 @@ async function postToSlackWebhook(envVar: string, text: string): Promise<void> {
 }
 
 /**
+ * Slack renders webhook text as mrkdwn: `<...>` is a link or a mention
+ * (`<!channel>` pings everyone) and `&` starts an entity. Camper names,
+ * parent emails and Stripe descriptions flow into these messages straight
+ * from the registration form, so the three characters Slack reserves are
+ * escaped before anything is posted. None of our messages use markup.
+ * @param text The message as composed by the caller.
+ * @returns The same text with Slack's reserved characters escaped.
+ */
+export function escapeSlackText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
  * Send a message to the #registrations-for-camp Slack Channel
  * @param message
  * @param isTestData
@@ -44,7 +60,10 @@ export async function sendMessageToRegistrationForCampChannel(
     return;
   }
 
-  await postToSlackWebhook("SLACK_REGISTRATION_WEBHOOK", message);
+  await postToSlackWebhook(
+    "SLACK_REGISTRATION_WEBHOOK",
+    escapeSlackText(message)
+  );
 }
 
 /**
@@ -60,5 +79,5 @@ export async function sendMessageToRegistrationErrorMessages(
     return;
   }
 
-  await postToSlackWebhook("SLACK_ERROR_WEBHOOK", message);
+  await postToSlackWebhook("SLACK_ERROR_WEBHOOK", escapeSlackText(message));
 }
