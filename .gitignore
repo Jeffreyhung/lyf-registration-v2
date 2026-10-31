@@ -145,15 +145,14 @@ vite.config.ts.timestamp-*
 # mac
 .DS_Store
 
-# Per-workspace build outputs and generated files
+# Per-workspace build outputs and generated files (`dist` and `.cache` are
+# already covered above)
 functions/lib/
 functions/isolate/
 scripts/lib/
 scripts/output/
-website/.cache/
 website/public/
 website/src/gatsby-types.d.ts
-*/dist/
 
 # Admin SDK key files must never be committed; use gcloud ADC instead
 # (docs/local-development.md).

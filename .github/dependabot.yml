@@ -21,20 +21,44 @@ updates:
   # yarn.lock, so one entry at / covers every workspace's package.json
   # (website, functions, schemas, small-group-pairing, scripts,
   # firestore-rules-tests). Minor and patch bumps arrive together in one
-  # weekly PR; every major gets a PR of its own so it can be reviewed and
-  # tried against the emulators separately.
+  # weekly PR; every other major gets a PR of its own so it can be reviewed
+  # and tried against the emulators separately. The frameworks below are
+  # excluded from majors: each of those upgrades is a project in itself
+  # (Gatsby, React, MUI, the Firebase SDKs, Stripe) and should be planned, not
+  # opened by a bot. Security updates are never filtered by `ignore`.
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
       day: monday
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     groups:
       minor-and-patch:
         applies-to: version-updates
         update-types:
           - minor
           - patch
+    ignore:
+      - dependency-name: "gatsby*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@mui/*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-functions"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "firebase-tools"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "stripe"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@stripe/stripe-js"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "deps"
       prefix-development: "deps(dev)"

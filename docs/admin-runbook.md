@@ -157,11 +157,12 @@ be ordered so no page sees a half-migrated state:
    rollover, via the Admin Management tab (or `grantAdminAccess` with
    `ADMIN_ROLE=program_admin` for the very first one).
 
-### Testing
+## Test mode
 
-The system supports test mode via the `isTestData` flag which:
-
-- Uses test Firestore database
-- Uses Stripe test mode
-- Sends notifications to test Slack channels
-- Allows testing without affecting production data
+The dashboard's test-data toggle (and the `isTestData` flag on callable
+payloads) routes everything to `lyf-v2-test`, the Stripe test keys and the
+test Slack channels, so a full registration or a rollover can be rehearsed
+without touching production. Functions have test twins bound to the test
+database (`handleTestStripeWebhookV2`, `*OnUpdateTestV2`). Config and data
+changes made in test mode stay in `lyf-v2-test`; only the admin roster is
+mirrored from production automatically.

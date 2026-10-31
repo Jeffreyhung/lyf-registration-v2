@@ -17,7 +17,7 @@ a `V2` suffix and is listed in `FUNCTION_NAMES` in the schemas package.
 ## Working in this workspace
 
 ```bash
-yarn workspace functions lint      # eslint-config-google; never run prettier here
+yarn workspace functions lint      # eslint (recommended rules); never run prettier here
 yarn workspace functions test      # builds ../schemas, then jest on test/unit
 yarn --cwd functions tsc --noEmit  # type-check the production build
 yarn emulators                     # from the repo root: isolate + emulators

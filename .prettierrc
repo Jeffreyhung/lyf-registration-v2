@@ -6,7 +6,6 @@
     {
       "files": ["small-group-pairing/**", "scripts/**"],
       "options": {
-        "singleQuote": false,
         "bracketSpacing": false
       }
     }

@@ -29,19 +29,8 @@ yarn typecheck && yarn lint && yarn test
 ```
 
 Then follow [docs/local-development.md](docs/local-development.md) for the
-`.env` files, Google Cloud access, the emulators and running the site.
-
-## Everyday commands
-
-| Command                                              | What it does                                                                                                    |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `yarn build:packages`                                | Builds `schemas/` and `small-group-pairing/`. Run after changing either, before type-checking anything else.    |
-| `yarn typecheck`                                     | Builds the packages, type-checks `functions/` and the website.                                                  |
-| `yarn lint`                                          | ESLint in `functions/` (eslint-config-google), plus the website's `lint` script once it exists.                 |
-| `yarn test`                                          | Jest in `schemas/`, `functions/` (unit tests under `functions/test/unit`) and `small-group-pairing/`.           |
-| `yarn format:check` / `format`                       | Prettier over everything not listed in `.prettierignore` (`functions/` is linted instead; see the ignore file). |
-| `yarn emulators`                                     | Builds and isolates the functions, then starts the Firebase emulators from the root `firebase.json`.            |
-| `yarn workspace firestore-rules-tests test:emulator` | Runs the security rules suite against the Firestore emulator (needs Java).                                      |
+`.env` files, Google Cloud access, the emulators, running the site and the
+full table of everyday commands.
 
 ## Data and environments
 

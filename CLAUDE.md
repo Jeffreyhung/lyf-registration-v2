@@ -7,9 +7,9 @@ when this file and the code disagree, the code wins and this file needs a fix.
 
 Camp registration system for TACL LYF: families register campers and pay via
 Stripe; program directors run camp from an admin dashboard. Yarn 1 workspaces
-monorepo. Fork `Jeffreyhung/lyf-registration-v2` is `origin`;
-`TACL-LYF/lyf-registration-v2` is `upstream` and is never pushed to directly.
-Pull requests target `main`; merging to `main` deploys (see Deploy below).
+monorepo. The canonical repository is `TACL-LYF/lyf-registration-v2`; work
+happens on forks and lands through pull requests against `main`. Merging to
+`main` deploys (see Deploy below).
 
 ## Workspace map
 
@@ -37,8 +37,9 @@ yarn workspace firestore-rules-tests test:emulator   # needs Java
 yarn emulators          # isolate functions + firebase emulators:start (root firebase.json)
 ```
 
-CI (`.github/workflows/ci.yml`) runs exactly these per workspace, plus
-`codeql.yml` and, when rules change, `test-firestore-rules.yml`.
+CI (`.github/workflows/ci.yml`) runs these per workspace (plus a build of
+`scripts/` and an advisory `yarn audit`), alongside `codeql.yml` and, when
+rules change, `test-firestore-rules.yml`.
 
 ## Data model essentials
 
@@ -73,14 +74,18 @@ region). The website calls them through `FUNCTION_NAMES` in
 
 ## Conventions
 
-- `functions/`: eslint-config-google style via `yarn workspace functions lint`.
+- `functions/`: linted, not formatted. `yarn workspace functions lint` is a
+  flat config (`eslint.config.mts`) of the `@eslint/js`, `typescript-eslint`
+  and `eslint-plugin-react` recommended rule sets; it enforces no style rules.
+  The code is written Google-style by convention (semicolons, `{noSpaces}`
+  braces, double quotes): match the surrounding file by hand.
   **Never run Prettier in `functions/`.**
 - Everything else: Prettier, root `.prettierrc` (2 spaces, no semicolons;
   `small-group-pairing/` and `scripts/` keep `bracketSpacing: false`).
   `.prettierignore` lists the areas not formatted yet; do not reformat them as
   a side effect of another change.
 - Pre-commit (husky + lint-staged): ESLint on staged `functions/` files,
-  `prettier --check` on the rest.
+  `prettier --check` on the rest. Details in `docs/local-development.md`.
 - Secrets only in `functions/.env` / `website/.env` (git-ignored; examples
   checked in). Admin SDK scripts authenticate with gcloud ADC; no key files.
 - Tests: `functions/test/unit/*.test.ts` (fake Firestore in `fakeFirestore.ts`),

@@ -55,7 +55,7 @@ are git-ignored; never commit them, and never commit an Admin SDK key file
 | Command                                              | What it does                                                                                                                  |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `yarn typecheck`                                     | `build:packages`, then `tsc --noEmit` for `functions/` and the website.                                                       |
-| `yarn lint`                                          | `yarn workspace functions lint` (ESLint, eslint-config-google) and the website `lint` script when present.                    |
+| `yarn lint`                                          | `yarn workspace functions lint` (ESLint, correctness rules only) and the website `lint` script when present.                  |
 | `yarn test`                                          | Jest in `schemas/`, `functions/` and `small-group-pairing/`, plus the website `test` script when present.                     |
 | `yarn format:check` / `yarn format`                  | Prettier with the root `.prettierrc`; `.prettierignore` excludes `functions/` and the areas not formatted yet.                |
 | `yarn workspace lyf-registration-website develop`    | Gatsby dev server at http://localhost:8000.                                                                                   |
@@ -88,9 +88,13 @@ in `website/tsconfig.json`.
 - Unit tests (`functions/test/unit`, jest + ts-jest via `tsconfig.test.json`)
   need no emulator: `yarn workspace functions test`. They live outside `src/`
   so they are excluded from the production build and the isolate bundle.
-- Lint with `yarn workspace functions lint`. The style is eslint-config-google
-  (flat config in `functions/eslint.config.mts`); do **not** run Prettier in
-  `functions/`.
+- Lint with `yarn workspace functions lint`. The flat config
+  (`functions/eslint.config.mts`) applies the `@eslint/js`, `typescript-eslint`
+  and `eslint-plugin-react` recommended rules and nothing stylistic;
+  `eslint-config-google` is in `devDependencies` but not loaded. The code is
+  written in that Google style (semicolons, `{noSpaces}` braces, double
+  quotes) by convention, so match the surrounding file by hand and do **not**
+  run Prettier in `functions/`.
 - Emulator smoke test: with `yarn emulators` running, `functions/test/run.sh`
   builds and runs `functions/test/addEmulatorData.js`.
 - Deploying uses [isolate-package](https://github.com/0x80/isolate-package):
@@ -124,9 +128,9 @@ variables.
 
 - **Formatting.** Root `.prettierrc` (2 spaces, no semicolons; the
   `small-group-pairing/` and `scripts/` overrides keep their `{noSpaces}`
-  bracket style). `functions/` is linted, not formatted. `.prettierignore`
-  still lists the workspaces whose files predate the check; format one area
-  per PR and delete its line.
+  bracket style). `functions/` is linted, not formatted (see Functions above).
+  `.prettierignore` still lists the workspaces whose files predate the check;
+  format one area per PR and delete its line.
 - **Pre-commit hook.** `yarn install` installs husky; `.husky/pre-commit` runs
   lint-staged: ESLint on staged `functions/` files, `prettier --check` on
   everything else that `.prettierignore` allows.

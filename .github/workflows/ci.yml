@@ -29,9 +29,10 @@ jobs:
           node-version: 22
           cache: yarn
       - run: yarn install --frozen-lockfile
-      # functions/ is linted with eslint-config-google instead (functions job).
-      # .prettierignore also still lists the workspaces that have not been
-      # formatted yet; remove a line there once that area is clean.
+      # functions/ is excluded: it is linted (functions job) and kept in its
+      # Google style by convention, not by a formatter. .prettierignore also
+      # still lists the workspaces that have not been formatted yet; remove a
+      # line there once that area is clean.
       - name: Check formatting
         run: yarn format:check
 

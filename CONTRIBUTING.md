@@ -2,14 +2,14 @@
 
 1. **Set up** following [docs/local-development.md](docs/local-development.md).
    Node 22 (`.nvmrc`), yarn 1, `yarn install` at the repo root.
-2. **Branch from `main`.** Development happens on the fork
-   (`origin`, `Jeffreyhung/lyf-registration-v2`); `upstream`
-   (`TACL-LYF/lyf-registration-v2`) is never pushed to directly.
+2. **Branch from `main`** on your fork; the canonical repository
+   (`TACL-LYF/lyf-registration-v2`) only receives pull requests.
 3. **Before pushing** run what CI runs:
    `yarn typecheck`, `yarn lint`, `yarn test`, `yarn format:check`, and
    `yarn workspace firestore-rules-tests test:emulator` if you touched
    `firestore.rules`. The pre-commit hook (husky + lint-staged) checks staged
-   files: ESLint in `functions/`, Prettier everywhere `.prettierignore` allows.
+   files: ESLint in `functions/` (correctness rules only; match the file's
+   existing style by hand), Prettier everywhere `.prettierignore` allows.
 4. **Open a pull request against `main`** and fill in the template. The
    checklist exists because the same mistakes keep coming back: a change made
    in `lyf-v2` but not `lyf-v2-test`, a schema change without the matching
