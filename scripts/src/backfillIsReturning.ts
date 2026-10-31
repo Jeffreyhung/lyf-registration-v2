@@ -1,22 +1,36 @@
 /**
- * Convert string `isReturning` values on registrations back to booleans.
+ * Repair legacy field-type problems that a Read-validator scan of production
+ * turned up. Despite the name (it started with `isReturning` alone) the
+ * script runs four independent repairs, each with its own counts:
  *
- * The website's "Has this camper attended LYF camp before?" radio used to
- * dispatch the radio's event value, so `isReturning` reached the
- * registration documents as the string "true" or "false" instead of a
- * boolean. The website now sends a boolean and the payload validator
- * coerces the two legacy strings, but documents written before that fix
- * still fail `validateRegistrationRead`, which requires a boolean.
+ * 1. `isReturning` stored as the string "true" / "false" on
+ *    camps/{year}/registrations/*. The website's "Has this camper attended
+ *    LYF camp before?" radio used to dispatch the radio's event value. The
+ *    website now sends a boolean and the payload validator coerces the two
+ *    legacy strings; this converts the stored documents. Any other string is
+ *    reported and left alone.
+ * 2. `grade` equal to NaN on registrations. Pre-registrations fulfilled
+ *    before the current guard were written as `parseInt("") + 1`. The
+ *    function now writes no grade at all when none is known, so the field is
+ *    deleted.
+ * 3. `hasContacted === false` on registrations. The field marks a waitlisted
+ *    family as contacted and its type is the literal `true`; a false is the
+ *    same as absent, so the field is deleted.
+ * 4. `amountRemaining` stored as a string on credits/{familyId}. The field is
+ *    written back as a number. This one matters most: fulfillRegistration
+ *    applies `FieldValue.increment(-campCreditUsed)` to it, and an increment
+ *    on a non-numeric field replaces the field with the operand, so the
+ *    family's credit would go negative on their next registration. A string
+ *    that does not parse to a finite number is reported and left alone.
  *
- * For every camps/{year}/registrations/* document whose `isReturning` is the
- * string "true" or "false": sets it to the boolean `true` / `false`.
- * Nothing else on the document is touched. Any other string value is
- * reported and left alone, so a surprise never turns into a silent write.
- * Each update is checked with `validateRegistrationWrite` before it is
- * queued.
+ * Nothing else on any document is touched. Every update is checked with the
+ * matching Write validator (`validateRegistrationWrite`,
+ * `validateCampCreditWrite`) before it is queued; a document that fails
+ * validation is counted as an error and skipped. Registrations are read once
+ * and the three registration repairs are merged into one write per document.
  *
- * Idempotent: documents that already hold a boolean are skipped, so the
- * script can be re-run after a partial apply.
+ * Idempotent: documents that already hold the right shape are skipped, so
+ * the script can be re-run after a partial apply.
  *
  * Usage:
  *   ./run.sh -n backfillIsReturning            # dry run
@@ -27,11 +41,16 @@ import * as admin from "firebase-admin"
 import {
   DocumentData,
   DocumentReference,
+  DocumentSnapshot,
+  FieldValue,
   getFirestore,
   UpdateData,
   WriteBatch,
 } from "firebase-admin/firestore"
-import {validateRegistrationWrite} from "lyf-registration-schemas"
+import {
+  validateCampCreditWrite,
+  validateRegistrationWrite,
+} from "lyf-registration-schemas"
 
 const app = admin.initializeApp()
 // v2 data lives in a named database; "(default)" belongs to v1
@@ -42,24 +61,6 @@ const apply = process.env.APPLY === "1"
 
 // Firestore caps a batch at 500 operations; stay comfortably under it.
 const MAX_BATCH_WRITES = 400
-
-type YearCounts = {
-  total: number
-  alreadyBoolean: number
-  missing: number
-  converted: number
-  unexpectedValue: number
-  errors: number
-}
-
-const newCounts = (): YearCounts => ({
-  total: 0,
-  alreadyBoolean: 0,
-  missing: 0,
-  converted: 0,
-  unexpectedValue: 0,
-  errors: 0,
-})
 
 class BatchWriter {
   private batch: WriteBatch | null = null
@@ -92,100 +93,264 @@ class BatchWriter {
   }
 }
 
-async function backfillYear(
-  campRef: DocumentReference,
-  writer: BatchWriter
-): Promise<YearCounts> {
-  const counts = newCounts()
-  const registrations = await campRef.collection("registrations").get()
-  counts.total = registrations.size
+// ---------------------------------------------------------------------------
+// Repairs. Each looks at one document and either returns the fields to
+// update, `null` when the document is fine, or throws for a value it does not
+// know how to handle (reported as "unexpected", never written).
 
-  for (const regDoc of registrations.docs) {
-    try {
-      const value: unknown = regDoc.get("isReturning")
+class UnexpectedValue extends Error {}
 
-      if (typeof value === "boolean") {
-        counts.alreadyBoolean++
-        continue
-      }
-      if (value === undefined) {
-        counts.missing++
-        continue
-      }
-      if (value !== "true" && value !== "false") {
-        console.log(
-          `  unexpected ${regDoc.ref.path}: isReturning=${JSON.stringify(
-            value
-          )} (left alone)`
-        )
-        counts.unexpectedValue++
-        continue
-      }
+type Repair = {
+  /** Short label used in log lines and the summary. */
+  name: string
+  check: (snap: DocumentSnapshot) => Record<string, unknown> | null
+  describe: (snap: DocumentSnapshot, update: Record<string, unknown>) => string
+}
 
-      // Throws SchemaValidationError if the update would not pass the
-      // document contract; the catch below counts it and moves on.
-      const update = validateRegistrationWrite({isReturning: value === "true"})
-
-      console.log(
-        `  ${apply ? "update" : "would update"} ${regDoc.ref.path}: ` +
-          `isReturning ${JSON.stringify(value)} -> ${update.isReturning}`
-      )
-      await writer.update(regDoc.ref, update)
-      counts.converted++
-    } catch (err) {
-      counts.errors++
-      console.error(
-        `  error on ${regDoc.ref.path}:`,
-        err instanceof Error ? err.message : err
-      )
+const isReturningRepair: Repair = {
+  name: "isReturning string -> boolean",
+  check(snap) {
+    const value: unknown = snap.get("isReturning")
+    if (value === undefined || typeof value === "boolean") {
+      return null
     }
+    if (value !== "true" && value !== "false") {
+      throw new UnexpectedValue(`isReturning=${JSON.stringify(value)}`)
+    }
+    return {isReturning: value === "true"}
+  },
+  describe: (snap, update) =>
+    `isReturning ${JSON.stringify(snap.get("isReturning"))} -> ${
+      update.isReturning
+    }`,
+}
+
+const gradeNaNRepair: Repair = {
+  name: "grade NaN -> deleted",
+  check(snap) {
+    const value: unknown = snap.get("grade")
+    if (typeof value === "number" && Number.isNaN(value)) {
+      return {grade: FieldValue.delete()}
+    }
+    return null
+  },
+  describe: () => "grade NaN -> (deleted)",
+}
+
+const hasContactedFalseRepair: Repair = {
+  name: "hasContacted false -> deleted",
+  check(snap) {
+    const value: unknown = snap.get("hasContacted")
+    if (value === undefined || value === true) {
+      return null
+    }
+    if (value !== false) {
+      throw new UnexpectedValue(`hasContacted=${JSON.stringify(value)}`)
+    }
+    return {hasContacted: FieldValue.delete()}
+  },
+  describe: () => "hasContacted false -> (deleted)",
+}
+
+const amountRemainingStringRepair: Repair = {
+  name: "amountRemaining string -> number",
+  check(snap) {
+    const value: unknown = snap.get("amountRemaining")
+    if (typeof value !== "string") {
+      return null
+    }
+    const parsed = value.trim() === "" ? NaN : Number(value)
+    if (!Number.isFinite(parsed)) {
+      throw new UnexpectedValue(`amountRemaining=${JSON.stringify(value)}`)
+    }
+    return {amountRemaining: parsed}
+  },
+  describe: (snap, update) =>
+    `amountRemaining ${JSON.stringify(snap.get("amountRemaining"))} -> ${
+      update.amountRemaining
+    }`,
+}
+
+const registrationRepairs: Repair[] = [
+  isReturningRepair,
+  gradeNaNRepair,
+  hasContactedFalseRepair,
+]
+const creditRepairs: Repair[] = [amountRemainingStringRepair]
+
+// ---------------------------------------------------------------------------
+// Counting. One tally per repair, broken down by group (camp year for
+// registrations, "credits" for the credits collection).
+
+type Tally = {fixed: number; unexpected: number; errors: number}
+const newTally = (): Tally => ({fixed: 0, unexpected: 0, errors: 0})
+
+class Counts {
+  private perRepair = new Map<string, Map<string, Tally>>()
+  scanned = new Map<string, number>()
+
+  tally(repair: Repair, group: string): Tally {
+    let groups = this.perRepair.get(repair.name)
+    if (!groups) {
+      groups = new Map()
+      this.perRepair.set(repair.name, groups)
+    }
+    let t = groups.get(group)
+    if (!t) {
+      t = newTally()
+      groups.set(group, t)
+    }
+    return t
   }
 
-  return counts
+  addScanned(group: string, n: number) {
+    this.scanned.set(group, (this.scanned.get(group) ?? 0) + n)
+  }
+
+  totals(repair: Repair): Tally {
+    const total = newTally()
+    this.perRepair.get(repair.name)?.forEach((t) => {
+      total.fixed += t.fixed
+      total.unexpected += t.unexpected
+      total.errors += t.errors
+    })
+    return total
+  }
+
+  breakdown(repair: Repair): string {
+    const parts: string[] = []
+    this.perRepair.get(repair.name)?.forEach((t, group) => {
+      if (t.fixed > 0) {
+        parts.push(`${group}: ${t.fixed}`)
+      }
+    })
+    return parts.join(", ")
+  }
+}
+
+const counts = new Counts()
+
+// ---------------------------------------------------------------------------
+
+async function repairDocuments(
+  docs: DocumentSnapshot[],
+  group: string,
+  repairs: Repair[],
+  validate: (update: unknown) => unknown,
+  writer: BatchWriter
+) {
+  counts.addScanned(group, docs.length)
+
+  for (const snap of docs) {
+    const update: Record<string, unknown> = {}
+    const applied: string[] = []
+
+    for (const repair of repairs) {
+      const t = counts.tally(repair, group)
+      try {
+        const fields = repair.check(snap)
+        if (!fields) {
+          continue
+        }
+        // Throws SchemaValidationError if the update would not pass the
+        // document contract. The original fields are written (not the
+        // validator's copy) so FieldValue sentinels keep their identity.
+        validate(fields)
+        Object.assign(update, fields)
+        applied.push(repair.describe(snap, fields))
+        t.fixed++
+      } catch (err) {
+        if (err instanceof UnexpectedValue) {
+          console.log(
+            `  unexpected ${snap.ref.path}: ${err.message} (left alone)`
+          )
+          t.unexpected++
+        } else {
+          console.error(
+            `  error on ${snap.ref.path} (${repair.name}):`,
+            err instanceof Error ? err.message : err
+          )
+          t.errors++
+        }
+      }
+    }
+
+    if (applied.length === 0) {
+      continue
+    }
+    console.log(
+      `  ${apply ? "update" : "would update"} ${snap.ref.path}: ${applied.join(
+        "; "
+      )}`
+    )
+    await writer.update(snap.ref, update)
+  }
 }
 
 async function main() {
   console.log(apply ? "Applying changes" : "Dry run (set APPLY=1 to write)")
   console.log(`Database: ${databaseId}`)
 
+  const writer = new BatchWriter()
+
   // listDocuments (not get) so camp years whose parent document was never
   // created but still own a registrations subcollection are included.
   const campRefs = await db.collection("camps").listDocuments()
   campRefs.sort((a, b) => a.id.localeCompare(b.id))
 
-  const writer = new BatchWriter()
-  const perYear = new Map<string, YearCounts>()
-  const totals = newCounts()
-
   for (const campRef of campRefs) {
     console.log(`\n== camps/${campRef.id} ==`)
-    const counts = await backfillYear(campRef, writer)
-    perYear.set(campRef.id, counts)
-    ;(Object.keys(totals) as (keyof YearCounts)[]).forEach((key) => {
-      totals[key] += counts[key]
-    })
+    const registrations = await campRef.collection("registrations").get()
+    await repairDocuments(
+      registrations.docs,
+      campRef.id,
+      registrationRepairs,
+      validateRegistrationWrite,
+      writer
+    )
   }
+
+  console.log("\n== credits ==")
+  const credits = await db.collection("credits").get()
+  await repairDocuments(
+    credits.docs,
+    "credits",
+    creditRepairs,
+    validateCampCreditWrite,
+    writer
+  )
+
   await writer.flush()
 
-  const verb = apply ? "converted" : "would convert"
-  console.log("\n==== Summary ====")
-  perYear.forEach((c, year) => {
-    console.log(
-      `${year}: ${c.total} registrations | already boolean ${c.alreadyBoolean} | ` +
-        `missing ${c.missing} | ${verb} ${c.converted} | ` +
-        `unexpected value ${c.unexpectedValue} | errors ${c.errors}`
-    )
+  const verb = apply ? "fixed" : "would fix"
+  let registrationsScanned = 0
+  counts.scanned.forEach((n, group) => {
+    if (group !== "credits") {
+      registrationsScanned += n
+    }
   })
+  console.log("\n==== Summary ====")
   console.log(
-    `\nTotal: ${totals.total} registrations | already boolean ${totals.alreadyBoolean} | ` +
-      `missing ${totals.missing} | ${verb} ${totals.converted} | ` +
-      `unexpected value ${totals.unexpectedValue} | errors ${totals.errors}`
+    `Registrations scanned: ${registrationsScanned} | credits scanned: ${
+      counts.scanned.get("credits") ?? 0
+    }`
   )
+
+  let errors = 0
+  for (const repair of [...registrationRepairs, ...creditRepairs]) {
+    const t = counts.totals(repair)
+    errors += t.errors
+    const breakdown = counts.breakdown(repair)
+    console.log(
+      `${repair.name}: ${verb} ${t.fixed} | unexpected value ${t.unexpected} | errors ${t.errors}` +
+        (breakdown ? `  (${breakdown})` : "")
+    )
+  }
   if (apply) {
     console.log(`Writes committed: ${writer.committed}`)
   }
 
-  process.exit(totals.errors > 0 ? 1 : 0)
+  process.exit(errors > 0 ? 1 : 0)
 }
 
 main().catch((err) => {
