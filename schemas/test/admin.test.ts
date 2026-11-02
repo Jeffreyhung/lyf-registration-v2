@@ -44,30 +44,41 @@ describe("roleHasCapability", () => {
     }
   })
 
-  it("lets program staff write registrations but not read sensitive data", () => {
-    expect(roleHasCapability("program_staff", "writeRegistrations")).toBe(true)
+  it("gives program staff everything except health data, the camp-year rollover and the roster", () => {
+    for (const capability of [
+      "writeRegistrations",
+      "readDemographics",
+      "manageWaitlist",
+      "managePayments",
+      "manageCredits",
+      "createTestData",
+    ] as const) {
+      expect(roleHasCapability("program_staff", capability)).toBe(true)
+    }
     expect(roleHasCapability("program_staff", "readHealth")).toBe(false)
-    expect(roleHasCapability("program_staff", "readDemographics")).toBe(false)
+    expect(roleHasCapability("program_staff", "manageCampYear")).toBe(false)
     expect(roleHasCapability("program_staff", "manageAdmins")).toBe(false)
   })
 
-  it("lets health staff read health only", () => {
+  it("makes program admin a full admin minus the roster", () => {
+    for (const capability of ALL_CAPABILITIES.filter((c) => c !== "manageAdmins")) {
+      expect(roleHasCapability("program_admin", capability)).toBe(true)
+    }
+    expect(roleHasCapability("program_admin", "manageAdmins")).toBe(false)
+  })
+
+  it("lets health staff read everything, including health, and write nothing", () => {
     expect(roleHasCapability("health_staff", "readHealth")).toBe(true)
-    for (const capability of ALL_CAPABILITIES.filter((c) => c !== "readHealth")) {
+    expect(roleHasCapability("health_staff", "readDemographics")).toBe(true)
+    for (const capability of ALL_CAPABILITIES.filter(
+      (c) => c !== "readHealth" && c !== "readDemographics"
+    )) {
       expect(roleHasCapability("health_staff", capability)).toBe(false)
     }
   })
 
-  it("reserves money, roster, waitlist and test-data powers for full_admin", () => {
-    for (const capability of [
-      "managePayments",
-      "manageCredits",
-      "manageAdmins",
-      "manageWaitlist",
-      "createTestData",
-    ] as const) {
-      expect(rolesWithCapability(capability)).toEqual(["full_admin"])
-    }
+  it("reserves the admin roster for full_admin", () => {
+    expect(rolesWithCapability("manageAdmins")).toEqual(["full_admin"])
   })
 })
 
@@ -75,6 +86,7 @@ describe("rolesWithCapability", () => {
   it("lists every role that has the capability, in ADMIN_ROLES order", () => {
     expect(rolesWithCapability("readHealth")).toEqual([
       "full_admin",
+      "program_admin",
       "health_staff",
     ])
     expect(rolesWithCapability("writeRegistrations")).toEqual([

@@ -68,7 +68,7 @@ function seedCamp(db: FakeFirestore, registration: Record<string, unknown> | nul
 beforeEach(() => {
   mockState.prodDb = new FakeFirestore()
     .seed("admins", ADMIN, {role: "full_admin"})
-    .seed("admins", "staff@example.com", {role: "program_admin"});
+    .seed("admins", "staff@example.com", {role: "health_staff"});
   mockState.testDb = new FakeFirestore();
   mockGetFirestoreDb.mockClear();
   mockSendMail.mockReset().mockResolvedValue({accepted: [PARENT]});
@@ -82,7 +82,7 @@ describe("access", () => {
     await expectHttpsError(
       moveCampersOffWaitlist.run(request(move(), "staff@example.com")),
       "permission-denied",
-      /requires one of: full_admin/
+      /requires one of: full_admin, program_admin, program_staff/
     );
 
     expect(mockState.prodDb.read(REGISTRATIONS, "c1")?.status).toBe(RegistrationStatus.WAITLIST);

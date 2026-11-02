@@ -317,7 +317,7 @@ describe("assertAdmin", () => {
     await expectAsyncHttpsError(
       assertAdmin(requestFrom("staff@tacl.org"), "readHealth"),
       "permission-denied",
-      /requires one of: full_admin, health_staff/
+      /requires one of: full_admin, program_admin, health_staff/
     );
   });
 
@@ -363,7 +363,7 @@ describe("resolveTestDataFlag", () => {
   });
 
   it("silently forces production mode for a role without createTestData", async () => {
-    mockAdmins.set("staff@tacl.org", {role: "program_staff"});
+    mockAdmins.set("staff@tacl.org", {role: "health_staff"});
     await expect(
       resolveTestDataFlag(requestFrom("staff@tacl.org"), true)
     ).resolves.toBe(false);
@@ -415,7 +415,7 @@ describe("resolveForceWaitlistFlag", () => {
   });
 
   it("ignores forceWaitlist from an admin role without createTestData", async () => {
-    mockAdmins.set("staff@tacl.org", {role: "program_staff"});
+    mockAdmins.set("staff@tacl.org", {role: "health_staff"});
     await expect(
       resolveForceWaitlistFlag(requestFrom("staff@tacl.org"), true)
     ).resolves.toBe(false);
