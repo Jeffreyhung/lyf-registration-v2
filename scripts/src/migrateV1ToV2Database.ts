@@ -284,8 +284,11 @@ const HEALTH_FIELDS = ["medicalConditions", "dietAndFoodAllergies"] as const
 
 async function migrateFamilies() {
   const families = await source.collection("families").get()
+  console.log(`  ${families.size} families to read (one line per 100)`)
 
-  for (const family of families.docs) {
+  for (const [index, family] of families.docs.entries()) {
+    if (index > 0 && index % 100 === 0)
+      console.log(`  … ${index}/${families.size} families`)
     bump(sourceCounts, "families")
     const data = family.data()
     const emails = normalizeEmails(data.emails)
@@ -411,6 +414,7 @@ async function migrateCamps() {
     }
 
     const registrations = await camp.ref.collection("registrations").get()
+    console.log(`  camps/${camp.id}: ${registrations.size} registrations`)
     for (const reg of registrations.docs) {
       bump(sourceCounts, "camps/registrations")
       await migrateRegistration(
