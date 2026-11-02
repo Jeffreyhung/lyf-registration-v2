@@ -29,6 +29,7 @@ import {
   resolveAdminRole,
 } from "lyf-registration-schemas"
 
+import RolePermissions from "@components/Admin/RolePermissions"
 import AuthContext from "@components/Auth/AuthContext"
 import { SnackbarAlertContext } from "@components/SnackbarAlert"
 import { firebaseFunctions, prodFirestore } from "@utils/firebaseApp"
@@ -181,6 +182,8 @@ export default function AdminManagement() {
   return (
     <Stack spacing={3} sx={{ maxWidth: 700, mx: "auto", py: 2 }}>
       <Typography variant="h5">Manage Admins</Typography>
+
+      <RolePermissions roleLabels={ROLE_LABELS} />
 
       <Box component="form" onSubmit={handleAdd}>
         <Stack direction="row" spacing={1} alignItems="center">
