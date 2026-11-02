@@ -28,13 +28,16 @@
  *                                     claim, only while the target has no roster yet
  *                                     (create-only: never overwrites a role you set)
  *
- * Idempotent: every write is a merge, so re-running is a delta sync from source.
- * Because of that, the target must be treated as read-only for ETL-managed
- * fields until the final run — edits there are overwritten by the next sync.
- * The create-only collections above and the legacy-field repairs are the
- * exceptions: they exist so that a re-sync never undoes the repairs made in
- * the target (see scripts/src/backfillIsReturning.ts) or the camp
- * configuration entered in the dashboard.
+ * Idempotent delta sync: every planned document is read from the target
+ * first and merged only when the merge would change something, so a re-run
+ * writes exactly the documents that are new or differ (the summary lists
+ * them). Because the merge still copies source values over target values,
+ * the target must be treated as read-only for ETL-managed fields until the
+ * final run — edits there are overwritten by the next sync. The create-only
+ * collections above and the legacy-field repairs are the exceptions: they
+ * exist so that a re-sync never undoes the repairs made in the target (see
+ * scripts/src/backfillIsReturning.ts) or the camp configuration entered in
+ * the dashboard.
  *
  * DRY RUN by default. APPLY=1 writes.
  *   SOURCE_DB='(default)' TARGET_DB=lyf-v2 ./run.sh -n migrateV1ToV2Database
@@ -67,7 +70,6 @@ const TARGET_DB = process.env.TARGET_DB ?? "lyf-v2"
 // being rebuilt from SOURCE_DB admins + v1 Auth custom claims.
 const ADMINS_FROM_DB = process.env.ADMINS_FROM_DB
 const SCHEMA_VERSION = 2
-const BATCH_LIMIT = 400
 
 if (SOURCE_DB === TARGET_DB) {
   console.error(
@@ -97,6 +99,16 @@ const writeCounts: Record<string, number> = {}
 /** Distinct target paths per group — several source docs can merge into one
  *  (e.g. parent docs whose IDs differ only by case). */
 const plannedPaths: Record<string, Set<string>> = {}
+/** Per group: how many planned documents the merge would create, update or
+ *  leave as they are (the target already holds the same values). */
+type ChangeKind = "create" | "update" | "unchanged"
+const changeCounts: Record<ChangeKind, Record<string, number>> = {
+  create: {},
+  update: {},
+  unchanged: {},
+}
+/** Every document the merge would actually touch, with the fields involved. */
+const changedDocs: {kind: ChangeKind; path: string; fields: string[]}[] = []
 /** Create-only documents that already exist in the target and were left alone. */
 const keptCounts: Record<string, number> = {}
 /** Legacy-field repairs applied on the way, by kind. */
@@ -176,27 +188,106 @@ const isNonEmpty = (v: unknown) =>
   )
 
 // ---------------------------------------------------------------------------
-// Writer: batches merges, or just counts in dry-run
+// Change detection: would `set(ref, data, {merge: true})` alter the target?
 // ---------------------------------------------------------------------------
 
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && (v as object).constructor === Object
+
+const DELETE_SENTINEL = FieldValue.delete()
+
+/** Deep equality for stored Firestore values (arrays compare as a whole). */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (typeof a === "number" && typeof b === "number") return a === b
+  if (a instanceof Timestamp && b instanceof Timestamp) return a.isEqual(b)
+  if (a instanceof DocumentReference && b instanceof DocumentReference)
+    return a.path === b.path
+  if (a instanceof GeoPoint && b instanceof GeoPoint) return a.isEqual(b)
+  if (Array.isArray(a) && Array.isArray(b))
+    return a.length === b.length && a.every((v, i) => sameValue(v, b[i]))
+  if (isPlainObject(a) && isPlainObject(b)) {
+    const keys = Object.keys(a)
+    return (
+      keys.length === Object.keys(b).length &&
+      keys.every((k) => k in b && sameValue(a[k], b[k]))
+    )
+  }
+  return false
+}
+
+/**
+ * Top-level fields of `data` whose merge into `existing` would change the
+ * stored document. Mirrors merge semantics: nested maps merge field by
+ * field, arrays are replaced, FieldValue.delete() removes a field (a no-op
+ * when the field is already absent), other sentinels always count as a change.
+ */
+function changedFields(
+  existing: Record<string, unknown>,
+  data: Record<string, unknown>
+): string[] {
+  const out: string[] = []
+  for (const [key, value] of Object.entries(data)) {
+    if (value instanceof FieldValue) {
+      if (value.isEqual(DELETE_SENTINEL) ? key in existing : true) out.push(key)
+    } else if (!(key in existing)) {
+      out.push(key)
+    } else if (isPlainObject(value) && isPlainObject(existing[key])) {
+      if (changedFields(existing[key], value).length) out.push(key)
+    } else if (!sameValue(value, existing[key])) {
+      out.push(key)
+    }
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Writer: reads the target in chunks, merges only what would change, and in
+// dry-run just records what would change
+// ---------------------------------------------------------------------------
+
+/** Documents compared (and, in APPLY mode, committed) per round trip. */
+const CHUNK = 100
+
 class Writer {
-  private batch: WriteBatch | null = null
-  private pending = 0
+  private pending: {ref: DocumentReference; data: Record<string, unknown>}[] =
+    []
 
   async set(ref: DocumentReference, data: Record<string, unknown>) {
     const group = groupKey(ref.path)
     bump(writeCounts, group)
     ;(plannedPaths[group] ??= new Set()).add(ref.path)
-    if (!APPLY) return
-    this.batch ??= target.batch()
-    this.batch.set(ref, data, {merge: true})
-    if (++this.pending >= BATCH_LIMIT) await this.flush()
+    this.pending.push({ref, data})
+    if (this.pending.length >= CHUNK) await this.flush()
   }
 
   async flush() {
-    if (this.batch && this.pending > 0) await this.batch.commit()
-    this.batch = null
-    this.pending = 0
+    if (this.pending.length === 0) return
+    const items = this.pending
+    this.pending = []
+    const snaps = await target.getAll(...items.map((i) => i.ref))
+    let batch: WriteBatch | null = null
+    let queued = 0
+    items.forEach(({ref, data}, i) => {
+      const group = groupKey(ref.path)
+      const existing = snaps[i].exists ? snaps[i].data() : undefined
+      const fields = existing
+        ? changedFields(existing, data)
+        : Object.keys(data)
+      const kind: ChangeKind = !existing
+        ? "create"
+        : fields.length
+          ? "update"
+          : "unchanged"
+      bump(changeCounts[kind], group)
+      if (kind === "unchanged") return
+      changedDocs.push({kind, path: ref.path, fields})
+      if (!APPLY) return
+      batch ??= target.batch()
+      batch.set(ref, data, {merge: true})
+      queued++
+    })
+    if (batch && queued > 0) await (batch as WriteBatch).commit()
   }
 }
 const writer = new Writer()
@@ -655,40 +746,46 @@ async function main() {
   console.log("\nchecking references…")
   const dangling = await checkReferences()
 
-  console.log(`\nSummary (${APPLY ? "written" : "would write"}):`)
+  console.log(`\nSummary (${APPLY ? "written" : "dry run"}):`)
   const tgt = APPLY ? await targetCounts() : null
-  const rows: [string, string, string, string][] = [
+  const count = (kind: ChangeKind, group: string) =>
+    String(changeCounts[kind][group] ?? 0)
+  const rows: string[][] = [
     [
       "collection group",
       "source",
-      "distinct target docs",
+      "compared",
+      APPLY ? "created" : "would create",
+      APPLY ? "updated" : "would update",
+      "unchanged",
       APPLY ? "target now" : "",
     ],
   ]
   const merged: string[] = []
-  for (const group of Object.keys(sourceCounts).sort()) {
+  const groups = [
+    ...Object.keys(sourceCounts).sort(),
+    ...Object.keys(writeCounts)
+      .filter((k) => !(k in sourceCounts))
+      .sort(),
+  ]
+  for (const group of groups) {
+    const fromSource = group in sourceCounts
     const planned = plannedPaths[group]?.size ?? 0
     const kept = keptCounts[group] ?? 0
-    if (planned + kept < sourceCounts[group]) {
+    if (fromSource && planned + kept < sourceCounts[group]) {
       merged.push(
         `${group}: ${sourceCounts[group]} source docs -> ${planned} (IDs normalized to the same path)`
       )
     }
     rows.push([
       group,
-      String(sourceCounts[group]),
+      fromSource ? String(sourceCounts[group]) : "-",
       String(planned),
-      tgt ? String(tgt[group]) : "",
+      count("create", group),
+      count("update", group),
+      count("unchanged", group),
+      tgt && plannedPaths[group] ? String(tgt[group] ?? "") : "",
     ])
-  }
-  for (const [k, v] of Object.entries(writeCounts)) {
-    if (!(k in sourceCounts))
-      rows.push([
-        k,
-        "-",
-        String(plannedPaths[k]?.size ?? v),
-        tgt && plannedPaths[k] ? String(tgt[k] ?? "") : "",
-      ])
   }
   printTable(rows)
   merged.forEach((m) => console.log(`  ~ merged: ${m}`))
@@ -696,9 +793,25 @@ async function main() {
     console.log(
       `  ~ kept: ${group}: ${n} already in the target, left untouched (create-only)`
     )
+
+  const creates = changedDocs.filter((c) => c.kind === "create")
+  const updates = changedDocs.filter((c) => c.kind === "update")
+  console.log(
+    `\nDocuments the merge ${APPLY ? "changed" : "would change"}: ${creates.length} created, ${updates.length} updated`
+  )
+  const LIST_LIMIT = 60
+  for (const c of changedDocs.slice(0, LIST_LIMIT))
+    console.log(
+      `  ${c.kind === "create" ? "+" : "~"} ${c.path}${
+        c.kind === "update" ? `  (${c.fields.join(", ")})` : ""
+      }`
+    )
+  if (changedDocs.length > LIST_LIMIT)
+    console.log(`  … and ${changedDocs.length - LIST_LIMIT} more`)
+
   if (Object.keys(repairCounts).length) {
     console.log(
-      `\nLegacy-field repairs ${APPLY ? "applied" : "that would apply"}:`
+      "\nLegacy values repaired on the source copies (counted as unchanged when the target was already repaired):"
     )
     for (const [k, n] of Object.entries(repairCounts))
       console.log(`  ${String(n).padStart(5)}  ${k}`)
