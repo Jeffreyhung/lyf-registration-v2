@@ -25,7 +25,8 @@
  *   credits/{familyId}                CREATE-ONLY (v2 functions increment amountRemaining);
  *                                     a string amountRemaining is written as a number
  *   admins/{email}                    created from Auth users with the v1 `admin` custom
- *                                     claim (create-only: never overwrites a role you set)
+ *                                     claim, only while the target has no roster yet
+ *                                     (create-only: never overwrites a role you set)
  *
  * Idempotent: every write is a merge, so re-running is a delta sync from source.
  * Because of that, the target must be treated as read-only for ETL-managed
@@ -523,25 +524,37 @@ async function migrateAdmins() {
   }
 
   // Auth users carrying the v1 claim become full admins (v1 source only —
-  // a mirrored v2 roster is already authoritative)
+  // a mirrored v2 roster is already authoritative). Only consulted while the
+  // target has no roster yet: once it does, Admin Management owns it, and a
+  // delta sync must not need the Auth API (with user ADC the Identity
+  // Toolkit API rejects the call for lack of a quota project).
   if (!adminsSource) {
-    let pageToken: string | undefined
-    do {
-      const page = await admin.auth(app).listUsers(1000, pageToken)
-      for (const user of page.users) {
-        if (user.customClaims?.admin !== true || !user.email) continue
-        const email = normalizeEmail(user.email)
-        if (!entries.has(email)) {
-          entries.set(email, {
-            role: "full_admin",
-            disabled: false,
-            addedBy: "v1-migration (auth claim)",
-            addedAt: FieldValue.serverTimestamp(),
-          })
+    const targetRoster = (
+      await target.collection("admins").count().get()
+    ).data().count
+    if (targetRoster > 0) {
+      console.log(
+        `  target already has ${targetRoster} admins; v1 Auth claims not consulted`
+      )
+    } else {
+      let pageToken: string | undefined
+      do {
+        const page = await admin.auth(app).listUsers(1000, pageToken)
+        for (const user of page.users) {
+          if (user.customClaims?.admin !== true || !user.email) continue
+          const email = normalizeEmail(user.email)
+          if (!entries.has(email)) {
+            entries.set(email, {
+              role: "full_admin",
+              disabled: false,
+              addedBy: "v1-migration (auth claim)",
+              addedAt: FieldValue.serverTimestamp(),
+            })
+          }
         }
-      }
-      pageToken = page.pageToken
-    } while (pageToken)
+        pageToken = page.pageToken
+      } while (pageToken)
+    }
   }
 
   for (const [email, data] of entries) {
