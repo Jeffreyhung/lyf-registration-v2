@@ -8,18 +8,32 @@
  *
  * Transforms (everything else is copied verbatim, with refs rewritten):
  *   families/{id}                     emails lowercased + deduped; schemaVersion
- *   families/{id}/parents/{email}     doc ID + email lowercased
+ *   families/{id}/parents/{email}     doc ID + email lowercased;
+ *                                     subscribeToMailingList "true"/"false" -> boolean
  *   families/{id}/campers/{id}        medicalConditions/dietAndFoodAllergies -> private/health
  *                                     demographics -> private/demographics; schemaVersion
+ *   camps/{year}                      CREATE-ONLY: v2 owns these documents (the Camp
+ *                                     Year tab writes dates, fees, caps and remainingSpots
+ *                                     through manageCampYear), so an existing target
+ *                                     document is left untouched. Only its registrations
+ *                                     subcollection is synced.
  *   camps/{year}/registrations/{id}   familyEmails added (from the owning family);
  *                                     legacy demographics moved to the camper's
- *                                     private/demographics when absent there; schemaVersion
+ *                                     private/demographics when absent there; schemaVersion;
+ *                                     grade NaN -> field deleted; isReturning
+ *                                     "true"/"false" -> boolean; hasContacted false -> deleted
+ *   credits/{familyId}                CREATE-ONLY (v2 functions increment amountRemaining);
+ *                                     a string amountRemaining is written as a number
  *   admins/{email}                    created from Auth users with the v1 `admin` custom
  *                                     claim (create-only: never overwrites a role you set)
  *
  * Idempotent: every write is a merge, so re-running is a delta sync from source.
  * Because of that, the target must be treated as read-only for ETL-managed
  * fields until the final run — edits there are overwritten by the next sync.
+ * The create-only collections above and the legacy-field repairs are the
+ * exceptions: they exist so that a re-sync never undoes the repairs made in
+ * the target (see scripts/src/backfillIsReturning.ts) or the camp
+ * configuration entered in the dashboard.
  *
  * DRY RUN by default. APPLY=1 writes.
  *   SOURCE_DB='(default)' TARGET_DB=lyf-v2 ./run.sh -n migrateV1ToV2Database
@@ -82,12 +96,54 @@ const writeCounts: Record<string, number> = {}
 /** Distinct target paths per group — several source docs can merge into one
  *  (e.g. parent docs whose IDs differ only by case). */
 const plannedPaths: Record<string, Set<string>> = {}
+/** Create-only documents that already exist in the target and were left alone. */
+const keptCounts: Record<string, number> = {}
+/** Legacy-field repairs applied on the way, by kind. */
+const repairCounts: Record<string, number> = {}
 const warnings: string[] = []
 const referencedPaths = new Set<string>()
 
 const bump = (map: Record<string, number>, key: string) =>
   (map[key] = (map[key] ?? 0) + 1)
 const warn = (msg: string) => warnings.push(msg)
+
+/**
+ * Top-level collections whose documents are created when missing from the
+ * target but never merged into when present: v2 code or the dashboard owns
+ * them once they exist. `camps` is handled the same way in migrateCamps.
+ */
+const CREATE_ONLY_COLLECTIONS = new Set(["credits"])
+
+async function existsInTarget(ref: DocumentReference): Promise<boolean> {
+  return (await ref.get()).exists
+}
+
+/**
+ * v1's radio buttons stored some booleans as the strings "true"/"false".
+ * Returns the boolean for those two strings, the value unchanged otherwise.
+ */
+function legacyBoolean(value: unknown): unknown {
+  if (value === "true") return true
+  if (value === "false") return false
+  return value
+}
+
+/** In-place repairs of the legacy field shapes found on v1 registrations. */
+function repairRegistrationFields(out: Record<string, unknown>) {
+  if (typeof out.grade === "number" && Number.isNaN(out.grade)) {
+    // Merge semantics: FieldValue.delete() also clears a NaN already in the target.
+    out.grade = FieldValue.delete()
+    bump(repairCounts, "registration.grade NaN deleted")
+  }
+  if (out.isReturning === "true" || out.isReturning === "false") {
+    out.isReturning = legacyBoolean(out.isReturning)
+    bump(repairCounts, "registration.isReturning string -> boolean")
+  }
+  if (out.hasContacted === false) {
+    out.hasContacted = FieldValue.delete()
+    bump(repairCounts, "registration.hasContacted false deleted")
+  }
+}
 
 /** Collection-group key for counting: "families/parents", "camps/registrations", ... */
 function groupKey(path: string): string {
@@ -180,14 +236,38 @@ async function copySubcollections(
 
 async function copyCollection(
   from: CollectionReference,
-  to: CollectionReference
+  to: CollectionReference,
+  options: {createOnly?: boolean} = {}
 ) {
   const snap = await from.get()
   for (const doc of snap.docs) {
-    bump(sourceCounts, groupKey(doc.ref.path))
+    const group = groupKey(doc.ref.path)
+    bump(sourceCounts, group)
     const targetRef = to.doc(doc.id)
-    await writer.set(targetRef, rewrite(doc.data()) as Record<string, unknown>)
+    if (options.createOnly && (await existsInTarget(targetRef))) {
+      bump(keptCounts, group)
+    } else {
+      const data = rewrite(doc.data()) as Record<string, unknown>
+      if (from.id === "credits") repairCreditFields(data)
+      await writer.set(targetRef, data)
+    }
     await copySubcollections(doc.ref, targetRef)
+  }
+}
+
+/** credits/{familyId}.amountRemaining must be a number: v2 applies
+ *  FieldValue.increment() to it, which would replace a string outright. */
+function repairCreditFields(data: Record<string, unknown>) {
+  if (typeof data.amountRemaining === "string") {
+    const parsed = Number(data.amountRemaining.trim())
+    if (data.amountRemaining.trim() !== "" && Number.isFinite(parsed)) {
+      data.amountRemaining = parsed
+      bump(repairCounts, "credit.amountRemaining string -> number")
+    } else {
+      warn(
+        `credit amountRemaining "${data.amountRemaining}" is not a number; copied as-is`
+      )
+    }
   }
 }
 
@@ -230,8 +310,12 @@ async function migrateFamilies() {
       const targetParent = targetFamily
         .collection("parents")
         .doc(normalizeEmail(parent.id))
+      const subscribeToMailingList = legacyBoolean(pdata.subscribeToMailingList)
+      if (subscribeToMailingList !== pdata.subscribeToMailingList)
+        bump(repairCounts, "parent.subscribeToMailingList string -> boolean")
       await writer.set(targetParent, {
         ...(rewrite(pdata) as Record<string, unknown>),
+        ...(subscribeToMailingList !== undefined && {subscribeToMailingList}),
         email,
       })
       await copySubcollections(parent.ref, targetParent)
@@ -315,10 +399,16 @@ async function migrateCamps() {
   for (const camp of camps.docs) {
     bump(sourceCounts, "camps")
     const targetCamp = target.collection("camps").doc(camp.id)
-    await writer.set(
-      targetCamp,
-      rewrite(camp.data()) as Record<string, unknown>
-    )
+    // Create-only: once a camps/{year} document exists in v2 the dashboard
+    // owns it (dates, fees, caps, remainingSpots, image URLs, toggles).
+    if (await existsInTarget(targetCamp)) {
+      bump(keptCounts, "camps")
+    } else {
+      await writer.set(
+        targetCamp,
+        rewrite(camp.data()) as Record<string, unknown>
+      )
+    }
 
     const registrations = await camp.ref.collection("registrations").get()
     for (const reg of registrations.docs) {
@@ -346,6 +436,7 @@ async function migrateRegistration(
     ...(rewrite(rest) as Record<string, unknown>),
     schemaVersion: SCHEMA_VERSION,
   }
+  repairRegistrationFields(out)
 
   const camperRef =
     data.camper instanceof DocumentReference ? data.camper : null
@@ -475,8 +566,11 @@ const HANDLED = new Set(["families", "camps", "admins"])
 async function migrateOtherCollections() {
   for (const col of await source.listCollections()) {
     if (HANDLED.has(col.id)) continue
-    console.log(`  copying ${col.id} verbatim`)
-    await copyCollection(col, target.collection(col.id))
+    const createOnly = CREATE_ONLY_COLLECTIONS.has(col.id)
+    console.log(
+      `  copying ${col.id} ${createOnly ? "(create-only)" : "verbatim"}`
+    )
+    await copyCollection(col, target.collection(col.id), {createOnly})
   }
 }
 
@@ -557,7 +651,8 @@ async function main() {
   const merged: string[] = []
   for (const group of Object.keys(sourceCounts).sort()) {
     const planned = plannedPaths[group]?.size ?? 0
-    if (planned < sourceCounts[group]) {
+    const kept = keptCounts[group] ?? 0
+    if (planned + kept < sourceCounts[group]) {
       merged.push(
         `${group}: ${sourceCounts[group]} source docs -> ${planned} (IDs normalized to the same path)`
       )
@@ -580,6 +675,17 @@ async function main() {
   }
   printTable(rows)
   merged.forEach((m) => console.log(`  ~ merged: ${m}`))
+  for (const [group, n] of Object.entries(keptCounts))
+    console.log(
+      `  ~ kept: ${group}: ${n} already in the target, left untouched (create-only)`
+    )
+  if (Object.keys(repairCounts).length) {
+    console.log(
+      `\nLegacy-field repairs ${APPLY ? "applied" : "that would apply"}:`
+    )
+    for (const [k, n] of Object.entries(repairCounts))
+      console.log(`  ${String(n).padStart(5)}  ${k}`)
+  }
 
   if (tgt) {
     const short = Object.keys(sourceCounts).filter(
