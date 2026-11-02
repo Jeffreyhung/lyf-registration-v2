@@ -80,13 +80,13 @@ const CAPABILITY_ROWS: { capability: Capability; label: string; detail: string }
 
 const ROLE_SUMMARIES: Record<AdminRole, string> = {
   full_admin:
-    "Everything, including money, health data and the admin roster. Keep this to a small number of people.",
+    "Everything, including the admin roster. The only role that can add or remove families, campers and registrations directly. Keep this to a small number of people.",
   program_admin:
-    "Program Staff plus the yearly Camp Year rollover. No health data, payments or admin roster.",
+    "Full Admin minus the admin roster: health data, payments, credits, waitlist, test data and the yearly Camp Year rollover.",
   program_staff:
-    "Day-to-day camp operations: view registrations, update status, notes, check-out and small groups.",
+    "Day-to-day camp operations: view everything except health data; edit registrations, move campers off the waitlist, handle payments and camp credits, create test data.",
   health_staff:
-    "Read-only access to registrations plus camper health information. Cannot edit registrations.",
+    "Read-only view of everything, including camper health information. Cannot edit registrations.",
 }
 
 export default function RolePermissions({
@@ -102,9 +102,9 @@ export default function RolePermissions({
       <AccordionDetails>
         <Typography variant="body2" color="text.secondary" paragraph>
           Every admin can sign in to the console and see All Registrations,
-          Waitlist &amp; Pending Payments, Camper Checkout and Small Group
-          Assignments. The role decides what else they can see and change.
-          Pick the lowest role that covers the job.
+          Waitlist &amp; Pending Payments, Camper Checkout, Small Group
+          Assignments and Demographics. The role decides what else they can
+          see and change. Pick the lowest role that covers the job.
         </Typography>
 
         <Box component="dl" sx={{ m: 0, mb: 2 }}>

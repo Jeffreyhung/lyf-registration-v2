@@ -35,6 +35,7 @@ export type Admin = Partial<{
  * with this map, enforced by the rules unit tests).
  */
 export const ROLE_CAPABILITIES = {
+  // Everything, including the admin roster and unrestricted Firestore writes.
   full_admin: {
     readHealth: true,
     readDemographics: true,
@@ -46,33 +47,38 @@ export const ROLE_CAPABILITIES = {
     createTestData: true,
     manageCampYear: true,
   },
-  // program_staff plus the ability to run the yearly camp-year rollover
-  // (dates, fees, caps, bypass emails). Still no roster or money access.
+  // full_admin minus the admin roster. Sees health data and runs the yearly
+  // camp-year rollover. Firestore writes stay operational (same field list as
+  // program_staff): creating or deleting families, campers and registrations
+  // from the client remains full_admin only.
   program_admin: {
-    readHealth: false,
-    readDemographics: false,
+    readHealth: true,
+    readDemographics: true,
     writeRegistrations: true,
-    managePayments: false,
-    manageCredits: false,
+    managePayments: true,
+    manageCredits: true,
     manageAdmins: false,
-    manageWaitlist: false,
-    createTestData: false,
+    manageWaitlist: true,
+    createTestData: true,
     manageCampYear: true,
   },
+  // Day-to-day operations: everything except health data, the camp-year
+  // rollover and the admin roster.
   program_staff: {
     readHealth: false,
-    readDemographics: false,
+    readDemographics: true,
     writeRegistrations: true,
-    managePayments: false,
-    manageCredits: false,
+    managePayments: true,
+    manageCredits: true,
     manageAdmins: false,
-    manageWaitlist: false,
-    createTestData: false,
+    manageWaitlist: true,
+    createTestData: true,
     manageCampYear: false,
   },
+  // Read-only view of everything, including health data.
   health_staff: {
     readHealth: true,
-    readDemographics: false,
+    readDemographics: true,
     writeRegistrations: false,
     managePayments: false,
     manageCredits: false,

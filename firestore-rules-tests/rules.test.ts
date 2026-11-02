@@ -15,13 +15,17 @@ import {
   initializeTestEnvironment,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing"
+import { deleteApp, FirebaseApp, initializeApp } from "firebase/app"
 import {
   addDoc,
   collection,
+  connectFirestoreEmulator,
   deleteDoc,
   doc,
+  Firestore,
   getDoc,
   getDocs,
+  initializeFirestore,
   query,
   serverTimestamp,
   setDoc,
@@ -103,20 +107,81 @@ async function seed() {
   })
 }
 
+const PROJECT_ID = "demo-lyf-rules"
+const EMULATOR_HOST = "127.0.0.1"
+const EMULATOR_PORT = 8080
+
 const as = (email: string | null) =>
   email
     ? testEnv.authenticatedContext(email.replace(/[^a-z0-9]/gi, "_"), { email }).firestore()
     : testEnv.unauthenticatedContext().firestore()
 
-beforeAll(async () => {
-  testEnv = await initializeTestEnvironment({
-    projectId: "demo-lyf-rules",
-    firestore: {
-      rules: readFileSync(resolve(__dirname, "../firestore.rules"), "utf8"),
-      host: "127.0.0.1",
-      port: 8080,
-    },
+// ---- Named-database contexts ----
+// The rules are deployed unchanged to both databases and tell them apart by
+// the {database} wildcard (see canSeedTestData()). rules-unit-testing only
+// speaks to "(default)": it loads the rules there and its contexts talk to
+// it. The test-database cases therefore load the same rules into the named
+// database through the emulator's REST API (a database the emulator has no
+// rules for is wide open) and use the modular SDK pointed at the emulator
+// with the same mock-token mechanism.
+
+const TEST_DB = "lyf-v2-test"
+const namedApps: FirebaseApp[] = []
+
+function asIn(databaseId: string, email: string | "owner"): Firestore {
+  const app = initializeApp({ projectId: PROJECT_ID }, `${databaseId}-${email}-${namedApps.length}`)
+  namedApps.push(app)
+  const db = initializeFirestore(app, {}, databaseId)
+  connectFirestoreEmulator(db, EMULATOR_HOST, EMULATOR_PORT, {
+    mockUserToken:
+      email === "owner"
+        ? "owner"
+        : { sub: email.replace(/[^a-z0-9]/gi, "_"), email, email_verified: true },
   })
+  return db
+}
+
+// Seeds the admin roster into the test database (mirrors replicateAdminsToTest).
+async function seedTestDatabase() {
+  const db = asIn(TEST_DB, "owner")
+  const admins: Record<string, object> = {
+    [FULL]: { role: "full_admin" },
+    [PROGRAM]: { role: "program_staff" },
+    [PROGRAM_ADMIN]: { role: "program_admin" },
+    [HEALTH]: { role: "health_staff" },
+  }
+  for (const [email, data] of Object.entries(admins)) {
+    await setDoc(doc(db, "admins", email), data)
+  }
+}
+
+const EMULATOR_URL = `http://${EMULATOR_HOST}:${EMULATOR_PORT}/emulator/v1/projects/${PROJECT_ID}`
+
+async function loadTestDatabaseRules(rules: string) {
+  const res = await fetch(
+    `${EMULATOR_URL}:securityRules?database=projects/${PROJECT_ID}/databases/${TEST_DB}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules: { files: [{ name: "firestore.rules", content: rules }] } }),
+    }
+  )
+  if (!res.ok) {
+    throw new Error(`Loading rules into ${TEST_DB} failed: ${res.status} ${await res.text()}`)
+  }
+}
+
+async function clearTestDatabase() {
+  await fetch(`${EMULATOR_URL}/databases/${TEST_DB}/documents`, { method: "DELETE" })
+}
+
+beforeAll(async () => {
+  const rules = readFileSync(resolve(__dirname, "../firestore.rules"), "utf8")
+  testEnv = await initializeTestEnvironment({
+    projectId: PROJECT_ID,
+    firestore: { rules, host: EMULATOR_HOST, port: EMULATOR_PORT },
+  })
+  await loadTestDatabaseRules(rules)
 })
 
 beforeEach(async () => {
@@ -126,6 +191,7 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await testEnv.cleanup()
+  await Promise.all(namedApps.map((app) => deleteApp(app)))
 })
 
 // ---- Admin roster ----
@@ -254,12 +320,12 @@ describe("families/{id}/campers/", () => {
 // ---- Private sections ----
 
 describe("campers/{id}/private/health", () => {
-  test("readable by health_staff, full_admin, and the family — not program_staff or others", async () => {
+  test("readable by readHealth roles (health_staff, program_admin, full_admin) and the family — not program_staff or others", async () => {
     await assertSucceeds(getDoc(doc(as(HEALTH), CAMPER_HEALTH)))
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_HEALTH)))
     await assertSucceeds(getDoc(doc(as(FULL), CAMPER_HEALTH)))
     await assertSucceeds(getDoc(doc(as(PARENT), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(PROGRAM), CAMPER_HEALTH)))
-    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(OTHER_PARENT), CAMPER_HEALTH)))
     await assertFails(getDoc(doc(as(null), CAMPER_HEALTH)))
   })
@@ -273,17 +339,22 @@ describe("campers/{id}/private/health", () => {
     )
     await assertFails(updateDoc(doc(as(HEALTH), CAMPER_HEALTH), { medicalConditions: "x" }))
     await assertFails(updateDoc(doc(as(PROGRAM), CAMPER_HEALTH), { medicalConditions: "x" }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), CAMPER_HEALTH), { medicalConditions: "x" }))
     await assertSucceeds(updateDoc(doc(as(FULL), CAMPER_HEALTH), { medicalConditions: "x" }))
   })
 })
 
 describe("campers/{id}/private/demographics", () => {
-  test("full_admin only, in both directions", async () => {
+  test("readable by every admin role (readDemographics); written by full_admin only", async () => {
     await assertSucceeds(getDoc(doc(as(FULL), CAMPER_DEMOGRAPHICS)))
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_DEMOGRAPHICS)))
+    await assertSucceeds(getDoc(doc(as(PROGRAM), CAMPER_DEMOGRAPHICS)))
+    await assertSucceeds(getDoc(doc(as(HEALTH), CAMPER_DEMOGRAPHICS)))
     await assertSucceeds(updateDoc(doc(as(FULL), CAMPER_DEMOGRAPHICS), { born: "TW" }))
-    await assertFails(getDoc(doc(as(HEALTH), CAMPER_DEMOGRAPHICS)))
-    await assertFails(getDoc(doc(as(PROGRAM), CAMPER_DEMOGRAPHICS)))
-    await assertFails(getDoc(doc(as(PROGRAM_ADMIN), CAMPER_DEMOGRAPHICS)))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), CAMPER_DEMOGRAPHICS), { born: "x" }))
+    await assertFails(updateDoc(doc(as(PROGRAM), CAMPER_DEMOGRAPHICS), { born: "x" }))
+    await assertFails(updateDoc(doc(as(HEALTH), CAMPER_DEMOGRAPHICS), { born: "x" }))
+    await assertFails(getDoc(doc(as(DISABLED), CAMPER_DEMOGRAPHICS)))
     await assertFails(getDoc(doc(as(PARENT), CAMPER_DEMOGRAPHICS)))
     await assertFails(updateDoc(doc(as(PARENT), CAMPER_DEMOGRAPHICS), { born: "x" }))
     await assertFails(setDoc(doc(as(PARENT), `${CAMPER}/private/other`), { secret: 1 }))
@@ -404,7 +475,7 @@ describe("camps/{year}/registrations/", () => {
     await assertFails(deleteDoc(doc(as(PROGRAM), REGISTRATION)))
   })
 
-  test("program_admin (writeRegistrations) has the same operational-field access as program_staff", async () => {
+  test("program_admin (writeRegistrations) has the same operational-field access as program_staff — no structural writes", async () => {
     await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), REGISTRATION)))
     await assertSucceeds(
       updateDoc(doc(as(PROGRAM_ADMIN), REGISTRATION), {
@@ -437,15 +508,89 @@ describe("camps/{year}/registrations/", () => {
 // ---- Money ----
 
 describe("payments/ and credits/", () => {
-  test("full_admin only", async () => {
-    for (const path of ["payments/pay1", "credits/fam1"]) {
-      await assertSucceeds(getDoc(doc(as(FULL), path)))
-      await assertSucceeds(updateDoc(doc(as(FULL), path), { touched: true }))
-      await assertFails(getDoc(doc(as(PROGRAM), path)))
-      await assertFails(getDoc(doc(as(HEALTH), path)))
-      await assertFails(getDoc(doc(as(PARENT), path)))
-      await assertFails(updateDoc(doc(as(PROGRAM), path), { touched: true }))
+  test("payments: readable by managePayments roles, written by full_admin only", async () => {
+    await assertSucceeds(getDoc(doc(as(FULL), "payments/pay1")))
+    await assertSucceeds(getDoc(doc(as(PROGRAM_ADMIN), "payments/pay1")))
+    await assertSucceeds(getDoc(doc(as(PROGRAM), "payments/pay1")))
+    await assertSucceeds(getDocs(collection(as(PROGRAM), "payments")))
+    await assertFails(getDoc(doc(as(HEALTH), "payments/pay1")))
+    await assertFails(getDoc(doc(as(PARENT), "payments/pay1")))
+    await assertFails(getDoc(doc(as(null), "payments/pay1")))
+    await assertSucceeds(updateDoc(doc(as(FULL), "payments/pay1"), { touched: true }))
+    await assertFails(updateDoc(doc(as(PROGRAM_ADMIN), "payments/pay1"), { touched: true }))
+    await assertFails(updateDoc(doc(as(PROGRAM), "payments/pay1"), { touched: true }))
+    await assertFails(setDoc(doc(as(PROGRAM), "payments/new"), { total: 1 }))
+  })
+
+  test("credits: read and written by manageCredits roles", async () => {
+    for (const email of [FULL, PROGRAM_ADMIN, PROGRAM]) {
+      await assertSucceeds(getDoc(doc(as(email), "credits/fam1")))
+      await assertSucceeds(updateDoc(doc(as(email), "credits/fam1"), { touched: true }))
+      await assertSucceeds(setDoc(doc(as(email), `credits/new-${email}`), { amountRemaining: 10 }))
     }
+    await assertFails(getDoc(doc(as(HEALTH), "credits/fam1")))
+    await assertFails(updateDoc(doc(as(HEALTH), "credits/fam1"), { touched: true }))
+    await assertFails(getDoc(doc(as(PARENT), "credits/fam1")))
+    await assertFails(updateDoc(doc(as(PARENT), "credits/fam1"), { amountRemaining: 9999 }))
+  })
+})
+
+// ---- Test database (createTestData) ----
+
+describe("test database: createTestData roles may seed and delete test data", () => {
+  const T_FAMILY = "families/seed_test_family"
+  const T_PARENT = `${T_FAMILY}/parents/seed@example.com`
+  const T_CAMPER = `${T_FAMILY}/campers/test_camper_0`
+  const T_REGISTRATION = `${CAMP}/registrations/seed_test_camper_0_registration`
+
+  beforeEach(async () => {
+    await clearTestDatabase()
+    await seedTestDatabase()
+  })
+
+  test("program_staff, program_admin and full_admin can create, reset and delete the Create Test Data documents", async () => {
+    for (const email of [PROGRAM, PROGRAM_ADMIN, FULL]) {
+      const db = asIn(TEST_DB, email)
+      await assertSucceeds(setDoc(doc(db, T_FAMILY), { emails: ["seed@example.com"], isTestData: true }))
+      await assertSucceeds(setDoc(doc(db, T_PARENT), { email: "seed@example.com", isTestData: true }))
+      await assertSucceeds(setDoc(doc(db, T_CAMPER), { firstName: "Camper", isTestData: true }))
+      await assertSucceeds(
+        setDoc(doc(db, T_REGISTRATION), { camper: doc(db, T_CAMPER), familyEmails: ["seed@example.com"], isTestData: true })
+      )
+      // Re-running "Add Test Family" overwrites the same documents.
+      await assertSucceeds(setDoc(doc(db, T_FAMILY), { emails: ["seed@example.com"], isTestData: true, reset: true }))
+      await assertSucceeds(deleteDoc(doc(db, T_REGISTRATION)))
+      await assertSucceeds(deleteDoc(doc(db, T_CAMPER)))
+      await assertSucceeds(deleteDoc(doc(db, T_PARENT)))
+      await assertSucceeds(deleteDoc(doc(db, T_FAMILY)))
+    }
+  })
+
+  test("health_staff and parents still cannot seed data in the test database", async () => {
+    for (const email of [HEALTH, PARENT]) {
+      const db = asIn(TEST_DB, email)
+      await assertFails(setDoc(doc(db, T_FAMILY), { emails: [email] }))
+      await assertFails(setDoc(doc(db, T_REGISTRATION), { status: "Active" }))
+    }
+  })
+
+  test("the same writes in the production database stay full_admin only", async () => {
+    for (const email of [PROGRAM, PROGRAM_ADMIN]) {
+      await assertFails(setDoc(doc(as(email), T_FAMILY), { emails: ["seed@example.com"], isTestData: true }))
+      await assertFails(setDoc(doc(as(email), T_CAMPER), { firstName: "Camper", isTestData: true }))
+      await assertFails(setDoc(doc(as(email), T_REGISTRATION), { status: "Active", isTestData: true }))
+      await assertFails(deleteDoc(doc(as(email), FAMILY)))
+      await assertFails(deleteDoc(doc(as(email), REGISTRATION)))
+    }
+    await assertSucceeds(setDoc(doc(as(FULL), T_FAMILY), { emails: ["seed@example.com"], isTestData: true }))
+  })
+
+  test("test-database private docs and the roster keep their production gates", async () => {
+    const owner = asIn(TEST_DB, "owner")
+    await setDoc(doc(owner, CAMPER_HEALTH), { medicalConditions: "none" })
+    await assertFails(getDoc(doc(asIn(TEST_DB, PROGRAM), CAMPER_HEALTH)))
+    await assertFails(updateDoc(doc(asIn(TEST_DB, PROGRAM), CAMPER_HEALTH), { medicalConditions: "x" }))
+    await assertFails(setDoc(doc(asIn(TEST_DB, PROGRAM), `admins/${PROGRAM}`), { role: "full_admin" }))
   })
 })
 

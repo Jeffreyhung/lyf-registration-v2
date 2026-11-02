@@ -4,10 +4,23 @@ rules_version = '2';
 // rules cannot import TS, so when a role or capability changes there, update
 // the corresponding hasRole/hasAnyRole calls here and keep validRoles() in sync.
 // Capabilities that are only exercised through callables (manageAdmins,
-// manageCampYear) have no rule here: the matching collections (admins/,
-// camps/{year} itself, config/) deny every client write and the function
-// enforces the capability with assertAdmin. The matrix is enforced by
+// manageCampYear, manageWaitlist) have no rule here: the matching collections
+// (admins/, camps/{year} itself, config/) deny every client write and the
+// function enforces the capability with assertAdmin. The matrix is enforced by
 // firestore-rules-tests/ (run against the emulator).
+//
+// Role groups used below (each mirrors a ROLE_CAPABILITIES column):
+//   readHealth        health_staff, program_admin, full_admin
+//   readDemographics  every admin role
+//   writeRegistrations program_staff, program_admin (operational fields),
+//                     full_admin (unrestricted)
+//   managePayments    program_staff, program_admin, full_admin (read; the
+//                     functions write payments/)
+//   manageCredits     program_staff, program_admin, full_admin
+//   createTestData    program_staff, program_admin, full_admin — and only in
+//                     the test database, see canSeedTestData()
+// Unrestricted client writes (create/delete families, campers and
+// registrations, edit private/ docs) stay full_admin only.
 service cloud.firestore {
   match /databases/{database}/documents {
     // ---------- Identity helpers ----------
@@ -64,6 +77,23 @@ service cloud.firestore {
 
     function isFullAdmin() {
       return hasRole('full_admin');
+    }
+
+    // ---------- Test-data helpers ----------
+
+    // These rules are deployed unchanged to both databases; `database` is the
+    // one the request targets, so this is how a rule tells them apart.
+    function isTestDatabase() {
+      return database == 'lyf-v2-test';
+    }
+
+    // createTestData capability: the Create Test Data tab seeds and deletes
+    // families, parents, campers and registrations straight from the browser.
+    // Roles with the capability may do that in the test database only; the
+    // same writes in production remain full_admin only.
+    function canSeedTestData() {
+      return isTestDatabase() &&
+        hasAnyRole(['program_staff', 'program_admin', 'full_admin']);
     }
 
     // ---------- Family ownership helpers ----------
@@ -191,22 +221,22 @@ service cloud.firestore {
 
     match /families/{familyId} {
       allow read: if isAnyAdmin() || isMemberOfResourceFamily();
-      allow create, delete: if isFullAdmin();
+      allow create, delete: if isFullAdmin() || canSeedTestData();
       // Family members may edit address/household details only. `emails`
       // (membership) and `registrations` are function-managed.
-      allow update: if isFullAdmin() ||
+      allow update: if isFullAdmin() || canSeedTestData() ||
         (isMemberOfResourceFamily() &&
           onlyUpdates(['street', 'suite', 'city', 'state', 'zip', 'country', 'household']) &&
           familyAddressShapeOk(request.resource.data, changedKeys()));
 
       match /parents/{parentId} {
         allow read: if isAnyAdmin() || isFamilyMember(familyId);
-        allow write: if isFullAdmin();
+        allow write: if isFullAdmin() || canSeedTestData();
       }
 
       match /campers/{camperId} {
         allow read: if isAnyAdmin() || isFamilyMember(familyId);
-        allow write: if isFullAdmin();
+        allow write: if isFullAdmin() || canSeedTestData();
         // Parents may add campers and edit profile fields. A new camper
         // cannot arrive with registrations attached.
         allow create: if isFamilyMember(familyId) &&
@@ -224,8 +254,9 @@ service cloud.firestore {
         match /private/{section} {
           allow read: if
             (section == 'health' &&
-              (hasAnyRole(['health_staff', 'full_admin']) || isFamilyMember(familyId))) ||
-            (section == 'demographics' && isFullAdmin());
+              (hasAnyRole(['health_staff', 'program_admin', 'full_admin']) ||
+                isFamilyMember(familyId))) ||
+            (section == 'demographics' && isAnyAdmin());
           allow write: if isFullAdmin();
           // Parents own their child's health info and may keep it current.
           allow create, update: if section == 'health' &&
@@ -271,8 +302,8 @@ service cloud.firestore {
       match /registrations/{registrationId} {
         allow read: if isAnyAdmin() ||
           (hasEmail() && callerEmail() in resource.data.familyEmails);
-        allow create, delete: if isFullAdmin();
-        allow update: if isFullAdmin();
+        allow create, delete: if isFullAdmin() || canSeedTestData();
+        allow update: if isFullAdmin() || canSeedTestData();
         // writeRegistrations capability: program_staff and program_admin may
         // edit the operational fields the admin console exposes, nothing
         // structural (camper ref, payments, familyEmails, waiver, pricing state).
@@ -291,12 +322,18 @@ service cloud.firestore {
 
     // ---------- Money ----------
 
+    // managePayments capability. The Payments tab only reads from the
+    // browser; payment records are written by the Stripe webhook and the
+    // refund callable, so client writes stay full_admin only.
     match /payments/{paymentId} {
-      allow read, write: if isFullAdmin();
+      allow read: if hasAnyRole(['program_staff', 'program_admin', 'full_admin']);
+      allow write: if isFullAdmin();
     }
 
+    // manageCredits capability: the Camp Credits tab reads and writes a
+    // family's credit document directly.
     match /credits/{familyId} {
-      allow read, write: if isFullAdmin();
+      allow read, write: if hasAnyRole(['program_staff', 'program_admin', 'full_admin']);
     }
 
     // ---------- Everything else ----------

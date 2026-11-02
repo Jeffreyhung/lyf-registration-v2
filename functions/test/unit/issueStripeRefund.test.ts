@@ -43,7 +43,7 @@ const refund = (overrides: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   mockState.db = new FakeFirestore()
     .seed("admins", ADMIN, {role: "full_admin"})
-    .seed("admins", STAFF, {role: "program_admin"});
+    .seed("admins", STAFF, {role: "health_staff"});
   for (const stripe of [mockProdStripe, mockTestStripe]) {
     stripe.refunds.create.mockReset().mockResolvedValue({id: "re_1"});
     stripe.checkout.sessions.retrieve.mockReset().mockResolvedValue({payment_intent: "pi_from_cs"});
@@ -71,7 +71,7 @@ describe("access", () => {
     await expectHttpsError(
       issueStripeRefund.run(request(refund(), STAFF)),
       "permission-denied",
-      /requires one of: full_admin/
+      /requires one of: full_admin, program_admin, program_staff/
     );
     expectNoRefund();
   });

@@ -15,6 +15,25 @@ registration for the selected camp year joined with the camper, the parents and
 the family document (`website/src/hooks/useRegistrations.tsx`). Health columns
 appear only for roles with the `readHealth` capability.
 
+### Roles
+
+`ROLE_CAPABILITIES` in `schemas/src/admin.ts` is the source of truth and the
+Admin Management tab renders it; in short:
+
+- `health_staff` — read-only view of everything, including health data.
+- `program_staff` — everything except health data, the Camp Year tab and the
+  admin roster: edit registrations, move campers off the waitlist, Payments,
+  Camp Credits and Create Test Data.
+- `program_admin` — `full_admin` minus Admin Management. Sees health data and
+  runs the Camp Year rollover.
+- `full_admin` — all of the above plus the admin roster, and the only role
+  that may create or delete families, campers and registrations directly in
+  the production database.
+
+Create Test Data writes families, campers and registrations straight from the
+browser, so `firestore.rules` lets `createTestData` roles do that only in
+`lyf-v2-test`; in `lyf-v2` those writes stay `full_admin` only.
+
 ### Exports
 
 Data exports come from the All Registrations grid; there are no longer any
